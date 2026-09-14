@@ -1,5 +1,5 @@
 ---
-name: boss-git-workflow
+name: easy-git
 description: 在本原型仓库中，当用户说“保存一下”“存一下”“上传一下”“上传本地”“发到 GitHub”“同步最新”“同步正式版”等非技术表达时，执行老板专用 Git 流程；老板只使用 develop，master 仅作为 Xiao 维护的正式 UI 来源。
 metadata:
   tags: git, prototype, boss-workflow, commit, push, sync
