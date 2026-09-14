@@ -1,0 +1,121 @@
+/* ==========================================================================
+   KaiSpan · 工资单与发薪
+   前缀统一 .pay-。复用 styles.css 的变量、.card / .table / .pill，
+   以及 attend.css 的 .att-fix（行内编辑面板长得一样，不再抄一份）。
+   ========================================================================== */
+
+/* ------------------------------------------------------------ 各段 ------ */
+.pay-close, .pay-send, .pay-slips, .pay-pay, .pay-drift, .pay-done { margin-bottom: 16px; }
+.pay-close .section-title p, .pay-send .section-title p,
+.pay-slips .section-title p, .pay-pay .section-title p, .pay-drift .section-title p {
+  margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6;
+}
+.pay-done-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
+.pay-done-head strong { font-size: 14px; }
+.pay-done-head span { font-size: 12px; color: var(--muted); }
+.pay-done p { margin: 8px 0 10px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+.pay-blockers { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.pay-blockers li {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 1px solid #f0c0c0; background: #fffdfd; border-radius: 12px; padding: 10px 12px;
+}
+.pay-blockers li span { font-size: 12px; color: #b42318; line-height: 1.5; }
+
+.pay-hint { margin: 12px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.pay-hint.is-warn { color: #b45309; background: #fffaf3; border: 1px solid #f3c9a0; border-radius: 10px; padding: 9px 11px; }
+.pay-acts { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+.pay-acts input {
+  min-height: 38px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; font: inherit; flex: 1 1 240px; max-width: 420px;
+}
+
+.pay-mail { margin-top: 12px; }
+.pay-mail summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+.pay-mail pre {
+  margin: 10px 0 0; padding: 12px; background: #f7f8fc; border: 1px solid var(--line);
+  border-radius: 10px; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+}
+
+.pay-drift { border-color: #f3c9a0; background: #fffaf3; }
+.pay-driftlist { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.pay-driftlist li { font-size: 12px; line-height: 1.5; display: flex; gap: 10px; flex-wrap: wrap; }
+.pay-driftlist strong { min-width: 90px; }
+.pay-driftlist span { color: var(--muted); }
+
+/* ------------------------------------------------------------ 表格 ------ */
+.pay-table { width: 100%; min-width: 820px; }
+.pay-table td small { display: block; font-size: 11px; color: var(--muted); }
+.pay-off { color: #b42318; font-weight: 750; font-size: 13px; }
+.pay-off + small { color: var(--muted); }
+.pay-iban { font-size: 12px; font-variant-numeric: tabular-nums; }
+.pay-iban.is-bad { color: #b42318; font-weight: 750; text-decoration: none; }
+.pay-sent-tag { font-size: 11px; color: var(--muted); }
+.pay-paid.is-on { color: #067647; border-color: #bbf7d0; background: #f0fdf4; }
+
+.pay-form-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 10px;
+}
+.pay-form-grid label { display: grid; gap: 6px; font-size: 12px; font-weight: 750; color: var(--muted); }
+.pay-form-grid input {
+  min-height: 36px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; font: inherit; font-weight: 750; background: #fff;
+}
+.pay-form-grid input[type="file"] { font-weight: 400; font-size: 12px; padding: 6px 8px; }
+.pay-form-grid small { font-size: 11px; color: var(--muted); }
+.pay-off-note {
+  margin: 0; font-size: 12px; line-height: 1.55; color: #b45309;
+  background: #fffaf3; border: 1px solid #f3c9a0; border-radius: 10px; padding: 9px 11px;
+}
+
+/* ------------------------------------------------------ SEPA 那个文件 ---- */
+.pay-sepa-box {
+  margin-top: 14px; border: 1px solid #b9a7ff; background: #faf8ff;
+  border-radius: 14px; padding: 14px 16px;
+}
+.pay-sepa-box.is-blocked { border-color: var(--line); background: #f8f9fc; }
+.pay-sepa-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.pay-sepa-head strong { display: block; font-size: 14px; }
+.pay-sepa-head code {
+  display: inline-block; margin-top: 4px; font-size: 11.5px; color: var(--muted);
+  background: #fff; border: 1px solid var(--line); border-radius: 7px; padding: 2px 7px;
+}
+.pay-sepa-facts {
+  display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 13px 0 0;
+  padding-top: 12px; border-top: 1px solid #e4dcff;
+}
+.pay-sepa-box.is-blocked .pay-sepa-facts { border-top-color: var(--line); }
+.pay-sepa-facts > div { display: grid; gap: 2px; }
+.pay-sepa-facts dt { font-size: 11px; color: var(--muted); }
+.pay-sepa-facts dd { margin: 0; font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.pay-sepa-peek { margin-top: 12px; }
+.pay-sepa-peek summary { font-size: 12px; color: var(--purple); cursor: pointer; }
+.pay-sepa-peek pre {
+  margin: 10px 0 0; padding: 12px; max-height: 260px; overflow: auto;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  font-size: 11.5px; line-height: 1.55; white-space: pre; tab-size: 2;
+}
+.pay-sepa-box .pay-blockers { margin-top: 13px; }
+/* 按不了的时候要看得出来按不了 —— 一个满色的按钮点下去没反应，比没有按钮更糟 */
+.pay-sepa[disabled] {
+  background: #e6e8f0; color: #96a0b5; border-color: #e6e8f0;
+  box-shadow: none; cursor: not-allowed;
+}
+
+/* ------------------------------------------------------ 工资单那份文件 -- */
+.pay-file { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; max-width: 190px; }
+.pay-file b {
+  flex: none; font-size: 9.5px; letter-spacing: .04em; color: #b42318;
+  background: #fff1f0; border: 1px solid #f3c2bd; border-radius: 5px; padding: 1px 4px;
+}
+.pay-nofile { font-size: 12px; color: #b45309; font-weight: 750; text-decoration: none; }
+
+.pay-log summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+.pay-log ul { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 5px; }
+.pay-log li { font-size: 12px; line-height: 1.5; }
+.pay-log li span { color: var(--muted); }
+
+@media (max-width: 1100px) {
+  .pay-form-grid { grid-template-columns: 1fr 1fr; }
+  .pay-form-file { grid-column: 1 / -1; }
+}

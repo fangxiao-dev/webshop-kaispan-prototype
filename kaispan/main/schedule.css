@@ -1,0 +1,479 @@
+/* 岗位色。这三个变量一直被 .sch-shift / .sch-mchip / 岗位圆点引用，却从来没人定义过 ——
+   浏览器当成空值，于是「店长 / 前厅 / 清洁」的班次一直是默认深蓝，圆点干脆是透明的。
+   补上（值取自它们各自的浅色底）。 */
+:root { --r-manager: #6236ff; --r-front: #1d4ed8; --r-clean: #475467; }
+
+.sch-scope-hint { margin: -8px 0 14px; font-size: 12px; color: var(--muted); }
+
+/* 完整说明收进页头按钮，默认不占页面高度。 */
+.sch-guide { position: relative; }
+.sch-guide > summary, .sch-more-actions > summary {
+  list-style: none; cursor: pointer; user-select: none;
+}
+.sch-guide > summary::-webkit-details-marker, .sch-more-actions > summary::-webkit-details-marker { display: none; }
+.sch-guide[open] > summary, .sch-more-actions[open] > summary { border-color: var(--purple); color: var(--purple); }
+.sch-guide-panel {
+  position: absolute; z-index: 20; top: calc(100% + 8px); right: 0; width: min(680px, calc(100vw - 48px));
+  max-height: min(72vh, 720px); overflow-y: auto;
+  padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 18px 50px rgba(25, 34, 62, .16);
+}
+.sch-guide-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.sch-guide-head strong { font-size: 15px; }
+.sch-guide-head span, .sch-guide-panel > p { color: var(--muted); font-size: 11px; line-height: 1.55; }
+.sch-guide-panel ol { display: grid; gap: 12px; margin: 14px 0; padding: 0; list-style: none; }
+.sch-guide-panel li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; }
+.sch-guide-panel li > b { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: #f0ebff; color: var(--purple); font-size: 11px; }
+.sch-guide-panel li strong, .sch-guide-panel li span { display: block; }
+.sch-guide-panel li strong { font-size: 13px; }
+.sch-guide-panel li span { margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.65; }
+.sch-guide-panel li span b { color: var(--ink); font-weight: 600; }
+.sch-guide-panel > p { margin: 0; padding-top: 11px; border-top: 1px solid var(--line); }
+
+/* ============================================================== 周切换 ==== */
+.sch-weekbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 14px; margin-bottom: 14px;
+}
+/* 周 / 月工具栏（2026-09-03 三改）。
+   前两版的毛病是同一行上并排放了三种不同物种：一个方角箭头盒、一个灰底药丸开关、
+   一个橙色状态药丸 —— 形状、圆角、底色各不相同，谁也不比谁重要，眼睛没有落点。
+   现在只分两组：
+     左边「我在哪一周 / 换一周」—— 箭头分列日期两侧（`‹ 08.31 – 09.06 ›`，
+     跟任何日历一样的读法），后面隔一条竖线才是周 / 月这个「看法开关」；
+     右边「这张班表怎么样 / 我要干什么」—— 状态药丸紧挨着发布按钮，
+     状态和它对应的动作站在一起，不再一个在最左一个在最右。 */
+.sch-weeknav { display: flex; align-items: center; gap: 8px; }
+.sch-weekpick { display: flex; align-items: center; gap: 2px; }
+.sch-step {
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 999px;
+  color: #5c6479; text-decoration: none; font-size: 21px; font-weight: 500; line-height: 1;
+}
+.sch-step:hover { background: #f2effe; color: var(--purple); }
+/* 到头了：位置留着、变灰、不可点 —— 让人知道「后面没有了」，而不是「按钮跑哪去了」 */
+.sch-step.is-off { color: #cdd3e2; cursor: default; }
+.sch-weekname { display: flex; flex-direction: column; gap: 1px; padding: 0 6px; text-align: center; }
+.sch-weekname strong { font-size: 17px; white-space: nowrap; }
+.sch-weekname span { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.sch-jump {
+  padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px;
+  font-size: 12px; color: var(--purple); text-decoration: none; white-space: nowrap;
+}
+.sch-jump:hover { border-color: var(--purple); }
+.sch-bar-sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+.sch-week-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.sch-more-actions { position: relative; }
+.sch-more-menu {
+  position: absolute; z-index: 18; top: calc(100% + 7px); right: 0; display: grid; gap: 5px; width: 190px;
+  padding: 7px; border: 1px solid var(--line); border-radius: 11px; background: #fff; box-shadow: 0 14px 36px rgba(25, 34, 62, .15);
+}
+.sch-more-menu .ghost-btn { width: 100%; justify-content: flex-start; text-align: left; }
+
+/* ================================================================ 网格 ==== */
+.sch-grid-card .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.sch-grid-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sch-grid-title h2 { margin: 0; }
+.sch-grid-title .sch-ai { padding: 6px 11px; font-size: 12px; }
+.sch-grid-wrap { overflow-x: auto; margin-top: 12px; }
+/* 2026-09-03（Mingrong：这个排班太紧凑了）——
+   班次药丸、格子内边距、行高、表头全部松一档。宽度从 980 提到 1120：
+   七列每列多 20px，横向本来就能滚，挤在一屏里换来的是每颗药丸贴着格子边。 */
+.sch-grid { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1120px; }
+.sch-grid th, .sch-grid td {
+  border-bottom: 1px solid var(--line); padding: 0; vertical-align: top; text-align: left;
+}
+.sch-grid thead th {
+  padding: 11px 12px; font-size: 12px; color: var(--muted); font-weight: 600;
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.sch-grid thead th span { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; }
+.sch-grid thead th.is-today { color: var(--purple); }
+.sch-grid thead th:first-child { width: 204px; }
+
+/* 姓名列压成固定两行（2026-09-03 Mingrong：这一列信息太多）：
+   第一行「谁 + 报班了没有」，第二行一句安静的 `岗位 · 合同 · 这周的特殊情况`。
+   岗位不再是彩色药丸，只留一个小圆点保留颜色线索 —— 表格里的班次已经是按岗位上色的。 */
+.sch-who { padding: 14px 16px 14px 10px; }
+.sch-who a { text-decoration: none; color: inherit; }
+.sch-who a:hover strong { color: var(--purple); text-decoration: underline; }
+.sch-who strong { display: block; font-size: 14px; }
+.sch-who strong { line-height: 1.3; }
+.sch-who-sub {
+  display: flex; align-items: center; gap: 6px; margin-top: 6px;
+  font-size: 11.5px; line-height: 1.45; color: var(--muted); white-space: nowrap;
+}
+.sch-role-dot { flex: none; width: 7px; height: 7px; border-radius: 999px; background: #c9d0e2; }
+.sch-role-dot.manager { background: var(--r-manager); }
+.sch-role-dot.kitchen { background: #d97706; }
+.sch-role-dot.front { background: var(--r-front); }
+.sch-role-dot.bar { background: #067647; }
+.sch-role-dot.clean { background: var(--r-clean); }
+
+.sch-cellwrap { border-left: 1px solid var(--line); }
+.sch-cellwrap.is-today { background: #fbfaff; }
+/* 有问题的格子要一眼看得见（2026-09-03 Mingrong：原来那层淡橙几乎看不出来）。
+   两档都用红：排不了是实线红框 + 深一点的底，要确认是虚线红框 + 浅红底。
+   用框而不是只用底色，是因为格子里本来就有彩色的班次药丸，只改底色照样淹掉。 */
+.sch-cellwrap.is-warn, .sch-sum-col.is-warn { background: #ffdde3; box-shadow: inset 0 0 0 2px #ef7c90; }
+.sch-cellwrap.is-block, .sch-sum-col.is-block { background: #ffc4ce; box-shadow: inset 0 0 0 2px var(--red); }
+/* 底色变重之后，格子里那颗班次药丸自己的浅色底会跟红底打架 —— 让它退成透明，只留字。 */
+.sch-cellwrap.is-warn .sch-shift, .sch-cellwrap.is-block .sch-shift { background: rgba(255, 255, 255, .72); }
+
+.sch-shift {
+  display: inline-flex; align-items: center; gap: 1px; font-size: 12.5px; font-weight: 600;
+  padding: 5px 10px; border-radius: 9px; background: #eef1f8; color: var(--ink); white-space: nowrap;
+}
+.sch-shift i { font-style: normal; opacity: .5; margin: 0 1px; }
+.sch-shift.manager { background: #f0ebff; color: var(--r-manager); }
+.sch-shift.kitchen { background: #fff3e2; color: #b45309; }
+.sch-shift.front { background: #e8f1ff; color: var(--r-front); }
+.sch-shift.bar { background: #e6f7ef; color: #067647; }
+.sch-shift.clean { background: #eef1f8; color: var(--r-clean); }
+
+.sch-sum-col { padding: 13px 12px; text-align: right; white-space: nowrap; }
+.sch-sum-col strong { font-size: 13px; }
+.sch-sum-col small { display: block; font-size: 11px; color: var(--muted); }
+.sch-sum-col.is-over strong { color: var(--orange); }
+.sch-sum-col.is-under strong { color: var(--muted); }
+.sch-empty { padding: 24px; text-align: center; color: var(--muted); }
+
+.sch-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+.sch-rule-new select, .sch-rule-table select {
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; background: #fff; color: var(--ink);
+}
+
+/* ================================================================ 问题 ==== */
+
+/* ================================================================ 发布 ==== */
+.sch-publish { margin-bottom: 16px; border-left: 3px solid var(--purple); }
+.sch-publish .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.sch-pub-block, .sch-pub-warn { border-radius: 11px; padding: 12px 14px; margin-top: 12px; font-size: 13px; }
+.sch-pub-block { background: #fff6f6; border: 1px solid #ffd7d7; }
+.sch-pub-warn { background: #fffaf2; border: 1px solid #ffe4bd; }
+.sch-pub-block p { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.sch-pub-block ul, .sch-pub-warn ul { margin: 8px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.8; }
+.sch-pub-warn label { display: block; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.sch-pub-warn textarea {
+  display: block; width: 100%; margin-top: 5px; border: 1px solid var(--line);
+  border-radius: 9px; padding: 8px 10px; color: var(--ink); resize: vertical;
+}
+.sch-publish .button-row { margin-top: 12px; }
+
+/* ============================================================ 岗位需求 ==== */
+.sch-rule-table td { vertical-align: middle; }
+.sch-rule-table input[type="time"], .sch-rule-table input[type="number"] {
+  border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; color: var(--ink); background: #fff;
+}
+.sch-rule-table input[type="number"] { width: 64px; }
+.sch-dow-cell { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; }
+.sch-dow-cell label { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); }
+.sch-time-cell { white-space: nowrap; }
+.sch-time-cell input { margin-right: 4px; }
+.sch-rule-new {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px;
+  padding-top: 14px; border-top: 1px dashed var(--line);
+}
+.sch-rule-new strong { font-size: 13px; margin-right: 4px; }
+.sch-rule-new input[type="time"], .sch-rule-new input[type="number"], .sch-rule-new input[type="text"] {
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; color: var(--ink); background: #fff;
+}
+.sch-rule-new input[type="number"] { width: 64px; }
+.is-danger { color: var(--red) !important; border-color: #ffd7d7 !important; }
+.is-danger:hover { border-color: var(--red) !important; }
+
+/* 问题列表展开 */
+.sch-rule-table td:nth-child(2) { width: 300px; }
+.sch-rule-table td:nth-child(1) { width: 110px; }
+
+/* ============================================================== 月视图 ==== */
+.sch-month-card .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.sch-month { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 12px; table-layout: fixed; }
+.sch-month th {
+  padding: 6px 10px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .04em;
+  color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--line);
+}
+.sch-mcell { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 0; vertical-align: top; }
+.sch-mcell:last-child { border-right: 0; }
+.sch-mcell > a {
+  display: flex; flex-direction: column; gap: 3px; min-height: 92px;
+  padding: 8px 9px 10px; text-decoration: none; color: inherit;
+}
+.sch-mcell > a:hover { background: rgba(98, 54, 255, .06); }
+.sch-mcell.is-out { background: #fafbfe; }
+.sch-mcell.is-out .sch-mday, .sch-mcell.is-out .sch-mnet, .sch-mcell.is-out .sch-mcount { color: #b6bdd0; }
+.sch-mcell.is-out .sch-mchip { opacity: .5; }
+.sch-mcell.is-today { background: #f7f4ff; }
+.sch-mcell.is-today .sch-mday { color: var(--purple); font-weight: 700; }
+
+.sch-mday { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.sch-mdot { width: 7px; height: 7px; border-radius: 999px; display: inline-block; }
+.sch-mdot.is-pub { background: var(--green); }
+.sch-mdot.is-draft { background: var(--orange); }
+.sch-mcount { font-size: 12px; color: var(--purple); }
+.sch-mnames { display: flex; flex-wrap: wrap; gap: 3px; }
+.sch-mchip {
+  font-style: normal; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 6px;
+  background: #eef1f8; color: var(--ink); white-space: nowrap;
+}
+.sch-mchip.manager { background: #f0ebff; color: var(--r-manager); }
+.sch-mchip.kitchen { background: #fff3e2; color: #b45309; }
+.sch-mchip.front { background: #e8f1ff; color: var(--r-front); }
+.sch-mchip.bar { background: #e6f7ef; color: #067647; }
+.sch-mchip.clean { background: #eef1f8; color: var(--r-clean); }
+.sch-mmore { font-style: normal; font-size: 11px; color: var(--muted); align-self: center; }
+.sch-mnet { font-size: 11px; color: var(--muted); }
+
+/* 姓名列压成两行：一行「谁 + 什么岗」，一行「什么合同 + 有什么标记」 */
+.sch-who { padding: 13px 14px 13px 8px; }
+.sch-who-top { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.sch-who-top strong { display: inline; font-size: 14px; }
+.sch-who-flag { font-weight: 500; font-size: 11px; }
+.sch-who-flag.is-red { color: var(--red); }
+.sch-who-flag.is-orange { color: var(--orange); }
+.sch-who-flag.is-blue { color: var(--blue); }
+.sch-who-flag.is-gray { color: var(--muted); }
+/* ======================================================= 2026-09-02 重做 ===
+   点格子直接排班；班次自己就是可点的；成本钉在表底。
+   班次模板、报班、代填、缺口清单相关的样式都随功能一起删了。 */
+/* 一个人当天两个班：竖着排两行（2026-09-03 Mingrong）。
+   横着并排会把那一整列撑到能装下两颗药丸的宽度，七列都跟着变宽；
+   竖排之后每列只要一颗药丸的宽度，整张表窄了将近三分之一。 */
+/* 一周的结构要一眼看得出来：周末两列压一层极淡的底，不用读日期就知道边界在哪。
+   今天那一列在最上面拉一条紫线 —— 原来只有表头的字是紫的，扫到中间就找不着了。 */
+.sch-grid th.is-weekend, .sch-grid td.is-weekend { background: #f7f8fc; }
+.sch-grid th.is-today, .sch-grid td.is-today { background: #f7f4ff; }
+.sch-grid thead th.is-today { box-shadow: inset 0 3px 0 var(--purple); }
+/* 横向滚动时姓名列钉住，不然滚到周日就不知道这一行是谁 */
+.sch-grid th:first-child, .sch-grid td.sch-who {
+  position: sticky; left: 0; z-index: 2; background: var(--card);
+}
+.sch-grid tfoot .sch-foot-label { position: sticky; left: 0; z-index: 2; background: #fbfcfe; }
+/* 竖线已经把七天分开了，横线再一样重就成了方格纸 —— 放淡一档 */
+.sch-grid tbody td { border-bottom-color: #eef0f6; }
+
+.sch-cellwrap { position: relative; padding-bottom: 8px; }
+.sch-cellwrap > .sch-shift { display: flex; width: fit-content; margin: 5px 10px 0; }
+.sch-cellwrap > .sch-shift:first-child { margin-top: 9px; }
+
+button.sch-shift {
+  display: flex; align-items: baseline; gap: 5px; border: 0; cursor: pointer;
+  font-size: 12.5px; font-weight: 600; padding: 6px 10px; border-radius: 9px; white-space: nowrap;
+}
+button.sch-shift:hover { box-shadow: inset 0 0 0 1.5px currentColor; }
+.sch-shift em { font-style: normal; font-weight: 500; opacity: .62; font-size: 11px; }
+
+/* 空格子上的 + ：不占地方，鼠标进来才明显。整格都可点。 */
+.sch-add {
+  display: block; width: 100%; min-height: 42px; margin: 4px 0 6px; padding: 0;
+  border: 0; background: none; color: transparent; font-size: 15px; line-height: 42px;
+  border-radius: 8px; text-align: center;
+}
+/* 已经有班的格子：+ 缩成班次后面一个小钮，鼠标进格才显形。
+   常驻一个整行宽的 + 会把两个班的行撑成三行，一张表 56 个加号，是噪音不是提示。 */
+/* 已经有班的格子：+ 缩到右下角，不再自己占一行 —— 班次竖排之后每多一行都是真高度。 */
+.sch-add.is-inline {
+  position: absolute; right: 5px; bottom: 5px; display: grid; place-items: center;
+  width: 22px; height: 22px; min-height: 0; margin: 0; padding: 0; font-size: 13px; line-height: 1;
+}
+.sch-cellwrap > .sch-add:first-child:last-child {
+  position: absolute; inset: 0; min-height: 100%; margin: 0;
+}
+.sch-cellwrap:hover .sch-add { color: var(--purple); background: rgba(98, 54, 255, .07); }
+.sch-add:focus-visible { color: var(--purple); background: rgba(98, 54, 255, .12); }
+
+/* 格子里改时间：一次只有一个格子是这个状态 */
+.sch-cellwrap.is-editing { box-shadow: inset 0 0 0 2px var(--purple); background: #fbfaff; }
+.sch-inline { display: flex; flex-direction: column; gap: 4px; padding: 6px; }
+.sch-inline input[type="time"] {
+  width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 4px 6px;
+  font-size: 12px; color: var(--ink); background: #fff;
+}
+.sch-inline-row { display: flex; gap: 4px; }
+.sch-inline-row button { flex: 1; padding: 4px 6px; font-size: 12px; }
+.sch-inline small { font-size: 11px; color: var(--muted); }
+.sch-inline-warn { display: block; font-size: 11px; color: var(--orange); text-decoration: none; line-height: 1.4; }
+
+/* 成本行 */
+.sch-grid tfoot td { border-top: 2px solid var(--line); padding: 12px; background: #fbfcfe; }
+.sch-foot-label { font-size: 12px; color: var(--muted); padding-left: 4px !important; }
+.sch-foot strong { display: block; font-size: 14px; color: var(--ink); }
+.sch-foot small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+.sch-foot.is-today strong { color: var(--purple); }
+.sch-foot.is-total { text-align: right; }
+.sch-foot.is-total strong { font-size: 16px; white-space: nowrap; }
+.sch-grid .sch-sum-col { min-width: 104px; }
+.sch-cost-note { margin: 10px 0 0; color: var(--muted); font-size: 11px; }
+.sch-cost-note summary { display: inline-flex; align-items: center; gap: 5px; list-style: none; cursor: pointer; color: var(--muted); }
+.sch-cost-note summary::-webkit-details-marker { display: none; }
+.sch-cost-note summary::before { content: "▸"; color: var(--purple); }
+.sch-cost-note[open] summary::before { content: "▾"; }
+.sch-cost-note p { max-width: 920px; margin: 6px 0 0; line-height: 1.6; }
+.sch-rule-foot { margin: 14px 0 0; font-size: 12px; color: var(--muted); }
+
+@media (max-width: 760px) {
+  .sch-weeknav { flex-wrap: wrap; }
+  .sch-weekname { min-width: 160px; }
+  .sch-week-actions { width: 100%; }
+  .sch-more-actions { margin-left: auto; }
+}
+
+/* 分段导航用全站那套药丸标签（.emp-tabs / .emp-tab，见 employee.css）——
+   原来这儿自己发明了一个灰底分段控件，跟员工档案、员工资料页上的标签长得不一样，
+   同一个模块里两种标签，看着就是「界面不统一」。这里只补一个外边距。 */
+.sch-primary-tabs { margin: 0 0 16px; }
+
+.hrs-month-title { margin-bottom: 12px; padding-top: 4px; }
+.hrs-month-title h2 { margin: 0; font-size: 20px; }
+.hrs-month-title p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.hrs-month-title > span { color: var(--muted); font-size: 12px; }
+
+
+@media (max-width: 600px) {
+  .sch-guide { position: static; }
+  .sch-guide-panel { position: fixed; top: 76px; right: 16px; left: 16px; width: auto; max-height: calc(100vh - 96px); overflow-y: auto; }
+  .sch-guide-head { display: block; }
+  .sch-guide-head span { display: block; margin-top: 3px; }
+}
+
+/* 点了排不进去的时候，把原因整句显示出来 —— 格子窄，让它换行，别只报一个类别名 */
+/* 点了排不进去的时候，把原因整句显示出来 —— 格子窄，让它换行，别只报一个类别名。
+   自己一套 sch-flash：全站那个 .is-flash 是「已保存」用的绿底，
+   套在「排不进去」上就成了绿底红字，颜色说的是反话。 */
+.sch-add.sch-flash {
+  position: static; display: block; width: auto; min-height: 34px; height: auto;
+  margin: 4px 6px 6px; padding: 5px 7px; border-radius: 8px;
+  background: #ffdde3; box-shadow: inset 0 0 0 1.5px var(--red); color: var(--red);
+  white-space: normal; text-align: left; font-size: 11px; font-weight: 600; line-height: 1.4;
+}
+.sch-cellwrap:hover .sch-add.sch-flash { color: var(--red); background: #ffdde3; }
+
+
+/* 「周 / 月」是看法开关，不是主动作：白底细框、字小一号，安静地待在日期后面。
+   原来那个灰底 + 白色滑块的样子太像一个主控件，跟旁边的状态药丸抢眼。 */
+.sch-period { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.sch-period a {
+  padding: 4px 12px; border-radius: 7px; font-size: 12px;
+  color: var(--muted); text-decoration: none;
+}
+.sch-period a.is-on { background: #f2effe; color: var(--purple); font-weight: 600; }
+
+/* 考勤那段定位说明：默认收起，要看的时候再展开 */
+
+
+/* 员工那一列原来没给宽度，Sophia / Marco 这种名字被断成两行（2026-09-03 走查）。
+   给一个够放中德文名字的下限，姓名本身不断行。 */
+/* 名字自己不断行就够了 —— 给列压死一个 min-width 反而把最后那列挤出可视区。
+   .sch-who-top 是 flex，名字 nowrap 之后列会自己长到最长的名字那么宽。 */
+.sch-who-top { flex-wrap: nowrap; }
+/* 姓名 + 岗位 + 报班状态要在同一行放得下（2026-09-03 Mingrong） */
+.sch-grid th:first-child, .sch-who { min-width: 176px; }
+.sch-who-top strong { white-space: nowrap; }
+/* 最后那列（本周 / 目标）不断行 —— 它以前被挤成「3 目」那种半截字 */
+.sch-grid th.sch-sum-col, .sch-grid td.sch-sum-col { white-space: nowrap; }
+/* 1440px 上整张表比容器宽 50 来像素，最后那列「本周 / 目标」正好被切掉半截。
+   班次药丸左右各收 1px、格子左边距收 2px，七列就省出 50 多像素，表格正好放得下。 */
+button.sch-shift { padding-inline: 6px; }
+.sch-cellwrap > .sch-shift { margin-left: 3px; }
+.sch-sum-col { padding-inline: 6px 2px; }
+.sch-grid thead th { padding-inline: 6px; }
+
+/* 整周排不了的人收成表尾一行 */
+.sch-blocked-row td { padding: 8px 12px; background: #fafbff; }
+.sch-blocked-row summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+.sch-blocked-row ul { margin: 8px 0 2px; padding-left: 18px; }
+.sch-blocked-row li { font-size: 12px; margin-bottom: 4px; }
+.sch-blocked-row a { color: var(--ink); text-decoration: none; margin-right: 8px; }
+.sch-blocked-row a:hover { color: var(--purple); text-decoration: underline; }
+
+
+/* 加班：跟着班表走（2026-09-03 挪过来的） */
+.hrs-ot-card { margin-top: 16px; }
+.hrs-ot-card .section-title h2 { display: inline-flex; align-items: center; }
+.hrs-otlink {
+  display: block; padding: 13px 16px; margin-bottom: 14px; text-decoration: none;
+  border-left: 3px solid var(--orange); background: #fffaf2;
+}
+.hrs-otlink strong { display: block; font-size: 14px; color: var(--ink); }
+.hrs-otlink span { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.hrs-otlink:hover strong { color: var(--purple); }
+
+/* 周 / 月开关跟周导航挨在一起，中间给点距离 */
+
+
+.sch-avail {
+  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  background: #eef1f8; color: var(--muted); font-size: 11px;
+}
+.sch-avail.is-on { background: #e7f8ef; color: var(--green); font-weight: 600; }
+
+/* 排班检查那张单子没了，格子颜色就是提示本身；下面留一行图例 */
+.sch-legend-issue {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px;
+  margin: 10px 0 0; font-size: 12px; color: var(--ink);
+}
+.sch-legend-issue b { width: 14px; height: 12px; border-radius: 3px; margin-right: -8px; }
+.sch-legend-issue b.is-block { background: #ffc4ce; box-shadow: inset 0 0 0 2px var(--red); }
+.sch-legend-issue b.is-warn { background: #ffdde3; box-shadow: inset 0 0 0 2px #ef7c90; }
+.sch-legend-issue span { color: var(--muted); }
+
+
+/* 报班状态跟姓名同一行（2026-09-03）；点开在下面展开一整行（见 .sch-avail-row），
+   不用浮层 —— 姓名列是 sticky 的，sticky 单元格自己就是层叠上下文，浮层压不过后面几行。 */
+.sch-avail, .sch-nudge { white-space: nowrap; }
+a.sch-avail.is-on { text-decoration: none; cursor: pointer; }
+a.sch-avail.is-on:hover { background: #d5f2e2; }
+a.sch-avail.is-open { background: var(--green); color: #fff; }
+
+.sch-avail-row > td { padding: 0 12px 0 8px; background: #f7fbf8; border-bottom: 1px solid #eef0f6; }
+.sch-availbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 12px; padding: 9px 0; }
+.sch-availbar > strong { font-size: 13px; }
+.sch-availbar > span { font-size: 11px; color: var(--muted); }
+.sch-availbar ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.sch-availbar li {
+  display: flex; align-items: baseline; gap: 5px; padding: 3px 9px; border-radius: 8px;
+  background: #fff; box-shadow: inset 0 0 0 1px #cdead9; font-size: 12px; white-space: nowrap;
+}
+.sch-availbar li.is-off { background: #f4f5f9; box-shadow: none; color: var(--muted); }
+.sch-availbar li b { font-size: 11px; color: var(--muted); font-weight: 600; }
+.sch-availbar .ghost-btn { padding: 3px 10px; font-size: 12px; }
+
+.sch-nudge {
+  border: 1px solid var(--line); background: #fff; color: var(--purple);
+  border-radius: 999px; padding: 1px 9px; font-size: 11px; cursor: pointer;
+}
+.sch-nudge:hover { border-color: var(--purple); }
+.sch-nudge.is-done { color: var(--muted); border-color: var(--line); }
+
+
+/* ======================================================= 待办清单 ========
+   考勤的「还没处理的」和休假的「等你批」用同一套（2026-09-03 Mingrong：
+   照 HACCP 那张「全部表单 · 最近 7 天」的样子来）。
+   要点是：一行一件事、横向读得完、动作永远在最右边同一列，
+   而不是一张一张占半屏的卡片。两个模块共用，所以放在这儿（页头也是共用的）。 */
+.wl-card .section-title { align-items: center; }
+.wl-count {
+  padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: #ffe8ec; color: var(--red); white-space: nowrap;
+}
+.wl-count.is-soft { background: #fff3e2; color: #a85d00; }
+/* 中性的那一档：它只是个合计，不是警报 */
+.wl-count.is-plain { background: #eef1f8; color: var(--ink); font-weight: 600; }
+.wl-wrap { overflow-x: auto; margin-top: 12px; }
+.wl-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.wl-table th {
+  padding: 0 10px 7px; border-bottom: 1px solid var(--line);
+  font-size: 11px; font-weight: 600; color: var(--muted); text-align: left; white-space: nowrap;
+}
+.wl-table td { padding: 10px; border-bottom: 1px solid #eef0f6; vertical-align: middle; font-size: 13px; }
+.wl-table tbody tr:last-child > td { border-bottom: 0; }
+.wl-table tbody tr:hover > td { background: #fbfaff; }
+.wl-table tr.is-open > td { background: #fbfaff; }
+.wl-day strong { display: block; font-size: 13px; white-space: nowrap; }
+.wl-day small, .wl-who small, .wl-when small { display: block; font-size: 11px; color: var(--muted); }
+.wl-who strong { font-size: 13px; }
+.wl-why { color: var(--red); font-size: 12px; line-height: 1.5; }
+.wl-why.is-soft { color: var(--muted); }
+.wl-act { text-align: right; white-space: nowrap; }
+.wl-editrow > td { padding: 0 10px 12px; background: #fbfaff; }
+.wl-empty { margin: 12px 0 0; font-size: 12px; color: var(--muted); }

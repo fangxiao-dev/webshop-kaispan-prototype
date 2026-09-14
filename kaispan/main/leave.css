@@ -1,0 +1,134 @@
+/* ==========================================================================
+   KaiSpan · 休假模块样式
+   前缀统一 .lv-。复用 styles.css 的变量、.card / .table / .pill 和 .sch-weekbar。
+   ========================================================================== */
+
+.lv-cal, .lv-type, .lv-dot, .lv-chip {
+  --t-urlaub: #6236ff; --t-krank: #d92d20; --t-unbezahlt: #667094; --t-sonder: #12b76a;
+}
+
+.lv-type {
+  display: inline-block; font-size: 11px; font-weight: 750; padding: 1px 8px;
+  border-radius: 999px; background: #eef1f8; color: var(--muted);
+}
+.lv-type.is-urlaub { background: #f0ebff; color: #5b21b6; }
+.lv-type.is-krank { background: #fee4e2; color: #b42318; }
+.lv-type.is-unbezahlt { background: #eef1f8; color: #475467; }
+.lv-type.is-sonder { background: #e6f7ef; color: #067647; }
+
+/* ------------------------------------------------------- 待审批 / AU ----
+   两张表都用考勤那套 .wl-table（见 schedule.css）—— 店长在考勤和休假上做的
+   是同一类动作：看一条对不上的东西，给一个决定。长成两个样子只会让他每次
+   都重新找一遍按钮在哪。这里只补展开面板里的样式。 */
+.lv-au { margin-bottom: 16px; }
+.lv-au .section-title p, .lv-add .section-title p {
+  margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6;
+}
+.wl-when strong { font-size: 13px; white-space: nowrap; }
+
+.lv-decide { display: grid; gap: 10px; padding: 2px 0 6px; }
+.lv-req-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin: 0; font-size: 13px; }
+.lv-req-head span { color: var(--muted); font-size: 12px; }
+.lv-req-head i { font-style: normal; color: var(--muted); font-size: 12px; }
+.lv-req-col { white-space: nowrap; }
+.lv-req-col .ghost-btn, .lv-req-col .primary-btn { padding: 4px 10px; font-size: 12px; }
+.lv-table tr.is-open-req > td { background: #fffaf2; }
+.lv-facts { display: grid; gap: 5px; }
+.lv-facts span { font-size: 12px; line-height: 1.5; color: var(--muted); }
+.lv-facts span.is-bad { color: #b42318; }
+.lv-facts a { color: var(--purple); font-weight: 750; }
+.lv-note-in, .lv-au-form input {
+  min-height: 36px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 7px 10px; font: inherit; background: #fff;
+}
+.lv-note-in { width: 100%; }
+.lv-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.lv-au-form { display: inline-flex; gap: 8px; align-items: center; }
+.lv-au-form input { width: 150px; }
+
+/* ------------------------------------------------------------ 日历 ------ */
+/* 「这个月谁不在」默认收起（2026-09-03 Mingrong 问有没有必要）：
+   跨周的休假在周班表上要翻四次才看得全，这张月历是唯一一眼看完的地方 —— 留着；
+   但它是排下个月班时才看的东西，一个月一次，所以折起来，标题上写清楚有没有人不在。 */
+.lv-cal-card { margin-bottom: 16px; padding: 0; }
+.lv-cal-card > summary {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 14px 18px; cursor: pointer; list-style: none;
+}
+.lv-cal-card > summary::-webkit-details-marker { display: none; }
+.lv-cal-card > summary::after { content: "＋"; margin-left: auto; color: var(--purple); font-weight: 700; }
+.lv-cal-card[open] > summary::after { content: "−"; }
+.lv-cal-card > summary strong { font-size: 15px; }
+.lv-cal-card > summary span { font-size: 12px; color: var(--muted); }
+.lv-cal-card .lv-cal-wrap { padding: 0 18px; }
+.lv-cal-card .sch-legend { padding: 0 18px 16px; }
+.lv-cal-wrap { overflow-x: auto; margin-top: 12px; }
+.lv-cal { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 780px; }
+.lv-cal th {
+  padding: 6px 8px; font-size: 12px; color: var(--muted); font-weight: 600;
+  text-align: left; border-bottom: 1px solid var(--line);
+}
+.lv-cell {
+  border: 1px solid var(--line); border-top: none; border-left: none;
+  vertical-align: top; padding: 6px; height: 74px; width: 14.28%;
+}
+.lv-cell:first-child { border-left: 1px solid var(--line); }
+.lv-cell.is-out { background: #fafbfe; }
+.lv-cell.is-out .lv-cell-day { color: #c3c9d9; }
+.lv-cell.is-today { background: #fbfaff; }
+.lv-cell-day { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.lv-chip {
+  display: block; font-size: 11px; font-weight: 750; padding: 2px 6px; margin-bottom: 3px;
+  border-radius: 6px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: #f0ebff; color: #5b21b6;
+}
+.lv-chip.is-krank { background: #fee4e2; color: #b42318; }
+.lv-chip.is-unbezahlt { background: #eef1f8; color: #475467; }
+.lv-chip.is-sonder { background: #e6f7ef; color: #067647; }
+.lv-dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; background: var(--t-urlaub); }
+.lv-dot.is-krank { background: var(--t-krank); }
+.lv-dot.is-unbezahlt { background: var(--t-unbezahlt); }
+.lv-dot.is-sonder { background: var(--t-sonder); }
+
+/* ------------------------------------------------------------ 余额 ------ */
+.lv-table td small { display: block; font-size: 11px; color: var(--muted); }
+
+/* ------------------------------------------------------------ 代录 ------ */
+.lv-add { margin-bottom: 16px; }
+.lv-add-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 10px; margin-top: 12px;
+}
+.lv-add-grid label { display: grid; gap: 6px; font-size: 12px; font-weight: 750; color: var(--muted); }
+.lv-add-grid input, .lv-add-grid select {
+  min-height: 38px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; font: inherit; background: #fff;
+}
+.lv-add-why { grid-column: 1 / -1; }
+.lv-add .lv-acts { margin-top: 12px; }
+
+.lv-note { margin: 16px 0 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+
+@media (max-width: 900px) {
+  .lv-add-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ---------------------------------------------- 撤销批过的假（2026-09-04）--
+   「已批」那个数字点开就是这个人今年批过的每一条，各带一个撤销。
+   在此之前 lvCancel() 和 .lv-cancel 的监听都写好了，只是没人渲染那个按钮 —— 一条没接上的线。 */
+.lv-taken-link { color: var(--purple); text-decoration: none; border-bottom: 1px dashed currentColor; }
+.lv-taken { display: grid; gap: 10px; }
+.lv-taken-head { margin: 0; font-size: 13px; font-weight: 700; }
+.lv-taken-empty, .lv-taken-note { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
+.lv-taken-row {
+  display: grid; grid-template-columns: minmax(190px, auto) minmax(0, 1fr) auto;
+  gap: 10px 14px; align-items: center;
+  border: 1px solid var(--line); border-radius: 11px; padding: 9px 12px; background: #fff;
+}
+.lv-taken-row > span:first-child { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; font-size: 13px; }
+.lv-taken-row i { font-style: normal; font-size: 11.5px; color: var(--muted); }
+.lv-taken-act { display: flex; gap: 8px; align-items: center; }
+.lv-taken-act .lv-note-in { min-width: 190px; }
+@media (max-width: 900px) {
+  .lv-taken-row { grid-template-columns: 1fr; }
+  .lv-taken-act { flex-wrap: wrap; }
+}

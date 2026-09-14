@@ -1,0 +1,37 @@
+// 从本目录运行：ego-browser nodejs < inventory-master-data.check.mjs
+const task = await taskSpace(globalThis.inventoryCheckSpace || '物品资料检查');
+const page = task.page('p1');
+const { pathToFileURL } = await import('node:url');
+await page.goto(pathToFileURL('/Users/panhaisa/haisa/Pan/Projects/Gao/workspace/food-supplier-webapp/docs/fuji_backoffice/supplier-ui-editor.html').href);
+await page.evaluate(() => window.goToPage('inventory'));
+await page.click('[data-inventory-master-data]');
+console.log(await page.evaluate(() => {
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const click = selector => document.querySelector(selector).click();
+  const set = (name, value) => { document.querySelector(`[data-im-form] [name="${name}"]`).value = value; };
+  const save = () => document.querySelector('[data-im-form]').requestSubmit();
+  assert(document.querySelectorAll('[data-im-row]').length === inventoryProducts.length, '复用库存目录');
+  assert(!document.querySelector('[data-im-tab="brands"]'), '不显示品牌页签');
+  assert(!document.querySelector('[data-im-tab="groups"]'), '不显示物品组页签');
+  click('[data-im-new]');
+  set('name', '检查物品'); set('sku', 'CHECK-ITEM'); set('baseUnit', '瓶');
+  click('[data-im-add-spec]'); set('specLabel', '一箱24瓶'); set('specQuantity', '24'); save();
+  const item = inventoryProducts.find(entry => entry.sku === 'CHECK-ITEM');
+  assert(item?.specs[0].baseQuantity === '24', '新物品及规格保存');
+  click(`[data-im-edit="${item.id}"]`);
+  assert(document.querySelector('[name="brandId"]').value === item.brandId, '品牌回读');
+  set('name', '不应保存'); click('[data-im-cancel]'); assert(item.name === '检查物品', '取消不写入');
+  click(`[data-im-edit="${item.id}"]`); set('name', '检查物品已改'); save();
+  assert(item.name === '检查物品已改', '编辑保存');
+  click('[data-im-new]'); set('name', '检查物品已改'); save();
+  assert(!document.querySelector('[name="name"]').validity.valid, '拒绝重名');
+  click('[data-im-cancel]');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert(!drawer.classList.contains('open'), 'Escape 关闭');
+  click('[data-inventory-master-data]'); assert(drawerBody.textContent.includes('检查物品已改'), '重开保留');
+  closeDrawer(); openDrawer('productPriceNoodle');
+  assert([...document.querySelector('[data-inventory-product]').options].some(option => option.value === item.id), '商品绑定可选新库存物品');
+  return 'PASS: 仅显示物品、新增/编辑物品、规格、校验、取消、回读与商品绑定';
+}));
+await page.reload();
+await task.finish({ keep: [] });

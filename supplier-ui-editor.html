@@ -1,0 +1,2885 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>供应商管理后台 - 前端展示版</title>
+  <style>
+    :root {
+      --bg: #f6f7f8;
+      --panel: #fff;
+      --ink: #151515;
+      --muted: #6f7177;
+      --line: #dedfe3;
+      --primary: #111827;
+      --blue: #2563eb;
+      --green: #16a34a;
+      --orange: #d97706;
+      --red: #dc2626;
+      --radius: 8px;
+      --shadow: 0 12px 34px rgba(15, 23, 42, .08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 246px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      background: #fff;
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand-logo {
+      display: block;
+      width: min(190px, 100%);
+      height: 68px;
+      object-fit: contain;
+    }
+
+    .nav {
+      padding: 14px 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .nav button {
+      border: 0;
+      min-height: 42px;
+      border-radius: var(--radius);
+      background: transparent;
+      color: #3f3f46;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+      font-weight: 700;
+      text-align: left;
+    }
+
+    .nav button:hover { background: #f4f4f5; }
+    .nav button.active { background: var(--primary); color: #fff; }
+
+    svg.icon {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.9;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex: 0 0 auto;
+    }
+
+    .sidebar-note {
+      margin-top: auto;
+      padding: 16px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .main { min-width: 0; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      min-height: 68px;
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 28px;
+    }
+
+    .search {
+      width: min(460px, 46vw);
+      position: relative;
+    }
+
+    .search input {
+      width: 100%;
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 0 12px 0 38px;
+      background: #fff;
+    }
+
+    .search svg { position: absolute; left: 12px; top: 11px; color: var(--muted); }
+
+    .user-tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .select, .control {
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 0 11px;
+      color: #27272a;
+    }
+
+    .avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: #111827;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .content {
+      padding: 26px 28px 42px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .page { display: none; gap: 18px; }
+    .page.active { display: grid; }
+
+    .page-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 7px; font-size: 28px; line-height: 1.2; }
+    h2 { margin-bottom: 4px; font-size: 17px; line-height: 1.35; }
+    h3 { margin-bottom: 3px; font-size: 15px; }
+    .page-head p, .sub { color: var(--muted); line-height: 1.45; margin-bottom: 0; }
+
+    .actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+
+    .btn {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: #27272a;
+      padding: 0 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+    }
+
+    .btn.primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+    .btn.danger { border-color: #fecaca; background: #fff5f5; color: var(--red); }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat, .card, .table-card, .module-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: 0 1px 2px rgba(15,23,42,.03);
+    }
+
+    .stat { padding: 15px; display: grid; gap: 8px; }
+    .stat span { color: var(--muted); font-size: 13px; font-weight: 700; }
+    .stat strong { font-size: 25px; line-height: 1; }
+    .stat small { color: var(--green); font-weight: 750; }
+
+    .home-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+    }
+
+    .module-card {
+      min-height: 132px;
+      padding: 18px;
+      text-align: left;
+      display: grid;
+      align-content: start;
+      gap: 13px;
+      color: inherit;
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    }
+
+    .module-card:hover {
+      transform: translateY(-2px);
+      border-color: #b9bbc2;
+      box-shadow: var(--shadow);
+    }
+
+    .module-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .module-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius);
+      display: grid;
+      place-items: center;
+      background: #eef2ff;
+      color: #3730a3;
+    }
+
+    .module-card p { color: var(--muted); line-height: 1.45; margin-bottom: 0; }
+
+    .dashboard-grid, .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .warehouse-shortcuts {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .warehouse-card {
+      display: grid;
+      grid-template-columns: 54px minmax(0, 1fr);
+      gap: 13px;
+      align-content: start;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(15,23,42,.03);
+    }
+
+    .warehouse-card.blue { background: linear-gradient(135deg, #eef4ff 0%, #fff 72%); border-color: #cfe0ff; }
+    .warehouse-card.cyan { background: linear-gradient(135deg, #eef8ff 0%, #fff 72%); border-color: #cbe7fb; }
+    .warehouse-card.rose { background: linear-gradient(135deg, #fff1f3 0%, #fff 72%); border-color: #f5d4db; }
+
+    .warehouse-icon {
+      width: 54px;
+      height: 54px;
+      border-radius: var(--radius);
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.8);
+      color: var(--blue);
+      border: 1px solid rgba(37,99,235,.12);
+    }
+
+    .warehouse-copy { display: grid; gap: 5px; min-width: 0; }
+    .warehouse-copy strong { font-size: 20px; line-height: 1.15; }
+    .warehouse-copy span, .warehouse-card small { color: var(--muted); line-height: 1.45; }
+    .warehouse-body { grid-column: 1 / -1; display: grid; gap: 9px; margin-top: 2px; }
+
+    .warehouse-mini-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .warehouse-supplier-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .warehouse-mini-supplier,
+    .warehouse-upload-box,
+    .warehouse-mini-line,
+    .warehouse-mini-loss-row,
+    .warehouse-reco {
+      border: 1px solid rgba(15,23,42,.1);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.78);
+    }
+
+    .warehouse-mini-supplier {
+      padding: 9px;
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .warehouse-production-order {
+      grid-column: 1 / -1;
+      min-height: 76px;
+      padding: 14px 16px;
+      border-color: rgba(37,99,235,.28);
+      background: linear-gradient(135deg, #eef4ff 0%, #fff 100%);
+      text-align: left;
+      box-shadow: 0 10px 22px rgba(37, 99, 235, .08);
+    }
+
+    .warehouse-production-order b {
+      font-size: 18px;
+    }
+
+    .warehouse-mini-supplier b,
+    .warehouse-mini-supplier span,
+    .warehouse-mini-supplier small {
+      display: block;
+    }
+
+    .warehouse-mini-supplier span,
+    .warehouse-mini-supplier small {
+      font-size: 12px;
+    }
+
+    .warehouse-upload-box {
+      display: grid;
+      gap: 4px;
+      padding: 12px;
+      border-style: dashed;
+      text-align: center;
+    }
+
+    .warehouse-mini-list { display: grid; gap: 7px; }
+
+    .warehouse-mini-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 10px;
+    }
+
+    .warehouse-mini-line b,
+    .warehouse-mini-line span {
+      display: block;
+    }
+
+    .warehouse-mini-line span { color: var(--muted); font-size: 12px; }
+
+    .warehouse-loss-metric {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .warehouse-loss-metric b { font-size: 22px; }
+
+    .warehouse-mini-loss-row {
+      display: grid;
+      grid-template-columns: 1fr .55fr .8fr .7fr .9fr;
+      gap: 8px;
+      align-items: center;
+      padding: 9px 10px;
+      font-size: 12px;
+    }
+
+    .warehouse-footer,
+    .warehouse-quick-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .warehouse-footer {
+      grid-column: 1 / -1;
+      padding-top: 8px;
+      border-top: 1px solid rgba(15,23,42,.08);
+    }
+
+    .warehouse-ordering-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .warehouse-ordering-toolbar {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      align-items: stretch;
+      padding-top: 8px;
+      border-top: 1px solid rgba(15,23,42,.08);
+    }
+
+    .warehouse-filter-layer {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+    }
+
+    .warehouse-filter-layer[hidden] {
+      display: none;
+    }
+
+    .warehouse-filter-layer > span {
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .warehouse-filter-title {
+      display: grid;
+      gap: 2px;
+      align-content: center;
+    }
+
+    .link-btn {
+      border: 0;
+      background: transparent;
+      color: var(--blue);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 900;
+      padding: 0;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .warehouse-order-mode {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      flex-wrap: wrap;
+    }
+
+    .warehouse-order-mode button {
+      min-height: 34px;
+      min-width: 86px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 0 16px;
+      background: transparent;
+      font-weight: 900;
+      color: #334155;
+      white-space: nowrap;
+    }
+
+    .warehouse-order-mode button.active {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+      box-shadow: 0 6px 14px rgba(37, 99, 235, .2);
+    }
+
+    .warehouse-order-mode button span,
+    .warehouse-order-mode button small {
+      display: block;
+      line-height: 1.25;
+    }
+
+    .warehouse-order-mode button small {
+      color: var(--red);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .warehouse-order-mode button.active small {
+      color: #fff;
+    }
+
+    .warehouse-order-mode .zone-remove,
+    .warehouse-order-mode .zone-add {
+      display: none;
+    }
+
+    .warehouse-order-mode .zone-remove {
+      margin-left: 8px;
+      color: inherit;
+      font-size: 14px;
+      font-weight: 900;
+      line-height: 1;
+      opacity: .75;
+    }
+
+    .warehouse-order-mode .zone-add {
+      min-width: 40px;
+      padding: 0 12px;
+      color: var(--blue);
+      font-size: 20px;
+    }
+
+    .warehouse-zone-editing .warehouse-order-mode .zone-remove,
+    .warehouse-zone-editing .warehouse-order-mode .zone-add,
+    .warehouse-filter-editing .warehouse-order-mode .zone-remove,
+    .warehouse-filter-editing .warehouse-order-mode .zone-add {
+      display: inline-block;
+    }
+
+    .warehouse-zone-editing .warehouse-order-mode button:not(.zone-add),
+    .warehouse-filter-editing .warehouse-order-mode button:not(.zone-add) {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .supplier-schedule {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 12px;
+      border: 1px solid #fecaca;
+      border-radius: var(--radius);
+      background: #fff7f7;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .supplier-schedule strong {
+      color: var(--red);
+    }
+
+    [data-order-catalog-tabs][hidden], [data-order-catalog-empty][hidden], .warehouse-product-card[hidden] { display: none; }
+
+    .warehouse-product-grid {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(190px, 1fr));
+      gap: 12px;
+    }
+
+    .warehouse-product-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.9);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: 126px minmax(96px, auto) auto;
+    }
+
+    .warehouse-product-image {
+      margin: 10px 10px 0;
+      border: 1px solid #e4e7ec;
+      border-radius: 8px;
+      background: #f7f5f2;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .warehouse-product-image svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .warehouse-product-info {
+      padding: 10px 12px;
+      display: grid;
+      gap: 5px;
+    }
+
+    .warehouse-product-info strong {
+      font-size: 15px;
+    }
+
+    .warehouse-product-info span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .warehouse-zone-field {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 6px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .warehouse-zone-field b {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .warehouse-zone-field select {
+      display: none;
+      width: 100%;
+      min-height: 30px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .warehouse-products-zone-editing .warehouse-zone-field b {
+      display: none;
+    }
+
+    .warehouse-products-zone-editing .warehouse-zone-field select {
+      display: block;
+    }
+
+    .warehouse-product-info b {
+      font-size: 16px;
+    }
+
+    .warehouse-product-actions {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) 34px;
+      gap: 6px;
+      align-items: center;
+      padding: 10px 12px 12px;
+      border-top: 1px solid var(--line);
+      background: #fbfcff;
+    }
+
+    .warehouse-product-actions button {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .warehouse-product-actions input {
+      width: 100%;
+      min-height: 34px;
+      text-align: center;
+      font-weight: 800;
+    }
+
+    .stock-register-alert {
+      grid-column: 1 / -1;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 1px solid #fecaca;
+      border-radius: var(--radius);
+      background: #fff7f7;
+      color: var(--red);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .stock-register-alert.show {
+      display: flex;
+    }
+
+    .stock-register-alert .actions {
+      flex-shrink: 0;
+    }
+
+    .warehouse-workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(320px, .7fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .warehouse-reco-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .warehouse-reco {
+      padding: 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .warehouse-reco strong { display: block; }
+    .warehouse-reco p { color: var(--muted); font-size: 13px; line-height: 1.45; margin-bottom: 0; }
+
+    .catalog-toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) repeat(3, minmax(160px, .55fr));
+      gap: 10px;
+    }
+
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .catalog-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .catalog-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .catalog-product {
+      display: flex;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .catalog-thumb {
+      width: 56px;
+      height: 56px;
+      border-radius: var(--radius);
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      background: #eef2ff;
+      color: #3730a3;
+      font-weight: 900;
+    }
+
+    .catalog-product strong,
+    .catalog-product span {
+      display: block;
+    }
+
+    .catalog-product span,
+    .catalog-meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .catalog-controls {
+      display: grid;
+      grid-template-columns: 1fr 120px 104px;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .catalog-price {
+      display: grid;
+      gap: 3px;
+      padding-top: 2px;
+      border-top: 1px solid var(--line);
+    }
+
+    .catalog-price strong {
+      font-size: 20px;
+    }
+
+    .shop-editor {
+      display: grid;
+      gap: 12px;
+    }
+
+    .shop-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .shop-summary .stat {
+      min-height: 56px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .shop-summary .stat strong {
+      font-size: 18px;
+      white-space: nowrap;
+    }
+
+    .shop-summary .stat small {
+      white-space: nowrap;
+    }
+
+    .price-template-radios {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .price-template-label {
+      display: grid;
+      gap: 2px;
+      align-content: center;
+    }
+
+    .price-template-radios label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .price-template-radios input {
+      accent-color: var(--primary);
+    }
+
+    .template-alert {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #fed7aa;
+      border-radius: var(--radius);
+      background: #fff7ed;
+    }
+
+    .template-alert.show {
+      flex-wrap: wrap;
+      display: flex;
+    }
+
+    .template-alert strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .template-alert p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .template-alert .actions {
+      flex-wrap: wrap;
+    }
+
+    .template-alert input {
+      width: 180px;
+      min-height: 38px;
+    }
+
+    .template-manager-error {
+      margin: 0;
+      color: var(--red);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .shop-browser {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .shop-search-band {
+      display: flex;
+      align-items: center;
+      padding: 18px 34px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .shop-search {
+      width: min(860px, 100%);
+      height: 54px;
+      border: 1px solid #d7d7d7;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 22px;
+      color: #8c8c8c;
+      font-size: 15px;
+    }
+
+    .shop-search .icon {
+      width: 22px;
+      height: 22px;
+      stroke-width: 1.8;
+    }
+
+    .shop-catalog {
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      gap: 44px;
+      padding: 32px 44px 44px;
+      background: #fafafa;
+    }
+
+    .shop-side-card {
+      align-self: start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+      box-shadow: 0 1px 7px rgba(15, 23, 42, .08);
+    }
+
+    .shop-side-card select,
+    .shop-side-link {
+      width: 100%;
+      min-height: 46px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 0 14px;
+      font: inherit;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .shop-side-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-color: transparent;
+      text-align: left;
+    }
+
+    .shop-side-link.active {
+      background: #f1f1f1;
+    }
+
+    .shop-products {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(210px, 1fr));
+      gap: 12px;
+    }
+
+    .shop-product-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      min-height: 354px;
+      display: grid;
+      grid-template-rows: 172px 104px auto;
+      overflow: hidden;
+    }
+
+    .shop-photo {
+      margin: 12px 12px 0;
+      border: 1px solid #e6e6e6;
+      border-radius: 6px;
+      background: #f7f5f2;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .shop-photo svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .product-placeholder {
+      min-height: 156px;
+      background: #f8fafc;
+      color: #94a3b8;
+    }
+
+    .product-placeholder strong {
+      font-size: 32px;
+      letter-spacing: .06em;
+    }
+
+    .shop-product-body {
+      padding: 12px;
+      display: grid;
+      align-content: start;
+      gap: 8px;
+    }
+
+    .shop-product-body h3 {
+      font-size: 15px;
+      line-height: 1.22;
+      margin: 0;
+    }
+
+    .shop-product-code {
+      color: #8a8a8a;
+      font-weight: 600;
+    }
+
+    .shop-spec {
+      color: #2f2f2f;
+      font-size: 14px;
+    }
+
+    .shop-admin-controls {
+      border-top: 1px solid var(--line);
+      background: #fbfcff;
+      padding: 10px 12px 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .shop-admin-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 96px;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .shop-admin-row .field label,
+    .shop-admin-controls .field label {
+      font-size: 11px;
+    }
+
+    .shop-admin-controls select,
+    .shop-admin-controls input {
+      min-height: 38px;
+      font-size: 13px;
+    }
+
+    .shop-section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .shop-section-title h2 {
+      font-size: 18px;
+      margin: 0;
+    }
+
+    .product-manage-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(210px, 1fr));
+      gap: 12px;
+    }
+
+    .product-manage-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      display: grid;
+      grid-template-rows: 168px minmax(138px, auto) auto;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .product-manage-card .shop-photo {
+      margin: 12px 12px 0;
+    }
+
+    .product-edit-delete {
+      display: none;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--red);
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1;
+      box-shadow: var(--shadow);
+      z-index: 2;
+    }
+
+    .product-catalog-editing .product-edit-delete {
+      display: grid;
+      place-items: center;
+    }
+
+    .product-manage-body {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .product-manage-body h3 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.25;
+    }
+
+    .product-stock-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .product-stock-grid div {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: #fafafa;
+    }
+
+    .product-stock-grid span,
+    .product-manage-body small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .product-stock-grid strong {
+      display: block;
+      margin-top: 2px;
+      font-size: 16px;
+    }
+
+    .product-card-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 38px;
+      gap: 8px;
+      padding: 10px 12px 12px;
+      border-top: 1px solid var(--line);
+      background: #fbfcff;
+    }
+
+    .product-card-actions select {
+      min-height: 36px;
+    }
+
+    .chevron-btn {
+      width: 38px;
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      display: grid;
+      place-items: center;
+      color: var(--text);
+    }
+
+    [data-page="products"] .shop-side-card,
+    [data-page="products"] .shop-side-card * {
+      min-width: 0;
+    }
+
+    [data-page="products"] .shop-side-card {
+      grid-template-columns: minmax(0, 1fr);
+      overflow-wrap: anywhere;
+    }
+
+    .product-add-panel input[type="file"] {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .product-add-panel {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px dashed #b8c7dc;
+      border-radius: var(--radius);
+      background: #f8fbff;
+    }
+
+    .product-add-panel .card-head {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 0;
+    }
+
+    .product-add-panel .card-head h3 {
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .product-add-panel .card-head .btn {
+      width: 100%;
+    }
+
+    .product-add-panel .form-grid {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .product-add-panel .upload-box {
+      min-height: 96px;
+      padding: 10px;
+    }
+
+    .product-add-panel .actions {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .inventory-mapping {
+      background: #fbfcff;
+    }
+
+    .mapping-summary {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius);
+      background: #eff6ff;
+      color: #1e40af;
+      line-height: 1.45;
+      font-size: 13px;
+    }
+
+    .field-error {
+      display: block;
+      margin-top: 5px;
+      color: var(--red);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .warn-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .warn-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 12px;
+      border: 1px solid #fecaca;
+      border-radius: var(--radius);
+      background: #fff7f7;
+    }
+
+    .material-warning {
+      display: block;
+      margin-top: 6px;
+      color: var(--red);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.35;
+      white-space: pre-line;
+    }
+
+    .material-warning[hidden] {
+      display: none;
+    }
+
+    .card { padding: 16px; }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .todo-list, .timeline, .rules {
+      display: grid;
+      gap: 9px;
+    }
+
+    .todo {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fbfbfc;
+    }
+
+    .todo strong { display: block; margin-bottom: 3px; }
+    .todo span { color: var(--muted); font-size: 13px; }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--blue);
+      box-shadow: 0 0 0 4px #dbeafe;
+    }
+
+    .dot.orange { background: var(--orange); box-shadow: 0 0 0 4px #fef3c7; }
+    .dot.green { background: var(--green); box-shadow: 0 0 0 4px #dcfce7; }
+
+    .filters {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+
+    .filters input { min-width: 220px; flex: 1; }
+
+    .customer-groups {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+    }
+
+    .group-btn {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: #34343a;
+      padding: 0 13px;
+      font-weight: 750;
+    }
+
+    .group-btn.active {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .tabs {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .tabs button {
+      height: 36px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      background: #fff;
+      padding: 0 12px;
+      color: #52525b;
+      font-weight: 700;
+    }
+
+    .tabs button:last-child { border-right: 0; }
+    .tabs button.active { background: var(--primary); color: #fff; }
+
+    .table-card { overflow: hidden; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+    }
+
+    th, td {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+      font-size: 14px;
+    }
+
+    th {
+      background: #fafafa;
+      color: #52525b;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #f8fafc; }
+    [data-page="customers"] tbody tr { background: #fff; }
+    [data-page="customers"] tr[data-customer-group-row]:not([data-customer-note]) td {
+      border-bottom: 0;
+      padding-bottom: 6px;
+    }
+    [data-page="customers"] [data-customer-note] td {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      padding: 0 16px 16px 54px;
+      color: var(--muted);
+      border-bottom: 2px solid var(--line);
+    }
+    [data-page="customers"] [data-customer-note]:last-child td { border-bottom: 0; }
+
+
+    .entity {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .entity-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius);
+      display: grid;
+      place-items: center;
+      background: #eef2ff;
+      color: #4338ca;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+
+    .entity strong { display: block; white-space: nowrap; }
+    .entity span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 999px;
+      padding: 0 9px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .badge.green { color: #166534; background: #dcfce7; }
+    .badge.orange { color: #92400e; background: #fef3c7; }
+    .badge.red { color: #991b1b; background: #fee2e2; }
+    .badge.blue { color: #1d4ed8; background: #dbeafe; }
+    .badge.gray { color: #52525b; background: #f4f4f5; }
+
+    .status-btn {
+      border: 0;
+      cursor: pointer;
+    }
+
+    .status-btn:hover {
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, .18);
+    }
+
+    .detail-block {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 13px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .detail-block h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .info-list {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+    }
+
+    .info-row {
+      display: grid;
+      grid-template-columns: 128px minmax(0, 1fr);
+      gap: 10px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .info-row span:first-child {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .upload-box {
+      border: 1px dashed #b9bbc2;
+      border-radius: var(--radius);
+      background: #fafafa;
+      padding: 14px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .row-actions { display: flex; justify-content: flex-end; gap: 7px; white-space: nowrap; }
+
+    .rule {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .rule span { color: var(--muted); font-size: 13px; }
+
+    .toggle {
+      width: 44px;
+      height: 24px;
+      border: 0;
+      border-radius: 999px;
+      background: #d4d4d8;
+      padding: 3px;
+      flex: 0 0 auto;
+    }
+
+    .toggle::before {
+      content: "";
+      display: block;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: #fff;
+      transition: transform .18s ease;
+    }
+
+    .toggle.on { background: var(--green); }
+    .toggle.on::before { transform: translateX(20px); }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .field { display: grid; gap: 6px; }
+    .field.full { grid-column: 1 / -1; }
+    .field label { color: #3f3f46; font-size: 13px; font-weight: 750; }
+    .help-dot {
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      margin-left: 6px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-size: 12px;
+      font-weight: 900;
+      vertical-align: middle;
+    }
+    .field input, .field select, .field textarea {
+      width: 100%;
+      min-height: 39px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 9px 10px;
+      color: var(--ink);
+    }
+    .field textarea { min-height: 84px; resize: vertical; }
+
+    .drawer {
+      position: fixed;
+      inset: 0;
+      display: none;
+      z-index: 30;
+    }
+
+    .drawer.open { display: block; }
+    .drawer-backdrop { position: absolute; inset: 0; background: rgba(15,23,42,.32); }
+
+    .drawer-panel {
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: min(1120px, 100vw);
+      height: 100%;
+      background: #fff;
+      box-shadow: var(--shadow);
+      padding: 20px 24px 28px;
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 14px;
+    }
+
+    .drawer-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .icon-btn {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      display: grid;
+      place-items: center;
+      color: #3f3f46;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%) translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+      background: #111827;
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 11px 14px;
+      font-weight: 750;
+      box-shadow: var(--shadow);
+      transition: opacity .18s ease, transform .18s ease;
+      z-index: 50;
+    }
+
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 1100px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .nav { grid-auto-flow: column; overflow-x: auto; padding-bottom: 14px; }
+      .nav button { white-space: nowrap; }
+      .sidebar-note { display: none; }
+      .home-grid, .dashboard-grid, .split, .warehouse-shortcuts, .warehouse-workspace { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      .topbar { align-items: stretch; flex-direction: column; padding: 12px 16px; }
+      .search { width: 100%; }
+      .user-tools { justify-content: space-between; }
+      .content { padding: 20px 16px 32px; }
+      .page-head { display: grid; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .form-grid { grid-template-columns: 1fr; }
+      .warehouse-supplier-list, .warehouse-reco-grid { grid-template-columns: 1fr; }
+      .warehouse-ordering-toolbar, .warehouse-product-grid { grid-template-columns: 1fr; }
+      .warehouse-filter-layer { grid-template-columns: 1fr; }
+      .catalog-toolbar, .catalog-grid, .catalog-controls { grid-template-columns: 1fr; }
+      .shop-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .shop-search-band, .shop-catalog, .shop-products, .product-manage-grid { grid-template-columns: 1fr; }
+      .shop-search-band, .shop-catalog { padding: 24px 18px; gap: 18px; }
+      .warehouse-mini-loss-row { grid-template-columns: 1fr 1fr; }
+      .table-card { overflow-x: auto; }
+      table { min-width: 760px; }
+    }
+
+    @media (max-width: 480px) {
+      .shop-summary { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: 1fr; }
+      h1 { font-size: 23px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <img class="brand-logo" src="新logo_副本.jpg" alt="Fujigawa Food GmbH 藤川食品">
+      </div>
+
+      <nav class="nav" aria-label="后台导航">
+        <button class="active" type="button" data-page-target="overview" onclick="goToPage('overview')">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-4"/><path d="M5 19h14"/></svg>
+          主页
+        </button>
+        <button type="button" data-page-target="customers" onclick="goToPage('customers')">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          客户管理
+        </button>
+        <button type="button" data-page-target="orders" onclick="goToPage('orders')">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M9 4h6"/><path d="M9 2h6v4H9z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>
+          订单管理
+        </button>
+        <button type="button" data-page-target="inventory" onclick="goToPage('inventory')">
+          <svg class="icon" viewBox="0 0 24 24"><path d="m21 16-9 5-9-5"/><path d="m21 12-9 5-9-5"/><path d="m3 8 9-5 9 5-9 5z"/></svg>
+          库存管理
+        </button>
+        <button type="button" data-page-target="products" onclick="goToPage('products')">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/><path d="M17 17l2 2 3-4"/></svg>
+          商品管理
+        </button>
+        <button type="button" data-page-target="production" onclick="goToPage('production')">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V9l5 4V9l5 4V7h4v14"/><path d="M9 17h1"/><path d="M14 17h1"/></svg>
+          生产管理
+        </button>
+        <button type="button" data-page-target="business" onclick="goToPage('business')">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/><path d="M18 7h1v1"/></svg>
+          经营分析
+        </button>
+      </nav>
+
+      <div class="sidebar-note">前端展示版，无后端连接。所有订单、客户、库存、生产和单据状态都是假数据。</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <label class="search">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input id="globalSearch" type="search" placeholder="搜索客户、订单、库存、单据">
+        </label>
+        <div class="user-tools">
+          <select class="select" aria-label="界面语言"><option>中文</option><option>Deutsch</option><option>English</option></select>
+          <span>Yuan Gao</span>
+          <div class="avatar" aria-hidden="true">YG</div>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="page active" data-page="overview">
+          <div class="page-head">
+            <div>
+              <h1>供应商管理后台</h1>
+              <p class="sub">主页保留主要入口：客户、订单、库存、出货。具体页面后面可以继续按你的想法调整。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" data-toast="已刷新展示数据">刷新</button>
+              <button class="btn primary" type="button" data-page-jump="orders" onclick="goToPage('orders')">处理订单</button>
+            </div>
+          </div>
+
+          <div class="home-grid">
+            <button class="module-card" type="button" data-page-jump="customers" onclick="goToPage('customers')">
+              <div class="module-top">
+                <span class="module-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></span>
+                <span class="badge orange">7 待审核</span>
+              </div>
+              <div>
+                <h2>客户管理</h2>
+                <p>审核客户、维护资料、管理顾客专属产品配置。</p>
+              </div>
+            </button>
+            <button class="module-card" type="button" data-page-jump="orders" onclick="goToPage('orders')">
+              <div class="module-top">
+                <span class="module-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M9 4h6"/><path d="M9 2h6v4H9z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg></span>
+                <span class="badge red">2 异常</span>
+              </div>
+              <div>
+                <h2>订单管理</h2>
+                <p>处理新订单、订单修改、配送状态和付款信息。</p>
+              </div>
+            </button>
+            <button class="module-card" type="button" data-page-jump="inventory" onclick="goToPage('inventory')">
+              <div class="module-top">
+                <span class="module-icon"><svg class="icon" viewBox="0 0 24 24"><path d="m21 16-9 5-9-5"/><path d="m21 12-9 5-9-5"/><path d="m3 8 9-5 9 5-9 5z"/></svg></span>
+                <span class="badge blue">148 商品</span>
+              </div>
+              <div>
+                <h2>库存管理</h2>
+                <p>查看库存余量、低库存预警、补货和入库记录。</p>
+              </div>
+            </button>
+            <button class="module-card" type="button" data-page-jump="production" onclick="goToPage('production')">
+              <div class="module-top">
+                <span class="module-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V9l5 3V9l5 3V7h4v14"/><path d="M9 17h1"/><path d="M14 17h1"/></svg></span>
+                <span class="badge orange">3 待排产</span>
+              </div>
+              <div>
+                <h2>生产管理</h2>
+                <p>安排自有产品生产，扣减原料并跟进入库。</p>
+              </div>
+            </button>
+            <button class="module-card" type="button" data-page-jump="shipping" onclick="goToPage('shipping')">
+              <div class="module-top">
+                <span class="module-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="7" cy="19" r="2"/><circle cx="17" cy="19" r="2"/></svg></span>
+                <span class="badge green">9 待出库</span>
+              </div>
+              <div>
+                <h2>出货</h2>
+                <p>按日期查看待出库订单，确认出库并下载 Lieferschein。</p>
+              </div>
+            </button>
+          </div>
+
+          <div class="stats">
+            <div class="stat"><span>今日新订单</span><strong>12</strong><small>3 个待确认</small></div>
+            <div class="stat"><span>订单修改</span><strong>4</strong><small style="color:var(--orange)">需要复核</small></div>
+            <div class="stat"><span>新客户申请</span><strong>7</strong><small style="color:var(--orange)">待审核</small></div>
+            <div class="stat"><span>低库存商品</span><strong>5</strong><small style="color:var(--red)">需要补货</small></div>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="card" style="grid-column:1 / -1">
+              <div class="card-head">
+                <div>
+                  <h2>待办事项</h2>
+                  <p class="sub">放在首页下面，供应商一进来就知道要处理什么。</p>
+                </div>
+                <button class="btn" type="button" data-toast="已打开全部待办">全部待办</button>
+              </div>
+              <div class="todo-list">
+                <div class="todo"><span class="dot"></span><div><strong>Ramen Haus Mitte 有新订单 ORD-2051</strong><span>18 件商品，要求明天 09:00 配送。</span></div><button class="btn" type="button" data-page-jump="orders" onclick="goToPage('orders')">处理</button></div>
+                <div class="todo"><span class="dot orange"></span><div><strong>Sakura Kitchen 修改了订单 ORD-2049</strong><span>客户把 Gyoza Mix 从 4 箱改成 6 箱。</span></div><button class="btn" type="button" data-page-jump="orders" onclick="goToPage('orders')">查看</button></div>
+                <div class="todo"><span class="dot green"></span><div><strong>Sushi Bar Nord 提交了新客户申请</strong><span>已上传营业执照、联系人和配送地址。</span></div><button class="btn" type="button" data-page-jump="customers" onclick="goToPage('customers')">审核</button></div>
+                <div class="todo"><span class="dot orange"></span><div><strong>Tonkotsu Base 2kg 库存低于安全线</strong><span>当前 12 包，建议补货到 60 包。</span></div><button class="btn" type="button" data-page-jump="inventory" onclick="goToPage('inventory')">补货</button></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="page" data-page="customers">
+          <div class="page-head">
+            <div>
+              <h1>客户管理</h1>
+              <p class="sub">客户审核、客户资料和“顾客专属产品配置”都放在这里。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" data-page-jump="overview" onclick="goToPage('overview')">返回</button>
+              <button class="btn primary" type="button" data-open-drawer="newCustomer">手动新增客户</button>
+            </div>
+          </div>
+
+          <div class="customer-groups" data-customer-groups>
+            <button class="group-btn active" type="button" data-customer-group="all">全部客户</button>
+            <button class="group-btn" type="button" data-customer-group="application">新申请</button>
+            <button class="group-btn" type="button" data-customer-group="new">新顾客</button>
+            <button class="group-btn" type="button" data-customer-group="old">老顾客</button>
+          </div>
+
+          <div class="filters">
+            <input class="control" data-filter="customers" placeholder="搜索客户名、邮箱、城市">
+            <select class="select" aria-label="客户选择">
+              <option>客户选择</option>
+              <option>新申请</option>
+              <option>待审核</option>
+              <option>新客户</option>
+              <option>老客户</option>
+            </select>
+            <select class="select"><option>全部状态</option><option>待审核</option><option>已通过</option><option>已暂停</option></select>
+          </div>
+
+          <div class="table-card">
+            <table>
+              <thead><tr><th>客户</th><th>城市</th><th>联系人</th><th>基础信息</th><th>Gewerbeanmeldung</th><th>申请时间 ↓</th><th>状态</th><th>个性化配置</th><th>账期</th><th></th></tr></thead>
+              <tbody>
+                <tr data-search-row="sushi bar nord berlin new application no price" data-customer-group-row="application">
+                  <td><div class="entity"><span class="entity-icon">SB</span><div><strong>Sushi Bar Nord</strong><span>hello@sushinord.de</span></div></div></td>
+                  <td>Berlin</td>
+                  <td>Mina Ito</td>
+                  <td><button class="badge red status-btn" type="button" data-open-drawer="basicSushi">缺失</button></td>
+                  <td><button class="badge green status-btn" type="button" data-open-drawer="gewSushi">完整</button></td>
+                  <td><time datetime="2026-09-14T08:15:00+02:00" title="示例申请时间（德国当地时间）">14.09.2026 08:15</time></td>
+                  <td><span class="badge orange">新申请</span></td>
+                  <td><button class="btn" type="button" onclick="openPersonalization('Sushi Bar Nord', '模版3')">价格模版3</button></td>
+                  <td>待设置</td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="customerSushiFull">详情</button></div></td>
+                </tr>
+                <tr data-search-row="sushi bar nord berlin new application no price" data-customer-group-row="application" data-customer-note><td colspan="10"><strong>内部备注：</strong><span data-note-text>测试备注：新申请客户，计划今天联系，了解门店需求并说明开户流程。</span> <button class="link-btn" type="button" data-note-edit>编辑</button><span data-note-editor hidden><textarea class="control" aria-label="内部备注" style="display:block;width:100%;margin:8px 0"></textarea><button class="btn primary" type="button" data-note-save>保存</button> <button class="btn" type="button" data-note-cancel>取消</button></span></td></tr>
+                <tr data-search-row="ramen haus mitte berlin anna pending tonkotsu price" data-customer-group-row="new">
+                  <td><div class="entity"><span class="entity-icon">RH</span><div><strong>Ramen Haus Mitte</strong><span>kunden@ramenhaus.de</span></div></div></td>
+                  <td>Berlin</td>
+                  <td>Anna Keller</td>
+                  <td><button class="badge green status-btn" type="button" data-open-drawer="basicRamen">完整</button></td>
+                  <td><button class="badge red status-btn" type="button" data-open-drawer="gewRamen">缺失</button></td>
+                  <td><time datetime="2026-09-12T10:30:00+02:00" title="示例申请时间（德国当地时间）">12.09.2026 10:30</time></td>
+                  <td><span class="badge orange">待审核</span></td>
+                  <td><button class="btn" type="button" onclick="openPersonalization('Ramen Haus Mitte', '模版1')">价格模版1</button></td>
+                  <td>Net 14</td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="customerRamenFull">详情</button></div></td>
+                </tr>
+                <tr data-search-row="ramen haus mitte berlin anna pending tonkotsu price" data-customer-group-row="new" data-customer-note><td colspan="10"><strong>内部备注：</strong><span data-note-text>测试备注：已联系客户，等待补充营业执照，下次沟通时确认配送地址。</span> <button class="link-btn" type="button" data-note-edit>编辑</button><span data-note-editor hidden><textarea class="control" aria-label="内部备注" style="display:block;width:100%;margin:8px 0"></textarea><button class="btn primary" type="button" data-note-save>保存</button> <button class="btn" type="button" data-note-cancel>取消</button></span></td></tr>
+                <tr data-search-row="sakura kitchen hamburg kenji approved noodles price" data-customer-group-row="old">
+                  <td><div class="entity"><span class="entity-icon">SK</span><div><strong>Sakura Kitchen</strong><span>orders@sakura-kitchen.de</span></div></div></td>
+                  <td>Hamburg</td>
+                  <td>Kenji Mori</td>
+                  <td><button class="badge green status-btn" type="button" data-open-drawer="basicSakura">完整</button></td>
+                  <td><button class="badge green status-btn" type="button" data-open-drawer="gewSakura">完整</button></td>
+                  <td><time datetime="2026-09-10T14:20:00+02:00" title="示例申请时间（德国当地时间）">10.09.2026 14:20</time></td>
+                  <td><span class="badge green">已通过</span></td>
+                  <td><button class="btn" type="button" onclick="openPersonalization('Sakura Kitchen', '模版2')">价格模版2</button></td>
+                  <td>Net 30</td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="customerSakuraFull">详情</button></div></td>
+                </tr>
+                <tr data-search-row="sakura kitchen hamburg kenji approved noodles price" data-customer-group-row="old" data-customer-note><td colspan="10"><strong>内部备注：</strong><span data-note-text>测试备注：已确认常用商品，下次联系时核对采购数量。</span> <button class="link-btn" type="button" data-note-edit>编辑</button><span data-note-editor hidden><textarea class="control" aria-label="内部备注" style="display:block;width:100%;margin:8px 0"></textarea><button class="btn primary" type="button" data-note-save>保存</button> <button class="btn" type="button" data-note-cancel>取消</button></span></td></tr>
+                <tr data-search-row="noodle lab munich old customer gyoza price" data-customer-group-row="old">
+                  <td><div class="entity"><span class="entity-icon">NL</span><div><strong>Noodle Lab</strong><span>buying@noodlelab.de</span></div></div></td>
+                  <td>Munich</td>
+                  <td>Lisa Wagner</td>
+                  <td><button class="badge green status-btn" type="button" data-open-drawer="basicNoodle">完整</button></td>
+                  <td><button class="badge green status-btn" type="button" data-open-drawer="gewNoodle">完整</button></td>
+                  <td><time datetime="2026-09-08T09:00:00+02:00" title="示例申请时间（德国当地时间）">08.09.2026 09:00</time></td>
+                  <td><span class="badge gray">老客户</span></td>
+                  <td><button class="btn" type="button" onclick="openPersonalization('Noodle Lab', '模版1')">价格模版1</button></td>
+                  <td>Prepaid</td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="customerNoodleFull">详情</button></div></td>
+                </tr>
+                <tr data-search-row="noodle lab munich old customer gyoza price" data-customer-group-row="old" data-customer-note><td colspan="10"><strong>内部备注：</strong><span data-note-text>测试备注：客户希望上午配送，后续沟通时再次确认。</span> <button class="link-btn" type="button" data-note-edit>编辑</button><span data-note-editor hidden><textarea class="control" aria-label="内部备注" style="display:block;width:100%;margin:8px 0"></textarea><button class="btn primary" type="button" data-note-save>保存</button> <button class="btn" type="button" data-note-cancel>取消</button></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="page" data-page="personalization">
+          <div class="page-head">
+            <div>
+              <h1>个性化 online shop 配置</h1>
+              <p class="sub">按顾客预览并编辑他们看到的商品目录、价格等级和上下架状态。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" data-page-jump="customers" onclick="goToPage('customers')">返回</button>
+              <button class="btn" type="button" data-toast="已模拟预览顾客商城">预览商城</button>
+              <button class="btn primary" type="button" data-toast="已模拟保存个性化配置">保存配置</button>
+            </div>
+          </div>
+
+          <section class="shop-editor">
+            <div class="shop-summary">
+              <div class="stat"><span>当前顾客</span><strong id="personalCustomer">Ramen Haus Mitte</strong><small>正在编辑顾客可见目录</small></div>
+              <div class="stat">
+                <div class="price-template-label">
+                  <span>价格模版</span>
+                  <button class="link-btn" type="button" data-open-template-manager>编辑模板</button>
+                </div>
+                <div class="price-template-radios" id="personalTemplate">
+                  <label><input type="radio" name="priceTemplate" value="模版1" checked> 模版1</label>
+                  <label><input type="radio" name="priceTemplate" value="模版2"> 模版2</label>
+                  <label><input type="radio" name="priceTemplate" value="模版3"> 模版3</label>
+                </div>
+              </div>
+              <div class="stat"><span>上架产品</span><strong>12</strong><small>2 个分类</small></div>
+              <div class="stat"><span>隐藏产品</span><strong>3</strong><small style="color:var(--orange)">仅后台可见</small></div>
+            </div>
+
+            <div class="shop-browser" aria-label="顾客 online shop 目录预览">
+              <div class="shop-search-band">
+                <div class="shop-search">
+                  <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <span>Artikel, Lieferantencode, Name, Beschreibung, Spezifikation</span>
+                  <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                </div>
+              </div>
+
+              <div class="shop-catalog">
+                <aside class="shop-side-card">
+                  <select aria-label="供应商">
+                    <option>Lieferant: Fujigawa</option>
+                    <option>Lieferant: Metro</option>
+                    <option>Lieferant: JFC</option>
+                  </select>
+                  <button class="shop-side-link active" type="button">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="m21 16-9 5-9-5"/><path d="m3 8 9-5 9 5-9 5z"/></svg>
+                    Alle Produkte
+                  </button>
+                </aside>
+
+                <div>
+                  <div class="shop-section-title">
+                    <div>
+                      <h2>顾客目录预览</h2>
+                      <p class="sub">这个区域按顾客看到的 online shop 样式展示，下面直接编辑价格和上下架。</p>
+                    </div>
+                    <span class="badge blue">1:1 目录编辑</span>
+                  </div>
+
+                  <div class="shop-products">
+                    <article class="shop-product-card">
+                      <div class="shop-photo">
+                        <svg viewBox="0 0 320 232" role="img" aria-label="Ramen noodle product image">
+                          <rect width="320" height="232" fill="#f3f1ed"/>
+                          <rect x="54" y="145" width="212" height="20" rx="10" fill="#d8d0c2"/>
+                          <ellipse cx="160" cy="142" rx="102" ry="20" fill="#b9b0a2"/>
+                          <g fill="none" stroke="#f2c84b" stroke-width="11" stroke-linecap="round">
+                            <path d="M72 118c42-40 86 38 128-2 26-25 46-15 55 4"/>
+                            <path d="M82 92c38-28 70 29 105-2 28-24 54-18 68 8"/>
+                            <path d="M98 137c35-29 71 22 111-8 23-17 44-13 56 5"/>
+                            <path d="M70 145c48-16 74 15 116-5 31-14 50-5 76 9"/>
+                          </g>
+                          <circle cx="93" cy="63" r="10" fill="#88a76e"/><circle cx="246" cy="74" r="8" fill="#88a76e"/>
+                        </svg>
+                      </div>
+                      <div class="shop-product-body">
+                        <h3>Ramen Noodle I4 <span class="shop-product-code">F432</span></h3>
+                        <div class="shop-spec">80pc*140g</div>
+                      </div>
+                      <div class="shop-admin-controls">
+                        <div class="shop-admin-row">
+                          <div class="field"><label>价格等级</label><select data-template-select data-template-sku="F432"><option>默认等级1 · €31.80</option><option>等级2 · €30.60</option><option>等级3 · €29.80</option></select></div>
+                          <div class="field"><select aria-label="上下架"><option>上架</option><option>下架</option></select></div>
+                        </div>
+                      </div>
+                    </article>
+
+                    <article class="shop-product-card">
+                      <div class="shop-photo">
+                        <svg viewBox="0 0 320 232" role="img" aria-label="Chicken paitan product image">
+                          <rect width="320" height="232" fill="#f4f1ec"/>
+                          <rect x="31" y="150" width="256" height="34" rx="8" fill="#d1c6b7"/>
+                          <g opacity=".95">
+                            <path d="M55 99h95l30 60H82z" fill="#f5d778"/><path d="M56 99h95l30 60H82z" fill="none" stroke="#fff" stroke-width="7"/>
+                            <path d="M145 82h95l30 60h-98z" fill="#efc95e"/><path d="M145 82h95l30 60h-98z" fill="none" stroke="#fff" stroke-width="7"/>
+                          </g>
+                          <circle cx="249" cy="76" r="24" fill="#fff8e5"/><ellipse cx="249" cy="78" rx="18" ry="8" fill="#c58b39"/>
+                          <path d="M42 62c20-18 36-20 52-12" stroke="#7d9f6a" stroke-width="7" fill="none" stroke-linecap="round"/>
+                        </svg>
+                      </div>
+                      <div class="shop-product-body">
+                        <h3>Chicken Paitan <span class="shop-product-code">F431</span></h3>
+                        <div class="shop-spec">6*2kg</div>
+                      </div>
+                      <div class="shop-admin-controls">
+                        <div class="shop-admin-row">
+                          <div class="field"><label>价格等级</label><select data-template-select data-template-sku="F431"><option>默认等级1 · €48.60</option><option>等级2 · €46.80</option><option>等级3 · €44.90</option></select></div>
+                          <div class="field"><select aria-label="上下架"><option>上架</option><option>下架</option></select></div>
+                        </div>
+                      </div>
+                    </article>
+
+                    <article class="shop-product-card">
+                      <div class="shop-photo">
+                        <svg viewBox="0 0 320 232" role="img" aria-label="Miso tare product image">
+                          <rect width="320" height="232" fill="#f5f1ec"/>
+                          <path d="M104 87h118l-11 83H115z" fill="#fff" stroke="#dadada" stroke-width="4"/>
+                          <path d="M110 86c9-38 96-38 105 0" fill="none" stroke="#fff" stroke-width="5"/>
+                          <ellipse cx="162" cy="87" rx="64" ry="11" fill="#fbfbfb" stroke="#dfdfdf" stroke-width="3"/>
+                          <ellipse cx="238" cy="151" rx="38" ry="14" fill="#b77a45"/>
+                          <ellipse cx="238" cy="146" rx="34" ry="14" fill="#d09b5d"/>
+                          <circle cx="58" cy="65" r="10" fill="#7fa266"/><path d="M47 78c16-18 29-20 42-13" stroke="#7fa266" stroke-width="6" fill="none"/>
+                        </svg>
+                      </div>
+                      <div class="shop-product-body">
+                        <h3>Miso Tare <span class="shop-product-code">F480</span></h3>
+                        <div class="shop-spec">1*10kg</div>
+                      </div>
+                      <div class="shop-admin-controls">
+                        <div class="shop-admin-row">
+                          <div class="field"><label>价格等级</label><select data-template-select data-template-sku="F480"><option>默认等级1 · €56.20</option><option>等级2 · €54.80</option><option>等级3 · €52.40</option></select></div>
+                          <div class="field"><select aria-label="上下架"><option>上架</option><option>下架</option></select></div>
+                        </div>
+                      </div>
+                    </article>
+
+                    <article class="shop-product-card">
+                      <div class="shop-photo">
+                        <svg viewBox="0 0 320 232" role="img" aria-label="Spicy miso tare product image">
+                          <rect width="320" height="232" fill="#f5f1ec"/>
+                          <path d="M103 84h120l-12 86H115z" fill="#fff" stroke="#dadada" stroke-width="4"/>
+                          <path d="M111 84c8-35 95-35 104 0" fill="none" stroke="#fff" stroke-width="5"/>
+                          <ellipse cx="163" cy="84" rx="65" ry="11" fill="#fbfbfb" stroke="#dfdfdf" stroke-width="3"/>
+                          <ellipse cx="241" cy="155" rx="39" ry="14" fill="#9f331e"/>
+                          <ellipse cx="241" cy="150" rx="34" ry="13" fill="#c44e2c"/>
+                          <g fill="#b21e16"><circle cx="57" cy="166" r="5"/><circle cx="71" cy="151" r="4"/><circle cx="86" cy="171" r="4"/></g>
+                        </svg>
+                      </div>
+                      <div class="shop-product-body">
+                        <h3>Spicy Miso Tare <span class="shop-product-code">F490</span></h3>
+                        <div class="shop-spec">1*10kg</div>
+                      </div>
+                      <div class="shop-admin-controls">
+                        <div class="shop-admin-row">
+                          <div class="field"><label>价格等级</label><select data-template-select data-template-sku="F490"><option>默认等级1 · €59.90</option><option>等级2 · €57.60</option><option>等级3 · €55.20</option></select></div>
+                          <div class="field"><select aria-label="上下架"><option>上架</option><option>下架</option></select></div>
+                        </div>
+                      </div>
+                    </article>
+
+                    <article class="shop-product-card">
+                      <div class="shop-photo">
+                        <svg viewBox="0 0 320 232" role="img" aria-label="Tonkotsu base product image">
+                          <rect width="320" height="232" fill="#f5f1ec"/>
+                          <path d="M92 78h134l-13 94H105z" fill="#fff" stroke="#dadada" stroke-width="4"/>
+                          <path d="M101 77c8-39 109-39 117 0" fill="none" stroke="#fff" stroke-width="5"/>
+                          <ellipse cx="159" cy="78" rx="72" ry="12" fill="#fbfbfb" stroke="#dfdfdf" stroke-width="3"/>
+                          <ellipse cx="246" cy="157" rx="38" ry="13" fill="#3e2b20"/>
+                          <ellipse cx="246" cy="152" rx="34" ry="12" fill="#6b4934"/>
+                          <circle cx="63" cy="66" r="9" fill="#7fa266"/>
+                        </svg>
+                      </div>
+                      <div class="shop-product-body">
+                        <h3>Tonkotsu Base <span class="shop-product-code">F410</span></h3>
+                        <div class="shop-spec">1*10kg</div>
+                      </div>
+                      <div class="shop-admin-controls">
+                        <div class="shop-admin-row">
+                          <div class="field"><label>价格等级</label><select data-template-select data-template-sku="F410"><option>默认等级1 · €52.40</option><option>等级2 · €50.90</option><option>等级3 · €48.70</option></select></div>
+                          <div class="field"><select aria-label="上下架"><option>上架</option><option>下架</option></select></div>
+                        </div>
+                      </div>
+                    </article>
+
+                    <article class="shop-product-card">
+                      <div class="shop-photo">
+                        <svg viewBox="0 0 320 232" role="img" aria-label="Red tare product image">
+                          <rect width="320" height="232" fill="#f5f1ec"/>
+                          <path d="M94 78h132l-13 94H106z" fill="#fff" stroke="#dadada" stroke-width="4"/>
+                          <path d="M103 77c9-38 107-38 116 0" fill="none" stroke="#fff" stroke-width="5"/>
+                          <ellipse cx="160" cy="78" rx="72" ry="12" fill="#fbfbfb" stroke="#dfdfdf" stroke-width="3"/>
+                          <ellipse cx="247" cy="158" rx="38" ry="13" fill="#802417"/>
+                          <ellipse cx="247" cy="153" rx="34" ry="12" fill="#a83220"/>
+                          <path d="M52 71c18-16 36-18 52-9" stroke="#7fa266" stroke-width="6" fill="none" stroke-linecap="round"/>
+                        </svg>
+                      </div>
+                      <div class="shop-product-body">
+                        <h3>Red Tare <span class="shop-product-code">F491</span></h3>
+                        <div class="shop-spec">1*10kg</div>
+                      </div>
+                      <div class="shop-admin-controls">
+                        <div class="shop-admin-row">
+                          <div class="field"><label>价格等级</label><select data-template-select data-template-sku="F491"><option>默认等级1 · €62.00</option><option>等级2 · €59.80</option><option>等级3 · €57.40</option></select></div>
+                          <div class="field"><select aria-label="上下架"><option>下架</option><option>上架</option></select></div>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+                  <div class="template-alert" id="templateMismatchAlert">
+                    <div>
+                      <strong>价格与当前模版不匹配</strong>
+                      <p>商品价格等级已调整。可只保存给当前客户，或另存新模板并用于当前客户；其他客户不变。</p>
+                    </div>
+                    <div class="actions">
+                      <input class="control" id="newTemplateName" value="Ramen Haus Mitte 专属模板" aria-label="新价格模板名称" aria-describedby="newTemplateError">
+                      <span id="newTemplateError" role="alert" style="color:var(--red)" hidden></span>
+                      <button class="btn" type="button" data-customer-price-action="cancel">取消修改</button>
+                      <button class="btn" type="button" data-customer-price-action="customer">只保存当前客户</button>
+                      <button class="btn primary" type="button" data-customer-price-action="new">保存新模板并用于当前客户</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="page" data-page="orders">
+          <div class="page-head">
+            <div>
+              <h1>订单管理</h1>
+              <p class="sub">订单处理、客户修改、配送时间、付款状态和利润信息都放在这里。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" data-page-jump="overview" onclick="goToPage('overview')">返回</button>
+              <button class="btn" type="button" data-toast="已按配送时间排序">排序</button>
+              <button class="btn primary" type="button" data-open-drawer="newOrder">创建订单</button>
+            </div>
+          </div>
+
+          <div class="filters">
+            <div class="tabs" data-tabs>
+              <button class="active" type="button">待确定</button>
+              <button type="button">未付款</button>
+              <button type="button">已完成</button>
+            </div>
+          </div>
+
+          <div class="filters">
+            <input class="control" data-filter="orders" placeholder="搜索订单号、客户、产品">
+            <select class="select"><option>全部状态</option><option>新订单</option><option>客户已修改</option><option>备货中</option><option>单据异常</option></select>
+          </div>
+
+          <div class="table-card">
+            <table>
+              <thead><tr><th>订单</th><th>客户</th><th>客户类别</th><th>配送</th><th>金额 / 预计利润</th><th>客户付款状态</th><th></th></tr></thead>
+              <tbody>
+                <tr data-search-row="ord-2051 ramen haus mitte ramen haus gmbh new order">
+                  <td><strong>ORD-2051</strong><br><span style="color:var(--muted)">18 件商品</span></td>
+                  <td><strong>Ramen Haus Mitte</strong><br><span style="color:var(--muted)">Ramen Haus GmbH</span></td>
+                  <td><span class="badge blue">新客户</span></td>
+                  <td>明天 09:00<br><span style="color:var(--muted)">预计 09:45 到达</span></td>
+                  <td><strong>€842.50</strong><br><span style="color:var(--green)">预计利润 22% · €185.35</span></td>
+                  <td><span class="badge orange">待付款</span></td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="order2051">详情</button></div></td>
+                </tr>
+                <tr data-search-row="ord-2049 sakura kitchen sakura foods gmbh changed order">
+                  <td><strong>ORD-2049</strong><br><span style="color:var(--muted)">客户修改数量</span></td>
+                  <td><strong>Sakura Kitchen</strong><br><span style="color:var(--muted)">Sakura Foods GmbH</span></td>
+                  <td><span class="badge gray">老客户</span></td>
+                  <td>今天 16:00<br><span style="color:var(--muted)">预计 16:30 到达</span></td>
+                  <td><strong>€391.20</strong><br><span style="color:var(--green)">预计利润 18% · €70.42</span></td>
+                  <td><span class="badge green">已付款</span></td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="order2049">详情</button></div></td>
+                </tr>
+                <tr data-search-row="ord-2048 noodle lab noodle lab ug erp error delivery note">
+                  <td><strong>ORD-2048</strong><br><span style="color:var(--muted)">Delivery Note 异常</span></td>
+                  <td><strong>Noodle Lab</strong><br><span style="color:var(--muted)">Noodle Lab UG</span></td>
+                  <td><span class="badge gray">老客户</span></td>
+                  <td>昨天 14:30<br><span style="color:var(--muted)">已延迟</span></td>
+                  <td><strong>€618.00</strong><br><span style="color:var(--green)">预计利润 15% · €92.70</span></td>
+                  <td><span class="badge red">逾期</span></td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="order2048">详情</button></div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="page" data-page="inventory">
+          <div class="page-head">
+            <div>
+              <h1>仓库管理助手</h1>
+              <p class="sub">从库存系统复制过来的工作台：供货商、下单、运单账单上传、损耗记录和采购异常都集中在这里。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" data-page-jump="overview" onclick="goToPage('overview')">返回</button>
+              <button class="btn" type="button" data-inventory-master-data>物品资料</button>
+              <button class="btn" type="button" data-open-drawer="warehouseOrders">订单管理</button>
+              <button class="btn" type="button" data-open-drawer="warehouseLoss">损耗</button>
+              <button class="btn primary" type="button" data-open-drawer="warehousePurchase">快速下单</button>
+            </div>
+          </div>
+
+          <section class="warehouse-shortcuts">
+            <div class="warehouse-card blue warehouse-ordering-card">
+              <span class="warehouse-icon">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9 20v-6h6v6"/></svg>
+              </span>
+              <div class="warehouse-copy">
+                <strong>生产与供应</strong>
+                <span>按图片产品卡点货、订货，支持仓库区和供货商筛选。</span>
+              </div>
+              <div class="warehouse-body">
+                <div class="warehouse-ordering-toolbar">
+                  <div class="warehouse-filter-layer">
+                    <span>操作</span>
+                    <div class="warehouse-order-mode" data-choice-group>
+                      <button class="active" type="button" data-mode="stock">点货</button>
+                      <button type="button" data-mode="order">订货</button>
+                    </div>
+                  </div>
+                  <div class="warehouse-filter-layer" data-zone-layer>
+                    <span class="warehouse-filter-title">仓库区<button class="link-btn" type="button" data-zone-edit-toggle>编辑</button></span>
+                    <div class="warehouse-order-mode" data-choice-group>
+                      <button class="active" type="button"><span>全部区域</span><i class="zone-remove" data-zone-remove>×</i></button>
+                      <button type="button"><span>冷冻房</span><i class="zone-remove" data-zone-remove>×</i></button>
+                      <button type="button"><span>冷藏房</span><i class="zone-remove" data-zone-remove>×</i></button>
+                      <button type="button"><span>常温库</span><i class="zone-remove" data-zone-remove>×</i></button>
+                      <button type="button"><span>干货库</span><i class="zone-remove" data-zone-remove>×</i></button>
+                      <button type="button"><span>未分组</span><i class="zone-remove" data-zone-remove>×</i></button>
+                      <button class="zone-add" type="button" data-zone-add aria-label="新增仓库区">+</button>
+                    </div>
+                  </div>
+                  <div class="warehouse-filter-layer">
+                    <span class="warehouse-filter-title">供货商<button class="link-btn" type="button" data-open-drawer="supplierRules">编辑</button></span>
+                    <div class="warehouse-order-mode" data-choice-group>
+                      <button class="active" type="button" data-supplier-name="全部供货商" data-deadline="按各供货商截止时间" data-delivery="按各供货商送货时间"><span>全部供货商</span></button>
+                      <button type="button" data-supplier-name="Fujigawa 自有产品" data-deadline="今天 16:00" data-delivery="明天 08:00"><span>Fujigawa 自有产品</span><small>需要订货</small></button>
+                      <button type="button" data-supplier-name="Metro Deutschland" data-deadline="今天 12:00" data-delivery="明天 09:00"><span>Metro Deutschland</span><small>需要订货</small></button>
+                      <button type="button" data-supplier-name="Transgourmet" data-deadline="明天 10:00" data-delivery="周四 10:30"><span>Transgourmet</span><small>需要订货</small></button>
+                      <button type="button" data-supplier-name="JFC Deutschland" data-deadline="今天 15:00" data-delivery="后天 14:00"><span>JFC Deutschland</span><small>需要订货</small></button>
+                    </div>
+                  </div>
+                  <div class="warehouse-filter-layer" data-editable-filter="品牌">
+                    <span class="warehouse-filter-title">品牌<button class="link-btn" type="button" data-filter-edit-toggle>编辑</button></span>
+                    <div class="warehouse-order-mode" data-choice-group>
+                      <button class="active" type="button"><span>全部品牌</span></button>
+                      <button type="button"><span>Fujigawa</span><i class="zone-remove" data-filter-remove>×</i></button>
+                      <button type="button"><span>Kikkoman</span><i class="zone-remove" data-filter-remove>×</i></button>
+                      <button type="button"><span>无品牌</span><i class="zone-remove" data-filter-remove>×</i></button>
+                      <button class="zone-add" type="button" data-filter-add aria-label="新增品牌">+</button>
+                    </div>
+                  </div>
+                  <div class="warehouse-filter-layer" data-editable-filter="物品组">
+                    <span class="warehouse-filter-title">物品组<button class="link-btn" type="button" data-filter-edit-toggle>编辑</button></span>
+                    <div class="warehouse-order-mode" data-choice-group>
+                      <button class="active" type="button"><span>全部物品组</span></button>
+                      <button type="button"><span>面条</span><i class="zone-remove" data-filter-remove>×</i></button>
+                      <button type="button"><span>调味料</span><i class="zone-remove" data-filter-remove>×</i></button>
+                      <button type="button"><span>生鲜</span><i class="zone-remove" data-filter-remove>×</i></button>
+                      <button type="button"><span>干货</span><i class="zone-remove" data-filter-remove>×</i></button>
+                      <button type="button"><span>未分组</span><i class="zone-remove" data-filter-remove>×</i></button>
+                      <button class="zone-add" type="button" data-filter-add aria-label="新增物品组">+</button>
+                    </div>
+                  </div>
+                  <div class="supplier-schedule" id="supplierSchedule">
+                    <span>选中：<strong>全部供货商</strong></span>
+                    <span>订货截止：按各供货商截止时间</span>
+                    <span>下次送货：按各供货商送货时间</span>
+                  </div>
+                </div>
+
+                <div class="warehouse-order-mode" data-choice-group data-order-catalog-tabs hidden aria-label="订货商品范围" style="grid-column:1 / -1">
+                  <button type="button" data-order-catalog="all" aria-pressed="false">全部商品</button>
+                  <button class="active" type="button" data-order-catalog="favorites" aria-pressed="true">收藏商品</button>
+                </div>
+                <p class="sub" data-order-catalog-empty hidden style="grid-column:1 / -1">当前供货商暂无收藏商品，请切换到全部商品。</p>
+
+                <div class="warehouse-product-grid">
+                  <article class="warehouse-product-card" data-catalog-supplier="Fujigawa 自有产品" data-catalog-favorite="true">
+                    <div class="warehouse-product-image">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Ramen noodle">
+                        <rect width="320" height="180" fill="#f3f1ed"/>
+                        <ellipse cx="160" cy="125" rx="102" ry="18" fill="#b9b0a2"/>
+                        <g fill="none" stroke="#f2c84b" stroke-width="11" stroke-linecap="round"><path d="M72 105c42-40 86 38 128-2 26-25 46-15 55 4"/><path d="M82 82c38-28 70 29 105-2 28-24 54-18 68 8"/><path d="M70 130c48-16 74 15 116-5 31-14 50-5 76 9"/></g>
+                        <circle cx="93" cy="54" r="9" fill="#88a76e"/><circle cx="246" cy="65" r="7" fill="#88a76e"/>
+                      </svg>
+                    </div>
+                    <div class="warehouse-product-info"><strong>拉面面条</strong><span>Ramen Noodles · Fujigawa 自有产品</span><div class="warehouse-zone-field"><span>分区</span><b>常温库</b><select><option>常温库</option><option>冷藏房</option><option>冷冻房</option><option>干货库</option><option>未分组</option></select></div><div class="product-stock-grid"><div><span>库存量</span><strong>24 包</strong></div><div><span>建议库存</span><strong>160 包</strong></div></div></div>
+                    <div class="warehouse-product-actions"><button type="button" data-step="-1">−</button><input class="control" value="240"><button type="button" data-step="1">+</button></div>
+                  </article>
+                  <article class="warehouse-product-card" data-catalog-supplier="Fujigawa 自有产品" data-catalog-favorite="false">
+                    <div class="warehouse-product-image">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Ramen sauce">
+                        <rect width="320" height="180" fill="#f5f1ec"/>
+                        <path d="M96 60h130l-13 80H107z" fill="#fff" stroke="#dadada" stroke-width="4"/><path d="M105 59c8-34 103-34 112 0" fill="none" stroke="#fff" stroke-width="5"/><ellipse cx="160" cy="60" rx="70" ry="11" fill="#fbfbfb" stroke="#dfdfdf" stroke-width="3"/><ellipse cx="245" cy="130" rx="38" ry="13" fill="#a83220"/><circle cx="65" cy="82" r="5" fill="#b21e16"/><circle cx="82" cy="95" r="4" fill="#b21e16"/>
+                      </svg>
+                    </div>
+                    <div class="warehouse-product-info"><strong>拉面汁</strong><span>Ramen Sauce · Fujigawa 自有产品</span><div class="warehouse-zone-field"><span>分区</span><b>常温库</b><select><option>常温库</option><option>冷藏房</option><option>冷冻房</option><option>干货库</option><option>未分组</option></select></div><div class="product-stock-grid"><div><span>库存量</span><strong>18 桶</strong></div><div><span>建议库存</span><strong>60 桶</strong></div></div></div>
+                    <div class="warehouse-product-actions"><button type="button" data-step="-1">−</button><input class="control" value="80"><button type="button" data-step="1">+</button></div>
+                  </article>
+                  <article class="warehouse-product-card" data-catalog-supplier="Metro Deutschland" data-catalog-favorite="true">
+                    <div class="warehouse-product-image">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Chicken">
+                        <rect width="320" height="180" fill="#f4f1ec"/><rect x="42" y="125" width="236" height="28" rx="8" fill="#d1c6b7"/><path d="M62 76h95l30 54H88z" fill="#f5d778" stroke="#fff" stroke-width="7"/><path d="M145 64h95l30 55h-98z" fill="#efc95e" stroke="#fff" stroke-width="7"/><circle cx="250" cy="57" r="22" fill="#fff8e5"/><ellipse cx="250" cy="59" rx="17" ry="7" fill="#c58b39"/>
+                      </svg>
+                    </div>
+                    <div class="warehouse-product-info"><strong>鸡胸肉 2.5kg</strong><span>Metro Deutschland</span><div class="warehouse-zone-field"><span>分区</span><b>冷藏房</b><select><option>冷藏房</option><option>冷冻房</option><option>常温库</option><option>干货库</option><option>未分组</option></select></div><div class="product-stock-grid"><div><span>库存量</span><strong>6 箱</strong></div><div><span>建议库存</span><strong>10 箱</strong></div></div></div>
+                    <div class="warehouse-product-actions"><button type="button" data-step="-1">−</button><input class="control" value="4"><button type="button" data-step="1">+</button></div>
+                  </article>
+                  <article class="warehouse-product-card" data-catalog-supplier="Metro Deutschland" data-catalog-favorite="true">
+                    <div class="warehouse-product-image">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Tomato box">
+                        <rect width="320" height="180" fill="#f7f2ee"/><rect x="72" y="92" width="176" height="42" rx="8" fill="#d7c8b6"/><g fill="#c83527"><circle cx="112" cy="91" r="17"/><circle cx="148" cy="82" r="18"/><circle cx="188" cy="90" r="16"/><circle cx="221" cy="84" r="15"/></g><g fill="#78a75f"><path d="m112 70 7 13h-14z"/><path d="m148 60 7 13h-14z"/><path d="m188 69 7 13h-14z"/><path d="m221 63 7 13h-14z"/></g>
+                      </svg>
+                    </div>
+                    <div class="warehouse-product-info"><strong>番茄 6kg</strong><span>Metro Deutschland</span><div class="warehouse-zone-field"><span>分区</span><b>常温库</b><select><option>常温库</option><option>冷藏房</option><option>冷冻房</option><option>干货库</option><option>未分组</option></select></div><div class="product-stock-grid"><div><span>库存量</span><strong>3 箱</strong></div><div><span>建议库存</span><strong>8 箱</strong></div></div></div>
+                    <div class="warehouse-product-actions"><button type="button" data-step="-1">−</button><input class="control" value="5"><button type="button" data-step="1">+</button></div>
+                  </article>
+                  <article class="warehouse-product-card" data-catalog-supplier="Transgourmet" data-catalog-favorite="false">
+                    <div class="warehouse-product-image">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Mozzarella">
+                        <rect width="320" height="180" fill="#f1f5f9"/><circle cx="132" cy="93" r="42" fill="#fff" stroke="#dbe4ef" stroke-width="5"/><circle cx="188" cy="96" r="38" fill="#fff" stroke="#dbe4ef" stroke-width="5"/><rect x="72" y="128" width="178" height="18" rx="9" fill="#cbd5e1"/>
+                      </svg>
+                    </div>
+                    <div class="warehouse-product-info"><strong>水牛芝士 500g</strong><span>Transgourmet</span><div class="warehouse-zone-field"><span>分区</span><b>冷藏房</b><select><option>冷藏房</option><option>冷冻房</option><option>常温库</option><option>干货库</option><option>未分组</option></select></div><div class="product-stock-grid"><div><span>库存量</span><strong>8 包</strong></div><div><span>建议库存</span><strong>20 包</strong></div></div></div>
+                    <div class="warehouse-product-actions"><button type="button" data-step="-1">−</button><input class="control" value="4"><button type="button" data-step="1">+</button></div>
+                  </article>
+                  <article class="warehouse-product-card" data-catalog-supplier="JFC Deutschland" data-catalog-favorite="true">
+                    <div class="warehouse-product-image">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Rice">
+                        <rect width="320" height="180" fill="#f8fafc"/><path d="M100 46h120l20 100H80z" fill="#fff" stroke="#d9dee8" stroke-width="5"/><path d="M111 70h98M118 95h84M125 120h70" stroke="#cbd5e1" stroke-width="7" stroke-linecap="round"/><text x="160" y="97" text-anchor="middle" font-size="28" font-weight="800" fill="#334155">米</text>
+                      </svg>
+                    </div>
+                    <div class="warehouse-product-info"><strong>寿司米 10kg</strong><span>JFC Deutschland</span><div class="warehouse-zone-field"><span>分区</span><b>常温库</b><select><option>常温库</option><option>冷藏房</option><option>冷冻房</option><option>干货库</option><option>未分组</option></select></div><div class="product-stock-grid"><div><span>库存量</span><strong>2 袋</strong></div><div><span>建议库存</span><strong>12 袋</strong></div></div></div>
+                    <div class="warehouse-product-actions"><button type="button" data-step="-1">−</button><input class="control" value="4"><button type="button" data-step="1">+</button></div>
+                  </article>
+                </div>
+              </div>
+              <div class="warehouse-footer">
+                <div class="stock-register-alert" id="stockRegisterAlert">
+                  <span>登记数量与系统记录库存不同，请上传 Lieferschein 核对，或直接登记报损。</span>
+                  <div class="actions">
+                    <button class="btn" type="button" data-open-drawer="warehouseUpload">上传 Lieferschein</button>
+                    <button class="btn" type="button" data-open-drawer="warehouseLoss">登记报损</button>
+                  </div>
+                </div>
+                <button class="btn primary" type="button" data-stock-action>登记库存</button>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="page" data-page="products">
+          <div class="page-head">
+            <div>
+              <h1>商品管理</h1>
+              <p class="sub">按 webshop 商品目录样式维护产品，上下架、库存量、建议库存和价格等级都集中在这里。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" data-page-jump="overview" onclick="goToPage('overview')">返回</button>
+              <button class="btn" type="button" data-toast="已模拟同步 webshop">同步 webshop</button>
+              <button class="btn primary" type="button" data-toast="已模拟保存商品状态">保存商品</button>
+            </div>
+          </div>
+
+          <div class="shop-browser" aria-label="商品管理目录">
+            <div class="shop-search-band">
+              <div class="shop-search">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <span>搜索商品名、SKU、供货商、分类</span>
+              </div>
+            </div>
+            <div class="shop-catalog">
+              <aside class="shop-side-card">
+                <button class="link-btn" type="button" data-product-edit-toggle>编辑商品</button>
+                <div class="product-add-panel" id="productAddPanel">
+                  <div class="card-head">
+                    <div>
+                      <h3>添加商品</h3>
+                      <p class="sub">手动新增在抽屉中完成，批量导入保留标准文档入口。</p>
+                    </div>
+                    <button class="btn primary" type="button" data-open-drawer="newProduct">新增商品</button>
+                  </div>
+                  <div class="upload-box"><strong>上传标准文档</strong><span class="sub">Excel / CSV / PDF，自动识别商品字段。</span><input type="file" aria-label="上传商品标准文档"></div>
+                  <div class="actions">
+                    <button class="btn" type="button" data-toast="已模拟下载标准模板">下载模板</button>
+                    <button class="btn" type="button" data-toast="已模拟识别商品文档">识别文档</button>
+                    <button class="btn primary" type="button" data-toast="已模拟批量导入商品">批量导入</button>
+                  </div>
+                </div>
+                <select aria-label="商品来源">
+                  <option>全部商品</option>
+                  <option>自产产品</option>
+                  <option>进货产品</option>
+                </select>
+                <button class="shop-side-link active" type="button">
+                  <svg class="icon" viewBox="0 0 24 24"><path d="m21 16-9 5-9-5"/><path d="m3 8 9-5 9 5-9 5z"/></svg>
+                  Alle Produkte
+                </button>
+                <button class="shop-side-link" type="button">拉面面条 / 拉面汁</button>
+                <button class="shop-side-link" type="button">冷冻 / 调味</button>
+              </aside>
+
+              <div>
+                <div class="shop-section-title">
+                  <div>
+                    <h2>商品目录</h2>
+                    <p class="sub">每个商品卡片可直接上下架，点击下箭头查看商品详情、价格等级和关联库存。</p>
+                  </div>
+                  <span class="badge blue">148 商品</span>
+                </div>
+
+                <div class="product-manage-grid">
+                  <article class="product-manage-card" data-product-drawer="productPriceNoodle" data-product-sku="F432">
+                    <button class="product-edit-delete" type="button" data-product-delete aria-label="删除商品">×</button>
+                    <div class="shop-photo">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Ramen noodle">
+                        <rect width="320" height="180" fill="#f3f1ed"/><ellipse cx="160" cy="125" rx="102" ry="18" fill="#b9b0a2"/><g fill="none" stroke="#f2c84b" stroke-width="11" stroke-linecap="round"><path d="M72 105c42-40 86 38 128-2 26-25 46-15 55 4"/><path d="M82 82c38-28 70 29 105-2 28-24 54-18 68 8"/><path d="M70 130c48-16 74 15 116-5 31-14 50-5 76 9"/></g><circle cx="93" cy="54" r="9" fill="#88a76e"/><circle cx="246" cy="65" r="7" fill="#88a76e"/>
+                      </svg>
+                    </div>
+                    <div class="product-manage-body">
+                      <div><h3>Ramen Noodle I4 <span class="shop-product-code">F432</span></h3><small>80pc*140g · 自产产品</small></div>
+                      <div class="product-stock-grid"><div><span>库存量</span><strong>24 包</strong></div><div><span>建议库存</span><strong>160 包</strong></div></div>
+                    </div>
+                    <div class="product-card-actions"><select class="select"><option>上架</option><option>下架</option></select><button class="chevron-btn" type="button" data-open-drawer="productPriceNoodle" aria-label="商品详情"><svg class="icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></div>
+                  </article>
+
+                  <article class="product-manage-card" data-product-drawer="productPricePaitan" data-product-sku="F431">
+                    <button class="product-edit-delete" type="button" data-product-delete aria-label="删除商品">×</button>
+                    <div class="shop-photo">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Chicken paitan">
+                        <rect width="320" height="180" fill="#f4f1ec"/><rect x="42" y="125" width="236" height="28" rx="8" fill="#d1c6b7"/><path d="M62 76h95l30 54H88z" fill="#f5d778" stroke="#fff" stroke-width="7"/><path d="M145 64h95l30 55h-98z" fill="#efc95e" stroke="#fff" stroke-width="7"/><circle cx="250" cy="57" r="22" fill="#fff8e5"/><ellipse cx="250" cy="59" rx="17" ry="7" fill="#c58b39"/>
+                      </svg>
+                    </div>
+                    <div class="product-manage-body">
+                      <div><h3>Chicken Paitan <span class="shop-product-code">F431</span></h3><small>6*2kg · 自产产品</small></div>
+                      <div class="product-stock-grid"><div><span>库存量</span><strong>18 箱</strong></div><div><span>建议库存</span><strong>60 箱</strong></div></div>
+                    </div>
+                    <div class="product-card-actions"><select class="select"><option>上架</option><option>下架</option></select><button class="chevron-btn" type="button" data-open-drawer="productPricePaitan" aria-label="商品详情"><svg class="icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></div>
+                  </article>
+
+                  <article class="product-manage-card" data-product-drawer="productPriceMiso" data-product-sku="F480">
+                    <button class="product-edit-delete" type="button" data-product-delete aria-label="删除商品">×</button>
+                    <div class="shop-photo">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Miso tare">
+                        <rect width="320" height="180" fill="#f5f1ec"/><path d="M96 60h130l-13 80H107z" fill="#fff" stroke="#dadada" stroke-width="4"/><path d="M105 59c8-34 103-34 112 0" fill="none" stroke="#fff" stroke-width="5"/><ellipse cx="160" cy="60" rx="70" ry="11" fill="#fbfbfb" stroke="#dfdfdf" stroke-width="3"/><ellipse cx="245" cy="130" rx="38" ry="13" fill="#b77a45"/>
+                      </svg>
+                    </div>
+                    <div class="product-manage-body">
+                      <div><h3>Miso Tare <span class="shop-product-code">F480</span></h3><small>1*10kg · 自产产品</small></div>
+                      <div class="product-stock-grid"><div><span>库存量</span><strong>12 桶</strong></div><div><span>建议库存</span><strong>80 桶</strong></div></div>
+                    </div>
+                    <div class="product-card-actions"><select class="select"><option>上架</option><option>下架</option></select><button class="chevron-btn" type="button" data-open-drawer="productPriceMiso" aria-label="商品详情"><svg class="icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></div>
+                  </article>
+
+                  <article class="product-manage-card" data-product-drawer="productPriceSpicy" data-product-sku="F490">
+                    <button class="product-edit-delete" type="button" data-product-delete aria-label="删除商品">×</button>
+                    <div class="shop-photo">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Spicy miso tare">
+                        <rect width="320" height="180" fill="#f5f1ec"/><path d="M96 60h130l-13 80H107z" fill="#fff" stroke="#dadada" stroke-width="4"/><path d="M105 59c8-34 103-34 112 0" fill="none" stroke="#fff" stroke-width="5"/><ellipse cx="160" cy="60" rx="70" ry="11" fill="#fbfbfb" stroke="#dfdfdf" stroke-width="3"/><ellipse cx="245" cy="130" rx="38" ry="13" fill="#a83220"/><circle cx="65" cy="82" r="5" fill="#b21e16"/><circle cx="82" cy="95" r="4" fill="#b21e16"/>
+                      </svg>
+                    </div>
+                    <div class="product-manage-body">
+                      <div><h3>Spicy Miso Tare <span class="shop-product-code">F490</span></h3><small>1*10kg · 自产产品</small></div>
+                      <div class="product-stock-grid"><div><span>库存量</span><strong>9 桶</strong></div><div><span>建议库存</span><strong>70 桶</strong></div></div>
+                    </div>
+                    <div class="product-card-actions"><select class="select"><option>上架</option><option>下架</option></select><button class="chevron-btn" type="button" data-open-drawer="productPriceSpicy" aria-label="商品详情"><svg class="icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></div>
+                  </article>
+
+                  <article class="product-manage-card" data-product-drawer="productPriceGyoza" data-product-sku="GM-50">
+                    <button class="product-edit-delete" type="button" data-product-delete aria-label="删除商品">×</button>
+                    <div class="shop-photo">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Gyoza mix">
+                        <rect width="320" height="180" fill="#f8fafc"/><ellipse cx="160" cy="128" rx="98" ry="16" fill="#cbd5e1"/><g fill="#f3eee2" stroke="#d9c7a6" stroke-width="4"><path d="M77 105c20-34 58-34 78 0z"/><path d="M130 102c20-35 58-35 78 0z"/><path d="M178 107c20-34 58-34 78 0z"/></g>
+                      </svg>
+                    </div>
+                    <div class="product-manage-body">
+                      <div><h3>Gyoza Mix 50pc</h3><small>冷冻 · 进货产品</small></div>
+                      <div class="product-stock-grid"><div><span>库存量</span><strong>76 箱</strong></div><div><span>建议库存</span><strong>120 箱</strong></div></div>
+                    </div>
+                    <div class="product-card-actions"><select class="select"><option>上架</option><option>下架</option></select><button class="chevron-btn" type="button" data-open-drawer="productPriceGyoza" aria-label="商品详情"><svg class="icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></div>
+                  </article>
+
+                  <article class="product-manage-card" data-product-drawer="productPriceRice" data-product-sku="JFC-RICE-10">
+                    <button class="product-edit-delete" type="button" data-product-delete aria-label="删除商品">×</button>
+                    <div class="shop-photo">
+                      <svg viewBox="0 0 320 180" role="img" aria-label="Sushi rice">
+                        <rect width="320" height="180" fill="#f8fafc"/><path d="M100 46h120l20 100H80z" fill="#fff" stroke="#d9dee8" stroke-width="5"/><path d="M111 70h98M118 95h84M125 120h70" stroke="#cbd5e1" stroke-width="7" stroke-linecap="round"/><text x="160" y="97" text-anchor="middle" font-size="28" font-weight="800" fill="#334155">米</text>
+                      </svg>
+                    </div>
+                    <div class="product-manage-body">
+                      <div><h3>寿司米 10kg</h3><small>JFC Deutschland · 进货产品</small></div>
+                      <div class="product-stock-grid"><div><span>库存量</span><strong>2 袋</strong></div><div><span>建议库存</span><strong>12 袋</strong></div></div>
+                    </div>
+                    <div class="product-card-actions"><select class="select"><option>下架</option><option>上架</option></select><button class="chevron-btn" type="button" data-open-drawer="productPriceRice" aria-label="商品详情"><svg class="icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></div>
+                  </article>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" data-page="production">
+          <div class="page-head">
+            <div>
+              <h1>生产管理</h1>
+              <p class="sub">Fujigawa 自有产品生产工作台：接收仓库订货、安排生产、扣减原料库存、成品入库。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" data-page-jump="overview" onclick="goToPage('overview')">返回</button>
+              <button class="btn" type="button" data-open-drawer="productionRequest">新增生产单</button>
+              <button class="btn primary" type="button" data-open-drawer="productionSchedule">安排今日生产</button>
+            </div>
+          </div>
+
+          <div class="stats">
+            <div class="stat"><span>仓库订货请求</span><strong>6</strong><small style="color:var(--orange)">3 个待排产</small></div>
+            <div class="stat"><span>今日生产批次</span><strong>4</strong><small>2 个进行中</small></div>
+            <div class="stat"><span>成品待入库</span><strong>128</strong><small>箱/包/桶</small></div>
+            <div class="stat"><span>原料预警</span><strong>2</strong><small style="color:var(--red)">低于安全库存</small></div>
+          </div>
+
+          <section class="dashboard-grid">
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>仓库订货请求</h2>
+                  <p class="sub">仓库助手向生产部门下单，自有产品在这里排产。</p>
+                </div>
+                <button class="btn" type="button" data-open-drawer="productionRequest">查看全部</button>
+              </div>
+              <div class="table-card">
+                <table>
+                  <thead><tr><th>请求单</th><th>产品</th><th>需求量</th><th>交付日期</th><th>状态</th><th></th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>PRD-REQ-1024</strong><br><span style="color:var(--muted)">仓库助手 · Berlin</span></td>
+                      <td>Tonkotsu Base 2kg</td>
+                      <td>80 桶</td>
+                      <td>明天 08:00</td>
+                      <td><span class="badge orange">待排产</span></td>
+                      <td><button class="btn primary" type="button" data-open-drawer="productionTonkotsu">排产</button></td>
+                    </tr>
+                    <tr>
+                      <td><strong>PRD-REQ-1023</strong><br><span style="color:var(--muted)">仓库助手 · Hamburg</span></td>
+                      <td>Special Noodles 1kg</td>
+                      <td>240 包</td>
+                      <td>今天 17:00</td>
+                      <td><span class="badge blue">生产中</span></td>
+                      <td><button class="btn" type="button" data-open-drawer="productionNoodles">详情</button></td>
+                    </tr>
+                    <tr>
+                      <td><strong>PRD-REQ-1022</strong><br><span style="color:var(--muted)">仓库助手 · Berlin</span></td>
+                      <td>Gyoza Mix 50pc</td>
+                      <td>160 箱</td>
+                      <td>今天 15:00</td>
+                      <td><span class="badge green">待入库</span></td>
+                      <td><button class="btn" type="button" data-open-drawer="productionGyoza">入库</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="warehouse-workspace">
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>自产产品生产关系</h2>
+                  <p class="sub">输入每个自产成品需要哪些原料、单位用量、损耗率和产出单位，用于自动扣减原料。</p>
+                </div>
+                <button class="btn" type="button" data-open-drawer="productionMaterial">编辑关系</button>
+              </div>
+              <div class="form-grid" style="margin-bottom:14px">
+                <div class="field"><label>自产产品</label><select><option>Tonkotsu Base 2kg</option><option>Special Noodles 1kg</option><option>Gyoza Mix 50pc</option><option>Ramen Sauce 10kg</option></select></div>
+                <div class="field"><label>产出单位</label><select><option>桶</option><option>包</option><option>箱</option><option>kg</option></select></div>
+                <div class="field"><label>标准批量</label><input value="80 桶"></div>
+                <div class="field"><label>默认损耗率</label><input value="3%"></div>
+              </div>
+              <div class="table-card">
+                <table>
+                  <thead><tr><th>原料</th><th>原料单位</th><th>每 1 成品用量</th><th>标准批量用量</th><th>损耗率</th><th>操作</th></tr></thead>
+                  <tbody>
+                    <tr><td><strong>猪骨汤底原料</strong><br><span style="color:var(--muted)">Tonkotsu Base stock</span></td><td><select class="control"><option>kg</option><option>L</option><option>个</option></select></td><td><input class="control" value="2 kg"></td><td><input class="control" value="160 kg"></td><td><input class="control" value="3%"></td><td><button class="btn" type="button" data-toast="已模拟删除原料关系">删除</button></td></tr>
+                    <tr><td><strong>包装桶 2kg</strong><br><span style="color:var(--muted)">成品包装</span></td><td><select class="control"><option>个</option><option>箱</option><option>包</option></select></td><td><input class="control" value="1 个"></td><td><input class="control" value="80 个"></td><td><input class="control" value="0%"></td><td><button class="btn" type="button" data-toast="已模拟删除原料关系">删除</button></td></tr>
+                    <tr><td><strong>酱油</strong><br><span style="color:var(--muted)">Ramen Sauce base</span></td><td><select class="control"><option>L</option><option>kg</option><option>瓶</option></select></td><td><input class="control" value="0.8 L"></td><td><input class="control" value="64 L"></td><td><input class="control" value="2%"></td><td><button class="btn" type="button" data-toast="已模拟删除原料关系">删除</button></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="actions" style="margin-top:14px">
+                <button class="btn" type="button" data-toast="已模拟新增一行原料关系">新增原料</button>
+                <button class="btn" type="button" data-toast="已模拟测试扣减关系">测试扣减</button>
+                <button class="btn primary" type="button" data-toast="已模拟保存生产关系">保存生产关系</button>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="page" data-page="business">
+          <div class="page-head">
+            <div>
+              <h1>经营分析</h1>
+              <p class="sub">把产品分析集中到这里：分开查看自产产品和进货产品的销量、成本、毛利和每月走势。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" data-page-jump="overview" onclick="goToPage('overview')">返回</button>
+              <button class="btn" type="button" data-toast="已模拟导出经营分析">导出</button>
+              <button class="btn primary" type="button" data-open-drawer="productAnalysis">查看详情</button>
+            </div>
+          </div>
+
+          <div class="stats">
+            <div class="stat"><span>本月销售额</span><strong>€18.4k</strong><small>比上月 +8.2%</small></div>
+            <div class="stat"><span>平均毛利</span><strong>37.7%</strong><small>核心产品</small></div>
+            <div class="stat"><span>自产产品销量</span><strong>606</strong><small>包 / 桶 / 箱</small></div>
+            <div class="stat"><span>进货产品销量</span><strong>312</strong><small style="color:var(--orange)">3 个低毛利</small></div>
+          </div>
+
+          <div class="filters">
+            <div class="tabs" data-tabs>
+              <button class="active" type="button">全部产品</button>
+              <button type="button">自产产品</button>
+              <button type="button">进货产品</button>
+            </div>
+            <select class="select"><option>本月</option><option>最近 30 天</option><option>本季度</option><option>今年</option></select>
+            <select class="select"><option>全部客户</option><option>老客户</option><option>新客户</option><option>加盟商</option></select>
+          </div>
+
+          <section class="dashboard-grid">
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>自产产品分析</h2>
+                  <p class="sub">Fujigawa 自己生产的汤底、面条和酱汁。</p>
+                </div>
+                <span class="badge green">毛利较高</span>
+              </div>
+              <div class="table-card">
+                <table>
+                  <thead><tr><th>产品</th><th>成本价</th><th>平均售价</th><th>销量</th><th>销售额 / 利润</th><th>平均毛利</th></tr></thead>
+                  <tbody>
+                    <tr><td><strong>Tonkotsu Base 2kg</strong><br><span style="color:var(--muted)">汤底 · 自产</span></td><td>€11.40</td><td>€18.90</td><td><strong>186</strong> 包/月</td><td><strong>€3,515.40</strong><br><span style="color:var(--green);font-weight:800">利润 €1,395.61</span></td><td><span class="badge green">39.7%</span></td></tr>
+                    <tr><td><strong>Special Noodles 1kg</strong><br><span style="color:var(--muted)">拉面面条 · 自产</span></td><td>€3.90</td><td>€6.80</td><td><strong>420</strong> 包/月</td><td><strong>€2,856.00</strong><br><span style="color:var(--green);font-weight:800">利润 €1,217.86</span></td><td><span class="badge green">42.6%</span></td></tr>
+                    <tr><td><strong>Ramen Sauce 1L</strong><br><span style="color:var(--muted)">拉面汁 · 自产</span></td><td>€4.20</td><td>€7.60</td><td><strong>128</strong> 瓶/月</td><td><strong>€972.80</strong><br><span style="color:var(--green);font-weight:800">利润 €435.20</span></td><td><span class="badge green">44.7%</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>进货产品分析</h2>
+                  <p class="sub">从供货商采购后销售的冷冻品、米、肉类和清洁用品。</p>
+                </div>
+                <span class="badge orange">需看成本</span>
+              </div>
+              <div class="table-card">
+                <table>
+                  <thead><tr><th>产品</th><th>供货商</th><th>进货价</th><th>销量</th><th>销售额 / 利润</th><th>平均毛利</th></tr></thead>
+                  <tbody>
+                    <tr><td><strong>Gyoza Mix 50pc</strong><br><span style="color:var(--muted)">冷冻品</span></td><td>Metro</td><td>€14.80</td><td><strong>96</strong> 箱/月</td><td><strong>€2,054.40</strong><br><span style="color:var(--green);font-weight:800">利润 €632.76</span></td><td><span class="badge orange">30.8%</span></td></tr>
+                    <tr><td><strong>Chashu Pork 1kg</strong><br><span style="color:var(--muted)">肉类</span></td><td>CHEFS CULINAR</td><td>€9.60</td><td><strong>128</strong> 包/月</td><td><strong>€1,945.60</strong><br><span style="color:var(--green);font-weight:800">利润 €715.98</span></td><td><span class="badge green">36.8%</span></td></tr>
+                    <tr><td><strong>Sushi Rice 10kg</strong><br><span style="color:var(--muted)">干货</span></td><td>JFC</td><td>€24.50</td><td><strong>42</strong> 袋/月</td><td><strong>€1,386.00</strong><br><span style="color:var(--green);font-weight:800">利润 €357.00</span></td><td><span class="badge orange">25.8%</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="dashboard-grid" style="margin-top:14px">
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>销量统计</h2>
+                  <p class="sub">按产品类型汇总本月销量。</p>
+                </div>
+              </div>
+              <div class="table-card">
+                <table>
+                  <thead><tr><th>分类</th><th>销量</th><th>销售额</th><th>利润</th><th>占比</th></tr></thead>
+                  <tbody>
+                    <tr><td><strong>自产产品</strong></td><td>606 件</td><td>€7,344.20</td><td style="color:var(--green);font-weight:800">€3,048.67</td><td><span class="badge green">63%</span></td></tr>
+                    <tr><td><strong>进货产品</strong></td><td>312 件</td><td>€5,386.00</td><td style="color:var(--green);font-weight:800">€1,704.92</td><td><span class="badge blue">37%</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>每月统计</h2>
+                  <p class="sub">销售额、利润和毛利率月度趋势。</p>
+                </div>
+              </div>
+              <div class="table-card">
+                <table>
+                  <thead><tr><th>月份</th><th>销售额</th><th>利润</th><th>毛利率</th><th>趋势</th></tr></thead>
+                  <tbody>
+                    <tr><td>2026/06</td><td><strong>€18.4k</strong></td><td style="color:var(--green);font-weight:800">€6.9k</td><td>37.7%</td><td><span class="badge green">上升</span></td></tr>
+                    <tr><td>2026/05</td><td><strong>€17.0k</strong></td><td style="color:var(--green);font-weight:800">€6.2k</td><td>36.5%</td><td><span class="badge green">稳定</span></td></tr>
+                    <tr><td>2026/04</td><td><strong>€15.8k</strong></td><td style="color:var(--green);font-weight:800">€5.7k</td><td>36.1%</td><td><span class="badge orange">平稳</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="page" data-page="shipping">
+          <div class="page-head">
+            <div>
+              <h1>出货</h1>
+              <p class="sub">选择日期，查看当天所有要出库的订单。支持批量下载 Lieferschein、批量确认出库。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" data-page-jump="overview" onclick="goToPage('overview')">返回</button>
+              <button class="btn" type="button" data-toast="已模拟批量下载 Lieferschein">批量下载 Lieferschein</button>
+              <button class="btn primary" type="button" data-toast="已模拟批量确认出库并生成账单">批量确认出库</button>
+            </div>
+          </div>
+
+          <div class="filters">
+            <div class="field" style="min-width:220px">
+              <label>出货日期</label>
+              <input type="date" value="2026-06-20">
+            </div>
+            <select class="select">
+              <option>全部状态</option>
+              <option>待拣货</option>
+              <option>待出库</option>
+              <option>已出库</option>
+            </select>
+            <select class="select">
+              <option>全部配送路线</option>
+              <option>Berlin 早班</option>
+              <option>Berlin 午班</option>
+              <option>Hamburg</option>
+            </select>
+            <input class="control" type="search" placeholder="搜索订单号、客户、路线">
+          </div>
+
+          <div class="stats">
+            <div class="stat"><span>今日待出库</span><strong>9</strong><small>6 单已备货</small></div>
+            <div class="stat"><span>待生成账单</span><strong>5</strong><small style="color:var(--orange)">确认后生成</small></div>
+            <div class="stat"><span>Lieferschein</span><strong>7</strong><small>可下载</small></div>
+            <div class="stat"><span>预计配送</span><strong>€4,218</strong><small>今日订单金额</small></div>
+          </div>
+
+          <div class="table-card">
+            <table>
+              <thead>
+                <tr>
+                  <th><input type="checkbox" aria-label="全选出货订单"></th>
+                  <th>订单</th>
+                  <th>客户</th>
+                  <th>配送时间</th>
+                  <th>拣货状态</th>
+                  <th>账单</th>
+                  <th>Lieferschein</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><input type="checkbox" checked aria-label="选择 ORD-2051"></td>
+                  <td><strong>ORD-2051</strong><br><span style="color:var(--muted)">18 件商品 · €842.50</span></td>
+                  <td><strong>Ramen Haus Mitte</strong><br><span style="color:var(--muted)">Ramen Haus GmbH</span></td>
+                  <td>09:00<br><span style="color:var(--muted)">Berlin 早班</span></td>
+                  <td><span class="badge green">已备货</span></td>
+                  <td><span class="badge orange">待生成</span></td>
+                  <td><button class="btn" type="button" data-toast="已模拟下载 ORD-2051 Lieferschein">下载</button></td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="shipping2051">详情</button><button class="btn primary" type="button" data-toast="已模拟确认 ORD-2051 出库并生成账单">确认出库并生成账单</button></div></td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" checked aria-label="选择 ORD-2049"></td>
+                  <td><strong>ORD-2049</strong><br><span style="color:var(--muted)">12 件商品 · €391.20</span></td>
+                  <td><strong>Sakura Kitchen</strong><br><span style="color:var(--muted)">Sakura Foods GmbH</span></td>
+                  <td>11:30<br><span style="color:var(--muted)">Hamburg</span></td>
+                  <td><span class="badge orange">待复核</span></td>
+                  <td><span class="badge orange">待生成</span></td>
+                  <td><button class="btn" type="button" data-toast="已模拟下载 ORD-2049 Lieferschein">下载</button></td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="shipping2049">详情</button><button class="btn primary" type="button" data-toast="已模拟确认 ORD-2049 出库并生成账单">确认出库并生成账单</button></div></td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" aria-label="选择 ORD-2053"></td>
+                  <td><strong>ORD-2053</strong><br><span style="color:var(--muted)">8 件商品 · €612.80</span></td>
+                  <td><strong>Noodle Lab</strong><br><span style="color:var(--muted)">Noodle Lab UG</span></td>
+                  <td>14:00<br><span style="color:var(--muted)">Berlin 午班</span></td>
+                  <td><span class="badge blue">待拣货</span></td>
+                  <td><span class="badge gray">未生成</span></td>
+                  <td><button class="btn" type="button" data-toast="已模拟下载 ORD-2053 Lieferschein">下载</button></td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="shipping2053">详情</button><button class="btn primary" type="button" data-toast="已模拟确认 ORD-2053 出库并生成账单">确认出库并生成账单</button></div></td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" aria-label="选择 ORD-2054"></td>
+                  <td><strong>ORD-2054</strong><br><span style="color:var(--muted)">24 件商品 · €1,125.40</span></td>
+                  <td><strong>Sushi Bar Nord</strong><br><span style="color:var(--muted)">Sushi Nord GmbH</span></td>
+                  <td>16:00<br><span style="color:var(--muted)">Berlin 午班</span></td>
+                  <td><span class="badge green">已备货</span></td>
+                  <td><span class="badge green">已生成</span></td>
+                  <td><button class="btn" type="button" data-toast="已模拟下载 ORD-2054 Lieferschein">下载</button></td>
+                  <td><div class="row-actions"><button class="btn" type="button" data-open-drawer="shipping2054">详情</button><button class="btn" type="button" data-toast="ORD-2054 已出库">已出库</button></div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-backdrop" data-close-drawer></div>
+    <aside class="drawer-panel">
+      <div class="drawer-head">
+        <div>
+          <h2 id="drawerTitle">详情</h2>
+          <p class="sub" id="drawerSubtitle">前端展示数据</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-drawer aria-label="关闭">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div id="drawerBody"></div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="supplier-ui-editor.js"></script>
+  <script src="inventory-master-data.js"></script>
+</body>
+</html>

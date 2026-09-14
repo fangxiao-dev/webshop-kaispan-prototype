@@ -1,0 +1,125 @@
+/* ==========================================================================
+   KaiSpan · 考勤模块样式
+   前缀统一 .att-。复用 styles.css 的变量、.card / .table / .pill。
+   ========================================================================== */
+
+/* ============================================================== 顶部 ====== */
+.att-warn {
+  border-color: #f3c9a0; background: #fffaf3; margin-bottom: 14px;
+}
+.att-warn strong { display: block; font-size: 14px; }
+.att-warn p { margin: 6px 0 10px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+/* 日期条跟排班的周工具栏共用同一个步进器（schedule.css 的 .sch-weekbar / .sch-weekpick）——
+   排班、考勤、休假是同一块事的三个面，页头不该长得三个样。 */
+.att-scope { font-size: 12px; color: var(--muted); }
+
+/* ============================================================ 待处理 ====== */
+.att-open { margin-top: 16px; border-color: #f0c0c0; }
+.att-clear { margin-top: 16px; }
+.att-clear strong { display: block; font-size: 14px; }
+.att-clear p { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.att-open .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+/* ============================================================== 表格 ====== */
+.att-tablewrap { overflow-x: auto; margin-top: 12px; }
+.att-table { width: 100%; min-width: 760px; }
+/* 上班 / 下班 / 位置原来占三列，读起来是三次跳；它们说的是同一件事：
+   这个人什么时候打的卡、打卡时人在哪。并成一格。 */
+.att-punch strong { display: block; font-size: 13px; white-space: nowrap; }
+.att-punch small { display: block; margin-top: 2px; }
+.att-table td small { display: block; font-size: 11px; color: var(--muted); }
+.att-table tr.att-bad td { background: #fffaf9; }
+.att-table tr.is-editing td { background: #fbfaff; border-bottom: none; }
+.att-dim { color: var(--muted); }
+.att-empty { font-size: 13px; color: var(--muted); margin-top: 10px; }
+.att-card .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+.att-geo { font-size: 12px; font-weight: 750; }
+.att-geo.is-ok { color: #067647; }
+.att-geo.is-far { color: #b42318; }
+
+.att-issues { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.att-issue { font-size: 11px; line-height: 1.4; }
+.att-issue.is-bad { color: #b42318; }
+.att-issue.is-note { color: var(--muted); }
+
+/* ============================================================ 处理面板 ==== */
+.att-editrow td { padding: 0 !important; background: #fbfaff; }
+.att-fix {
+  border-top: 1px dashed var(--line); padding: 14px 16px 16px;
+  display: grid; gap: 12px;
+}
+.att-fix-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
+.att-fix-head strong { font-size: 14px; }
+.att-fix-head span { font-size: 12px; color: var(--muted); }
+
+.att-fix-issues { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+.att-fix-issues li { font-size: 12px; line-height: 1.5; }
+.att-fix-issues li.is-bad { color: #b42318; }
+.att-fix-issues li.is-note { color: var(--muted); }
+
+.att-fix-done {
+  margin: 0; font-size: 12px; color: var(--muted);
+  background: #eef1f8; border-radius: 10px; padding: 8px 10px;
+}
+.att-fix-ot { margin: 0; font-size: 12px; color: var(--muted); }
+.att-fix-ot a { color: var(--purple); font-weight: 750; }
+
+.att-fix-grid { display: grid; grid-template-columns: 140px 140px 1fr; gap: 10px; }
+.att-fix-grid label {
+  display: grid; gap: 6px; font-size: 12px; font-weight: 750; color: var(--muted);
+}
+.att-fix-grid input {
+  min-height: 36px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; font: inherit; font-weight: 750; background: #fff;
+}
+.att-fix-why input { font-weight: 400; }
+
+.att-fix-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.att-fix-log summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+.att-fix-log ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.att-fix-log li { font-size: 12px; line-height: 1.5; }
+.att-fix-log li span { color: var(--muted); }
+
+
+/* ======================================================== 合规设置里那段 == */
+.att-site { margin-top: 16px; }
+.att-site .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.att-site-row {
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 12px;
+}
+.att-site-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.att-site-fields { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.att-site-fields label {
+  display: grid; gap: 6px; font-size: 12px; font-weight: 750; color: var(--muted); min-width: 130px;
+}
+.att-site-fields input {
+  min-height: 36px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; font: inherit; font-weight: 750;
+}
+.att-site-when { display: block; margin-top: 8px; font-size: 11px; color: var(--muted); }
+.att-site-note { margin: 12px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+/* ==================================================== 工时页上的提示条 ==== */
+.hrs-attpend-card { display: block; border-color: #f3c9a0; background: #fffaf3; margin-bottom: 16px; text-decoration: none; color: inherit; }
+.hrs-attpend-card:hover { border-color: var(--orange); }
+.hrs-attpend-card strong { display: block; font-size: 14px; }
+.hrs-attpend-card > span { display: block; margin-top: 5px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.hrs-attpend { display: block; margin-top: 3px; font-size: 11px; color: #b42318; font-weight: 750; }
+
+@media (max-width: 900px) {
+  .att-fix-grid { grid-template-columns: 1fr 1fr; }
+  .att-fix-why { grid-column: 1 / -1; }
+}
+.att-fix-cap { align-self: center; font-size: 11px; color: var(--muted); line-height: 1.4; max-width: 460px; }
+
+/* 被拦下的尝试：位置那一栏显示距离 + 「被拦下」 */
+.att-geo small { display: block; font-weight: 400; font-size: 10px; }
+.att-sick-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.att-sick-wrap label { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.att-sick-wrap input {
+  min-height: 32px; border: 1px solid var(--line); border-radius: 8px;
+  padding: 4px 8px; font: inherit; font-size: 12px;
+}

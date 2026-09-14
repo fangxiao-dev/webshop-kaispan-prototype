@@ -1,0 +1,681 @@
+/* ==========================================================================
+   KaiSpan · 员工助手模块样式
+   桌面端（D5/D10：员工自助端后续作为独立手机产品另做）。
+   复用 styles.css 的变量；前缀统一 .emp-，避免与既有选择器冲突。
+   ========================================================================== */
+
+/* 顶部那条五格状态条在之前几轮删掉了，样式一直留到 2026-09-04 复审才清。 */
+
+.emp-store-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.emp-store-switch select {
+  border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px;
+  font-size: 13px; color: var(--ink); background: #fff;
+}
+
+/* ============================================================== 预警区 ==== */
+.emp-alert-card .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+
+/* 四列：谁 / 什么事 / 状态 / 一个操作。
+   尾部只能有一个按钮 —— 之前塞了状态标 + 「已请他补交」+「打开」三样，
+   装不下就换行，每行 116px 高，整块预警区看着像坏了。 */
+.is-accent { border-color: var(--purple) !important; color: var(--purple) !important; }
+
+.emp-allclear { text-align: center; padding: 28px 20px; }
+.emp-allclear strong { display: block; font-size: 16px; color: var(--green); }
+.emp-allclear p { margin: 6px 0 14px; font-size: 13px; color: var(--muted); }
+
+/* ============================================================ 模块卡片 ==== */
+/* 主页固定四张卡（2026-09-03 定）：员工档案 / 排班与工时 / 考勤 / 工资单与发薪。
+   auto-fit 在 1440px 上排成 3+1，第四张孤零零占一行 —— 四张就该是 2×2。
+   窄屏落回一列（下面的 @media 里）。
+
+   一卡一色（2026-09-03 Mingrong 定）：四张卡原来全是紫边，四块看着是一块。
+   颜色定义放这儿一处，卡片和下面待办区那一组共用同一个 --mod ——
+   下面某一组是什么颜色，就对应上面哪张卡。
+   四个色都避开红 / 橙：那两个色在这套界面里是「过期 / 快到期」的意思，
+   拿来当模块底色，会让「工资单」这张卡看着永远在报警。 */
+/* 一行排开（2026-09-03 Mingrong 定）：一眼看完员工助手有哪几块。
+   四块并成三块之后每张卡宽了三分之一，说明文字不再挤成五行。窄屏落回 1 列。 */
+.emp-modules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.is-mod-staff { --mod: #6236ff; --mod-soft: #f1ecff; }
+.is-mod-sch   { --mod: #1677ff; --mod-soft: #e9f2ff; }
+.is-mod-pay   { --mod: #d6336c; --mod-soft: #fdeaf1; }
+.emp-module {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--mod-soft, var(--card)); border: 1px solid transparent; border-radius: 14px;
+  padding: 16px 17px; box-shadow: var(--shadow); transition: border-color .15s, transform .15s;
+}
+.emp-module:hover { border-color: var(--mod, var(--purple)); transform: translateY(-1px); }
+.emp-module.is-live { border-left: 3px solid var(--mod, var(--purple)); }
+.emp-module-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.emp-module-head h2 { margin: 0; font-size: 16px; color: var(--mod, var(--ink)); }
+.emp-module > p { margin: 8px 0 12px; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+.emp-module-mini { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.emp-module-cta { display: inline-block; margin-top: 12px; font-size: 13px; color: var(--mod, var(--purple)); font-weight: 500; }
+
+/* ================================================================ 表格 ==== */
+.emp-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.emp-tab {
+  padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line);
+  font-size: 13px; color: var(--muted); text-decoration: none; background: #fff;
+}
+.emp-tab:hover { border-color: var(--purple); color: var(--purple); }
+.emp-tab.is-on { background: var(--purple); border-color: var(--purple); color: #fff; }
+
+.emp-table td, .emp-table th { vertical-align: middle; }
+.emp-name-link { color: var(--ink); font-weight: 600; text-decoration: none; }
+.emp-name-link:hover { color: var(--purple); text-decoration: underline; }
+.emp-note { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
+.emp-empty { padding: 26px 4px; text-align: center; color: var(--muted); font-size: 13px; }
+
+.emp-alert-tr.is-expired td, .emp-alert-tr.is-missing td { background: #fff6f6; }
+.emp-alert-tr.is-warn td { background: #fffaf2; }
+
+/* 证件矩阵：一眼看出谁哪一格是红的 */
+.emp-matrix th { font-size: 11px; line-height: 1.3; }
+.emp-matrix .emp-cell { text-align: center; white-space: nowrap; }
+.emp-matrix .emp-cell small { font-size: 10px; color: var(--muted); margin-left: 3px; }
+.emp-matrix .emp-cell.is-expired, .emp-matrix .emp-cell.is-missing { background: #fff1f1; }
+.emp-matrix .emp-cell.is-warn { background: #fff8ee; }
+.emp-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.emp-dot.red { background: var(--red); }
+.emp-dot.orange { background: var(--orange); }
+.emp-dot.blue { background: var(--blue); }
+.emp-dot.green { background: var(--green); }
+.emp-dot.gray { background: #d7dbe8; }
+
+/* ============================================================ 员工资料 ==== */
+/* 资料页整体：左边资料，右边一条窄栏放要办的事（2026-09-03 版式）。
+   资料本身不再分两栏 —— 主栏窄了，表单一列一列排反而好读，
+   .form-grid 自己会把字段排成两列。 */
+.emp-person { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.emp-person-main { min-width: 0; }
+.emp-person-side { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 12px; }
+.emp-profile { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+
+.emp-rail-card { padding: 14px 16px; }
+.emp-rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.emp-rail-head h2 { margin: 0; font-size: 14px; }
+.emp-rail-card > p { margin: 0 0 8px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.emp-rail-card .small { display: block; margin-top: 8px; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.emp-rail-card .button-row { margin-top: 10px; gap: 8px; flex-wrap: wrap; }
+.emp-rail-card .primary-btn { width: 100%; margin-top: 10px; }
+.emp-rail-empty { margin: 0; font-size: 12px; color: var(--muted); }
+.emp-rail-foot { margin: 10px 0 0; font-size: 11px; color: var(--muted); }
+.emp-request-status {
+  margin: 0 0 10px; padding: 10px 11px; border-radius: 10px;
+  background: var(--purple-soft); border: 1px solid #d9ccff;
+}
+.emp-request-status > div:first-child { display: flex; flex-direction: column; gap: 3px; }
+.emp-request-status strong { font-size: 12px; color: var(--purple); }
+.emp-request-status span { font-size: 11px; color: var(--muted); }
+.emp-request-status .button-row { margin-top: 8px; }
+.emp-request-status .ghost-btn { padding: 6px 9px; font-size: 11px; }
+.emp-rail-action { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.emp-rail-action > span { display: block; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.emp-rail-account-needed {
+  margin: 10px 0 0 !important; padding: 9px 10px; border-radius: 9px;
+  background: #fff8ee; color: var(--orange) !important;
+}
+.emp-inline-result {
+  margin: 10px 0 0; padding: 9px 12px; border-radius: 10px;
+  background: var(--purple-soft); color: var(--purple); font-size: 12px;
+}
+
+.emp-rail-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 11px; margin-bottom: 6px; border: 1px solid var(--line);
+  border-left-width: 3px; border-radius: 10px; text-decoration: none; color: inherit;
+}
+.emp-rail-row:hover { border-color: var(--purple); border-left-color: var(--purple); }
+.emp-rail-row strong { display: block; font-size: 13px; }
+.emp-rail-row span { font-size: 11px; color: var(--muted); }
+.emp-rail-row.is-expired, .emp-rail-row.is-missing { border-left-color: var(--red); background: #fff6f6; }
+.emp-rail-row.is-warn { border-left-color: var(--orange); background: #fffaf2; }
+.emp-rail-row.is-soon { border-left-color: var(--blue); }
+
+.emp-account { border-left: 3px solid var(--blue); }
+.emp-account.is-none, .emp-account.is-off { border-left-color: var(--line); }
+.emp-account-rows > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 12px; }
+.emp-account-rows span { color: var(--muted); }
+.emp-account-rows strong { font-size: 12px; word-break: break-all; text-align: right; }
+.emp-account-rows code { background: #eef1f8; border-radius: 6px; padding: 2px 7px; font-size: 13px; letter-spacing: .5px; }
+
+/* 新人清单里就地传合同 */
+.emp-newhire-file { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.emp-newhire-file .small { font-size: 11px; color: var(--muted); }
+
+/* 传上来的文件：能点开的是链接，点不开的说明白为什么 */
+a.emp-file.is-open { color: var(--purple); text-decoration: underline; }
+.emp-file.is-gone { color: var(--muted); border-bottom: 1px dotted var(--muted); cursor: help; }
+.emp-check label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.emp-check input { width: auto; }
+
+.emp-hint {
+  margin-top: 14px; padding: 12px 14px; border-radius: 11px;
+  background: var(--purple-soft); font-size: 12px; line-height: 1.6;
+}
+.emp-hint strong { display: block; font-size: 13px; color: var(--ink); }
+.emp-hint p { margin: 5px 0; color: var(--ink); }
+.emp-hint p.is-over { color: var(--red); font-weight: 600; }
+.emp-hint span { color: var(--muted); }
+.emp-hint a { color: var(--purple); }
+
+/* 证件卡片 */
+.emp-doc {
+  border: 1px solid var(--line); border-radius: 11px; padding: 11px 13px;
+  margin-bottom: 8px; border-left-width: 3px;
+}
+.emp-doc.is-expired, .emp-doc.is-missing { border-left-color: var(--red); background: #fff6f6; }
+.emp-doc.is-warn { border-left-color: var(--orange); background: #fffaf2; }
+.emp-doc.is-soon { border-left-color: var(--blue); }
+.emp-doc.is-ok { border-left-color: var(--green); }
+.emp-doc.is-na { opacity: .55; }
+.emp-doc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.emp-doc-head strong { font-size: 13px; }
+.emp-doc-body { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
+.emp-doc-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.emp-doc-exp { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.emp-doc-exp input {
+  border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 12px;
+}
+.emp-doc-days { font-size: 12px; color: var(--muted); }
+.emp-doc-why { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; }
+.emp-doc-foot { margin: 12px 0 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.emp-doc-foot a { color: var(--purple); }
+
+/* ============================================================ 合规设置 ==== */
+.emp-rules-note { border-left: 3px solid var(--orange); }
+.emp-rules-note strong { font-size: 14px; }
+.emp-rules-note p { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.7; }
+.emp-rules { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.emp-rule { border: 1px solid var(--line); border-radius: 11px; padding: 13px 15px; }
+.emp-rule-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.emp-rule-head strong { font-size: 13px; }
+.emp-rule-input { display: inline-flex; align-items: center; gap: 6px; }
+.emp-rule-input input {
+  width: 88px; text-align: right; border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 9px; font-size: 13px;
+}
+.emp-rule-input i { font-style: normal; font-size: 12px; color: var(--muted); }
+.emp-rule p { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+/* ============================================================ 新增员工 ==== */
+.emp-doc-preview { border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+.emp-doc-preview-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 13px; font-size: 12px; border-bottom: 1px solid var(--line);
+}
+.emp-doc-preview-row:last-child { border-bottom: 0; }
+.emp-doc-preview-row span { color: var(--muted); }
+.emp-doc-preview-row strong { color: var(--ink); font-weight: 500; }
+
+/* 保存反馈：不用弹窗，按钮上闪一下 */
+.is-flash { background: var(--green) !important; border-color: var(--green) !important; }
+
+/* 一行四张要一直撑到侧栏收起为止 —— 1440 上一张卡约 270px，够放标题、两行说明和两行数。
+   再窄就撑不住了，落回 2 列，手机宽度落回 1 列。 */
+@media (max-width: 1180px) {
+  .emp-modules { grid-template-columns: 1fr; }
+}
+@media (max-width: 1180px) {
+  .emp-profile { grid-template-columns: 1fr; }
+  .emp-rules { grid-template-columns: 1fr; }
+}
+@media (max-width: 820px) {
+  .emp-modules { grid-template-columns: 1fr; }
+}
+
+/* ========================================================== 入职邀请闭环 == */
+/* 三步进度条：公司建档 → 员工填写 → 店长审核 */
+.emp-flow {
+  display: flex; gap: 10px; list-style: none; margin: 0 0 18px; padding: 0;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px 18px; box-shadow: var(--shadow);
+}
+.emp-flow li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.emp-flow li + li::before { content: "→"; margin-right: 10px; color: #cdd3e4; }
+.emp-flow i {
+  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font-style: normal; font-size: 12px; font-weight: 600;
+  background: #eef1f8; color: var(--muted);
+}
+.emp-flow li.is-now { color: var(--ink); font-weight: 600; }
+.emp-flow li.is-now i { background: var(--purple); color: #fff; }
+.emp-flow li.is-done i { background: var(--green); color: #fff; }
+
+/* 完成度小条 */
+.emp-progress {
+  display: inline-block; width: 74px; height: 6px; border-radius: 999px;
+  background: #eef1f8; overflow: hidden; vertical-align: middle; margin-right: 6px;
+}
+.emp-progress i { display: block; height: 100%; background: var(--purple); border-radius: 999px; }
+
+/* 邀请详情：左邮件右提交内容 */
+.emp-invite-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.emp-invite-grid textarea { font-family: inherit; line-height: 1.7; }
+
+.emp-link-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px;
+  padding: 10px 13px; border-radius: 11px; background: var(--purple-soft); font-size: 12px;
+}
+.emp-link-row > span { color: var(--muted); }
+.emp-link {
+  flex: 1; min-width: 180px; font-size: 12px; color: var(--ink);
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+  padding: 5px 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.emp-timeline { list-style: none; margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); }
+.emp-timeline li { display: flex; gap: 14px; font-size: 12px; padding: 4px 0; }
+.emp-timeline li span { color: var(--muted); white-space: nowrap; min-width: 120px; }
+.emp-timeline li strong { font-weight: 500; }
+
+.emp-returned {
+  background: #fff6f6; border: 1px solid #f7c9ce; border-left: 3px solid var(--red);
+  border-radius: 14px; padding: 14px 18px; margin-bottom: 16px;
+}
+.emp-returned strong { display: block; font-size: 14px; color: var(--red); }
+.emp-returned p { margin: 6px 0 0; font-size: 13px; line-height: 1.7; }
+.emp-returned span { font-size: 11px; color: var(--muted); }
+
+.emp-revoke-confirm {
+  margin-top: 12px; padding: 12px 14px; border-radius: 11px;
+  background: #fff6f6; border: 1px solid #f7c9ce;
+}
+.emp-revoke-confirm strong { display: block; font-size: 13px; margin-bottom: 10px; }
+.emp-revoke-confirm.is-hidden { display: none; }
+.danger-solid { background: var(--red) !important; border-color: var(--red) !important; }
+
+/* 审核区 */
+.emp-review-block { margin-bottom: 18px; }
+.emp-review-block h3 { margin: 0 0 8px; font-size: 13px; color: var(--ink); }
+.emp-review-table td, .emp-review-table th { font-size: 12px; }
+.emp-review-table tr.is-missing td { background: #fff6f6; }
+.emp-review-table tr.is-diff td { background: #fffaf2; }
+.emp-miss { color: var(--red); font-size: 12px; }
+.emp-file { font-size: 12px; color: var(--purple); word-break: break-all; }
+.emp-review-note {
+  margin: 10px 0 0; padding: 10px 13px; border-radius: 10px;
+  background: #fffaf2; border-left: 3px solid var(--orange); font-size: 12px; line-height: 1.7;
+}
+.emp-approve { margin-top: 16px; border-left: 3px solid var(--purple); }
+.emp-approve .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.emp-approve-warn {
+  margin: 12px 0 0; padding: 10px 13px; border-radius: 10px;
+  background: #fffaf2; border-left: 3px solid var(--orange); font-size: 12px; line-height: 1.7;
+}
+
+/* ========================================================= 员工自填页 ==== */
+.emp-onboard-wrap { min-height: 100vh; background: var(--bg); padding: 34px 20px 70px; }
+.emp-onboard-page { max-width: 880px; margin: 0 auto; }
+.emp-onboard-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+
+.emp-onboard-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 22px 26px; box-shadow: var(--shadow); margin-bottom: 16px;
+}
+.emp-onboard-store {
+  display: inline-block; font-size: 12px; color: var(--purple);
+  background: var(--purple-soft); border-radius: 999px; padding: 3px 12px; margin-bottom: 10px;
+}
+.emp-onboard-head h1 { margin: 0; font-size: 22px; }
+.emp-onboard-head p { margin: 8px 0 0; font-size: 13px; color: var(--muted); line-height: 1.7; }
+
+.emp-onboard-progress {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 18px;
+  font-size: 13px; color: var(--muted);
+}
+.emp-onboard-progress .emp-progress { width: 200px; height: 8px; }
+.emp-onboard-progress strong { color: var(--ink); font-size: 15px; }
+
+.emp-onboard .card { margin-bottom: 16px; }
+.emp-upload-note { color: var(--muted); margin: 0 0 12px; line-height: 1.6; }
+.emp-upload-btn {
+  display: inline-block; cursor: pointer; font-size: 12px; padding: 6px 14px;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink);
+}
+.emp-upload-btn:hover { border-color: var(--purple); color: var(--purple); }
+.emp-upload-btn input[type="file"] { display: none; }
+
+.emp-contract-check { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.emp-contract-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 13px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px;
+}
+.emp-contract-row span { color: var(--muted); }
+
+.emp-onboard-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+.emp-onboard-msg {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 44px 32px; text-align: center; box-shadow: var(--shadow);
+}
+.emp-onboard-msg h1 { margin: 0; font-size: 21px; }
+.emp-onboard-msg p { margin: 12px auto 0; max-width: 520px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+.emp-onboard-msg.is-done h1 { color: var(--green); }
+.emp-onboard-msg button { margin-top: 18px; }
+
+@media (max-width: 900px) {
+  .emp-invite-grid, .emp-contract-check { grid-template-columns: 1fr; }
+  .emp-onboard-head { flex-direction: column; }
+  .emp-flow { flex-wrap: wrap; }
+}
+
+.emp-approve-warn.is-hidden { display: none; }
+
+/* ====================================================== 档案列表（重做）== */
+.emp-listbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 12px 16px; margin-bottom: 16px; box-shadow: var(--shadow);
+}
+.emp-listtools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.emp-tab b {
+  display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 600;
+  background: #eef1f8; color: var(--muted); border-radius: 999px; padding: 1px 7px;
+}
+.emp-tab.is-on b { background: rgba(255, 255, 255, .25); color: #fff; }
+
+/* 真正要处理的数量统一用强红徽标；历史条数等纯信息仍用上面的灰色 b。 */
+.emp-attention-count {
+  box-sizing: border-box; display: inline-grid; place-items: center; vertical-align: middle;
+  min-width: 22px; height: 22px; margin-left: 7px; padding: 0 5px;
+  border: 2px solid #fff; border-radius: 999px; background: var(--red); color: #fff;
+  box-shadow: 0 0 0 1px #ffb9c2; font-size: 11px; font-weight: 800; line-height: 1;
+}
+.emp-tab.is-on .emp-attention-count { box-shadow: 0 0 0 1px rgba(255, 255, 255, .72); }
+/* 标签里的红徽标：`.emp-tab b` 那条灰药丸的选择器比 `.emp-attention-count` 更具体，
+   不写这一条的话红徽标在标签里会被刷成灰底 —— 排班那三段的数字就是这么白掉的。 */
+.emp-tab b.emp-attention-count { background: var(--red); color: #fff; }
+.emp-th-label { display: inline-flex; align-items: center; white-space: nowrap; }
+.emp-rail-head .emp-attention-count { margin-left: auto; }
+
+.emp-search input {
+  width: 230px; border: 1px solid var(--line); border-radius: 9px;
+  padding: 7px 12px; font-size: 13px; color: var(--ink); background: #fff;
+}
+.emp-search input:focus { outline: none; border-color: var(--purple); }
+
+/* 五列花名册：每格两到三行，主行大、辅行小。
+   ⚠️ 这里的 span 规则必须排除 .pill —— 上一版写成 `td > span` 把 pill 也变成了
+   block，绿标粉标被拉成横贯整列的色条，整张表看起来像坏了。 */
+.emp-roster td { vertical-align: top; padding-top: 12px; padding-bottom: 12px; }
+.emp-roster td > span:not(.pill):not(.emp-todo-line) {
+  display: block; font-size: 12px; color: var(--muted); margin-top: 3px;
+}
+.emp-roster td > strong { display: block; font-size: 13px; }
+.emp-roster .emp-note { display: block; margin-top: 3px; }
+.emp-roster .pill { display: inline-block; vertical-align: middle; }
+.emp-cell-who .emp-name-link { font-size: 14px; margin-right: 7px; }
+
+/* 待处理格：一行装下「状态 + 是什么 + 还剩几天」，不再堆三行 */
+.emp-todo-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.emp-todo-line b { font-size: 12px; font-weight: 600; color: var(--ink); }
+.emp-todo-line i { font-style: normal; font-size: 12px; color: var(--muted); }
+.emp-req-flag { color: var(--blue); }
+.emp-ok-dash { color: #cdd3e4; }
+
+/* 行不再整片染色 —— 十行里九行是粉的，等于没有强调。改成左边一条。 */
+.emp-alert-tr.is-expired td, .emp-alert-tr.is-missing td,
+.emp-alert-tr.is-warn td { background: transparent; }
+.emp-alert-tr td:first-child { position: relative; }
+.emp-alert-tr td:first-child::before {
+  content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px;
+}
+.emp-alert-tr.is-expired td:first-child::before, .emp-alert-tr.is-missing td:first-child::before { background: var(--red); }
+.emp-alert-tr.is-warn td:first-child::before { background: var(--orange); }
+
+/* 入职中标签下的引导条 */
+.emp-tabnote {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; border-left: 3px solid var(--blue); margin-bottom: 16px;
+}
+.emp-tabnote span { font-size: 13px; color: var(--muted); }
+
+/* 折叠的「更多合同条件」 */
+.emp-more { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.emp-more summary { cursor: pointer; font-size: 13px; color: var(--purple); list-style: none; }
+.emp-more summary::-webkit-details-marker { display: none; }
+.emp-more summary::before { content: "▸ "; }
+.emp-more[open] summary::before { content: "▾ "; }
+.emp-more .form-grid { margin-top: 12px; }
+.emp-preset-hint { color: var(--muted); margin: 10px 0 0; line-height: 1.6; }
+
+/* ====================================================== 补件请求 ========= */
+.emp-request-bar { margin-bottom: 16px; }
+.emp-request-bar.is-submitted { border-left: 3px solid var(--orange); }
+.emp-request-bar > div:first-child { display: flex; flex-direction: column; gap: 5px; }
+.emp-request-bar strong { font-size: 14px; }
+.emp-request-bar p { margin: 0; font-size: 13px; color: var(--ink); }
+.emp-request-bar span { font-size: 12px; color: var(--muted); }
+.emp-request-bar .button-row { margin-top: 12px; }
+.emp-request-items {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px; margin: 14px 0;
+}
+.emp-request-item { border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+.emp-request-item span { display: block; font-size: 11px; color: var(--muted); }
+.emp-request-item strong { display: block; font-size: 13px; margin-top: 2px; word-break: break-all; }
+.emp-request-item small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.emp-request-item .emp-miss { font-style: normal; color: var(--red); }
+.emp-doc-head + .emp-doc-why { margin-top: 6px; }
+.field label small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); }
+
+/* 申报必填的字段（2026-09-03 Mingrong：需要个人资料补充的地方要标红）。
+   填好了只留一个安静的灰标 —— 常驻的红会把「这一格重要」和「这一格现在缺」混成一件事，
+   一屏五个红标看久了就不再是警告了。缺着的才变红，并且写出为什么非填不可。 */
+.field.is-need > label { display: flex; align-items: baseline; gap: 7px; }
+.field-need {
+  font-size: 10px; font-weight: 700; letter-spacing: .03em; color: var(--muted);
+  background: #f1f3f8; border-radius: 5px; padding: 1px 5px;
+}
+.field-need-why { display: none; margin-top: 6px; font-size: 11px; line-height: 1.45; color: #b42318; }
+.field.is-need.is-missing .field-need { color: #b42318; background: #fff1f0; }
+.field.is-need.is-missing .field-need-why { display: block; }
+.field.is-need.is-missing input,
+.field.is-need.is-missing select { border-color: #e4a5a0; background: #fffdfd; }
+.field.is-need.is-missing input:focus,
+.field.is-need.is-missing select:focus { border-color: #b42318; }
+.emp-noresult { padding: 26px 4px; text-align: center; color: var(--muted); font-size: 13px; }
+.is-hidden { display: none !important; }
+
+/* ====================================================== 资料页（重做）=== */
+.emp-tabbar { margin-bottom: 16px; }
+.emp-tabbar .emp-tab { padding: 8px 18px; font-size: 14px; }
+
+.emp-left-banner { border-left: 3px solid var(--muted); margin-bottom: 16px; }
+.emp-left-banner strong { font-size: 15px; }
+.emp-left-banner p { margin: 6px 0; font-size: 13px; line-height: 1.7; }
+.emp-left-banner span { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+
+.emp-danger { border-left: 3px solid var(--red); }
+.emp-danger .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.emp-leave-form {
+  margin-top: 14px; padding: 14px 16px; border-radius: 11px;
+  background: #fff6f6; border: 1px solid #f7c9ce;
+}
+.emp-doc-wide { max-width: 720px; }
+
+@media (max-width: 1320px) {
+  .emp-person { grid-template-columns: 1fr; }
+  .emp-person-side { position: static; }
+}
+@media (max-width: 1180px) {
+  .emp-listbar { flex-direction: column; align-items: stretch; }
+  .emp-search input { width: 100%; }
+}
+
+/* 「返回员工助手」在全站是蓝底强调钮，但左侧导航已经高亮着员工助手，
+   它跟「新增员工」并排会抢走主操作的注意力。员工模块内降级成普通次要钮。 */
+.emp-page .accent-back-btn {
+  background: #fff; color: var(--muted); border: 1px solid var(--line); box-shadow: none;
+}
+.emp-page .accent-back-btn:hover { border-color: var(--purple); color: var(--purple); }
+
+.emp-request-bar .field { margin-top: 10px; }
+.emp-request-bar textarea { font-family: inherit; line-height: 1.7; }
+
+/* 保存状态：改了没存 / 刚存过，都要看得见 */
+.emp-saved-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--green); font-weight: 500;
+}
+.emp-saved-tag::before { content: "✓"; }
+.emp-dirty-tag { font-size: 12px; color: var(--orange); font-weight: 500; }
+.primary-btn.is-dirty { box-shadow: 0 0 0 3px rgba(247, 144, 9, .25); }
+
+/* 试用期提示按严重度分色 */
+.emp-hint.is-red { background: #fff6f6; }
+.emp-hint.is-red strong { color: var(--red); }
+.emp-hint.is-orange { background: #fffaf2; }
+.emp-hint.is-orange strong { color: var(--orange); }
+.emp-hint.is-blue { background: #f2f7ff; }
+
+/* 窄屏下 section-title 里的 pill 会被挤成竖排单字，锁住不换行 */
+.emp-page .section-title .pill { white-space: nowrap; flex: 0 0 auto; }
+
+
+/* 资料页：标签栏 + 保存钮吸顶。
+   保存原来在页头，滚下去改字段时它早就出屏幕了（实测 -422px），
+   改完找不到地方存，只能滚回最上面。 */
+.emp-stickybar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; margin-bottom: 16px; padding: 10px 14px;
+  background: rgba(246, 248, 252, .92); backdrop-filter: blur(8px);
+  border: 1px solid var(--line); border-radius: 14px;
+}
+.emp-stickybar .emp-tabbar { margin-bottom: 0; }
+.emp-stickybar-right { display: flex; align-items: center; gap: 12px; }
+
+
+/* 改了东西就浮出来的保存条。
+   保存原来只在页头，滚下去改字段时它早出屏幕了（实测 -422px），
+   改完找不到地方存。吸顶在这套 body 滚动的布局里不生效，
+   所以换成「一有改动就冒出来」—— 这个不依赖任何布局前提。 */
+.emp-savedock {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  z-index: 60; display: flex; align-items: center; gap: 12px;
+  padding: 11px 16px; border-radius: 999px;
+  background: var(--ink); color: #fff;
+  box-shadow: 0 16px 40px rgba(8, 17, 63, .28);
+}
+.emp-savedock-text { font-size: 13px; }
+.emp-savedock .ghost-btn {
+  background: transparent; border-color: rgba(255, 255, 255, .35); color: rgba(255, 255, 255, .85);
+}
+.emp-savedock .ghost-btn:hover { border-color: #fff; color: #fff; }
+
+
+/* 预警区改成按类型聚合的概览：一类一行，不再逐人列 + 逐人给按钮
+   （那样跟员工档案的「需要处理」筛选 100% 重叠）。 */
+.emp-alert-kind {
+  display: grid; grid-template-columns: 64px 190px minmax(0, 1fr) auto 84px;
+  align-items: center; gap: 14px; text-decoration: none; color: inherit;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px;
+  margin-bottom: 8px; border-left-width: 3px;
+}
+.emp-alert-kind:hover, .emp-alert-line:hover { border-color: var(--mod, var(--purple)); }
+.emp-alert-kind.is-expired, .emp-alert-kind.is-missing { border-left-color: var(--red); background: #fff6f6; }
+.emp-alert-kind.is-warn { border-left-color: var(--orange); background: #fffaf2; }
+.emp-alert-kind.is-soon { border-left-color: var(--blue); }
+.emp-kind-tag {
+  font-size: 11px; color: var(--muted); background: #eef1f8;
+  border-radius: 999px; padding: 3px 0; text-align: center;
+}
+.emp-alert-kind strong { font-size: 14px; }
+.emp-kind-detail { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emp-kind-go { font-style: normal; font-size: 13px; color: var(--mod, var(--purple)); text-align: right; }
+
+/* 待办汇总区（2026-09-03）：一张卡一组，组头那条底色 = 上面那张卡的颜色。
+   行本身的左边框仍然按急不急走红 / 橙 / 蓝 —— 归属看组头，急不急看行，两套颜色不打架。 */
+.emp-alert-mod + .emp-alert-mod { margin-top: 18px; }
+.emp-alert-mod-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--mod-soft); border-radius: 10px; padding: 7px 14px; margin: 14px 0 10px;
+}
+.emp-alert-mod-head h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--mod); }
+.emp-alert-mod-head h3 i { font-style: normal; font-weight: 400; color: var(--muted); margin-left: 8px; }
+.emp-alert-mod-head .button-row { margin: 0; gap: 8px; }
+.emp-alert-mod-head .button-row:empty { display: none; }
+
+/* 排班 / 考勤 / 工资那几条：中间不拆两栏，一句话说完是什么事 */
+.emp-alert-line {
+  display: grid; grid-template-columns: 64px minmax(0, 1fr) auto 84px;
+  align-items: center; gap: 14px; text-decoration: none; color: inherit;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px;
+  margin-bottom: 8px; border-left-width: 3px;
+}
+.emp-alert-line.is-expired { border-left-color: var(--red); background: #fff6f6; }
+.emp-alert-line.is-warn { border-left-color: var(--orange); background: #fffaf2; }
+.emp-alert-line.is-soon { border-left-color: var(--blue); }
+.emp-line-text {
+  font-size: 13px; font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 德语词比中文长一大截：「Arbeitsaufnahme」在 64px 的标签格里要断成两行，
+   「Bearbeiten →」在 84px 里也放不下。按 <html lang> 单独放宽这三列。 */
+:root[lang="de"] .emp-alert-kind { grid-template-columns: 104px 210px minmax(0, 1fr) auto 104px; }
+:root[lang="de"] .emp-alert-line { grid-template-columns: 104px minmax(0, 1fr) auto 104px; }
+:root[lang="de"] .emp-kind-go { white-space: nowrap; }
+.emp-kind-chip { background: var(--purple-soft) !important; color: var(--purple) !important; border-color: var(--purple) !important; }
+
+@media (max-width: 1180px) {
+  .emp-alert-kind, .emp-alert-line { grid-template-columns: 1fr; gap: 6px; }
+  .emp-kind-go { text-align: left; }
+  .emp-line-text { white-space: normal; }
+}
+
+/* 新人上工前的清单：审核通过之后「然后呢」的答案 */
+.emp-newhire { margin-bottom: 16px; border-left: 3px solid var(--purple); }
+.emp-newhire.is-late { border-left-color: var(--red); }
+.emp-newhire .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.emp-newhire-item {
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 11px 13px; border: 1px solid var(--line); border-radius: 11px; margin-top: 8px;
+}
+.emp-newhire-item.is-done { opacity: .55; }
+.emp-newhire-item.is-done strong { text-decoration: line-through; }
+.emp-newhire-item input { margin-top: 3px; }
+.emp-newhire-item strong { display: block; font-size: 13px; }
+.emp-newhire-item strong i {
+  font-style: normal; font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 8px;
+}
+/* ⚠️ 必须限定在直接子元素上。写成 `.emp-newhire-item span` 会连带把清单项里
+   即时申报面板的 .pill 和 .emp-miss 也变成 block —— 绿标粉标被拉成横贯一行的色条，
+   跟之前 .emp-roster td > span 那个 bug 是同一个。 */
+.emp-newhire-item > div > span { display: block; font-size: 12px; color: var(--muted); line-height: 1.65; margin-top: 3px; }
+.emp-newhire-fix { display: inline-block; margin-top: 5px; font-size: 12px; color: var(--purple); text-decoration: none; }
+.emp-newhire-fix:hover { text-decoration: underline; }
+
+/* ---- 即时申报数据单 ---- */
+.emp-sofort {
+  margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--bg);
+}
+.emp-sofort.is-done { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.emp-sofort.is-done > span { flex: 1; min-width: 200px; font-size: 12px; color: var(--muted); }
+.emp-sofort-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.emp-sofort-head strong { font-size: 12px; }
+.emp-sofort-table { margin: 0; font-size: 12px; }
+.emp-sofort-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
+.emp-sofort-table tr:last-child td { border-bottom: none; }
+.emp-sofort-table td:first-child { width: 42%; color: var(--muted); }
+.emp-sofort-table tr.is-missing td { background: rgba(240, 21, 47, .05); }
+.emp-sofort-table a { color: var(--purple); font-size: 11px; }
+.emp-sofort-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.emp-sofort-actions .small { flex: 1; min-width: 200px; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.emp-sofort-actions button[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* ---- 合规设置里的公司信息 ---- */
+.emp-employer-store { padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--line); }
+.emp-employer-store:first-child { padding-top: 0; margin-top: 0; border-top: none; }
+.emp-employer-store h3 { margin: 0 0 10px; font-size: 13px; }
+.emp-employer-store .field small { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.emp-newhire-auto {
+  width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center;
+  font-size: 11px; background: var(--green); color: #fff; flex: 0 0 auto; margin-top: 2px;
+}
+.emp-newhire-item:not(.is-done) .emp-newhire-auto { background: var(--orange); }
