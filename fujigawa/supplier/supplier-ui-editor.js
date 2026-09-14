@@ -397,14 +397,83 @@ const pages = document.querySelectorAll('.page');
       return { valid: true, mapping: { ...mapping, quantity } };
     }
 
-    function productLevelRows(prices = []) {
-      return templateLevels.map(([level, label], index) => `<tr>
-        <td><strong>${index === 0 ? '默认' : ''}${label}</strong></td>
+    function productLevelRows(prices = [], levels = templateLevels) {
+      return levels.map(([level, label], index) => `<tr>
+        <td><strong>${level === '1' ? '默认' : ''}${label}</strong></td>
         <td><input class="control" data-product-price="${level}" type="text" value="${escapeHtml(prices[index] || '')}" placeholder="请输入售价" aria-label="${label}售价" style="width:110px"></td>
         <td>—</td><td>—</td>
         <td><select class="select" aria-label="${label}启用状态"><option>启用</option><option>停用</option></select></td>
         <td>${index < 3 ? '现有价格等级' : '待设置价格'}</td>
       </tr>`).join('');
+    }
+
+    function setupProductLevels(root, record) {
+      if (!root) return;
+      const panel = root.querySelector('.product-price-levels');
+      const body = panel.querySelector('tbody');
+      const add = document.createElement('button');
+      add.className = 'btn';
+      add.type = 'button';
+      add.textContent = '＋ 添加价格等级';
+      add.style.margin = '12px';
+      panel.prepend(add);
+      const heading = document.createElement('th');
+      heading.textContent = '操作';
+      panel.querySelector('thead tr').append(heading);
+      const message = document.createElement('dialog');
+      message.style.cssText = 'border:1px solid #ddd;border-radius:12px;padding:24px;max-width:420px';
+      message.setAttribute('aria-label', '无法删除价格等级');
+      message.innerHTML = '<h3 style="color:#dc2626;font-weight:700">无法删除价格等级</h3><p style="color:#dc2626;font-weight:700">此价格等级已有客户通过价格模板使用，不允许删除。</p><p class="sub">原型示例：等级1正在使用，等级10可删除。</p><form method="dialog"><button class="btn" autofocus>关闭</button></form>';
+      message.addEventListener('keydown', event => event.stopPropagation());
+      root.append(message);
+      function attachDelete(row) {
+        const level = row.querySelector('[data-product-price]').dataset.productPrice;
+        const cell = row.insertCell();
+        const button = document.createElement('button');
+        button.className = 'btn';
+        button.type = 'button';
+        button.textContent = '×';
+        button.style.color = '#dc2626';
+        button.setAttribute('aria-label', `删除等级${level}`);
+        button.addEventListener('click', () => {
+          // ponytail: fixed prototype usage example; production must check customer/template references.
+          if (level === '1' && root.dataset.productMode === 'edit') {
+            message.showModal();
+            return;
+          }
+          const confirmation = document.createElement('dialog');
+          confirmation.style.cssText = message.style.cssText;
+          confirmation.setAttribute('aria-label', '删除价格等级');
+          confirmation.innerHTML = `<h3>删除价格等级</h3><p>确定删除等级${level}吗？</p><div class="actions"><button class="btn" type="button" data-cancel autofocus>取消</button><button class="btn" type="button" data-confirm>确认删除</button></div>`;
+          confirmation.addEventListener('keydown', event => event.stopPropagation());
+          confirmation.addEventListener('close', () => confirmation.remove());
+          confirmation.querySelector('[data-cancel]').onclick = () => confirmation.close();
+          confirmation.querySelector('[data-confirm]').onclick = () => {
+            row.remove();
+            add.disabled = false;
+            confirmation.close();
+          };
+          root.append(confirmation);
+          confirmation.showModal();
+        });
+        cell.append(button);
+      }
+      [...body.rows].forEach(row => {
+        const level = row.querySelector('[data-product-price]').dataset.productPrice;
+        if (record?.activePriceLevels && !record.activePriceLevels.includes(level)) row.remove();
+        else attachDelete(row);
+      });
+      add.disabled = body.rows.length >= 10;
+      add.title = '最多10个等级；删除未使用的等级后可添加';
+      add.addEventListener('click', () => {
+        const used = [...body.querySelectorAll('[data-product-price]')].map(input => input.dataset.productPrice);
+        const missing = templateLevels.find(([level]) => !used.includes(level));
+        if (!missing) return;
+        body.insertAdjacentHTML('beforeend', productLevelRows([], [missing]));
+        attachDelete(body.lastElementChild);
+        add.disabled = body.rows.length >= 10;
+        body.lastElementChild.querySelector('input').focus();
+      });
     }
 
     function productBrandField(brandId = '') {
@@ -546,6 +615,10 @@ const pages = document.querySelectorAll('.page');
         if (mapping) productMappings.set(record.sku, mapping);
         document.querySelector('.product-manage-grid')?.insertAdjacentHTML('beforeend', createProductCard(record, newKey));
       }
+      const priceInputs = [...root.querySelectorAll('[data-product-price]')];
+      record.activePriceLevels = priceInputs.map(input => input.dataset.productPrice);
+      record.prices = Array(10).fill('');
+      priceInputs.forEach(input => { record.prices[Number(input.dataset.productPrice) - 1] = input.value.trim(); });
       const mappingKey = record.sku;
       if (mapping) productMappings.set(mappingKey, mapping);
       else productMappings.delete(mappingKey);
@@ -564,6 +637,7 @@ const pages = document.querySelectorAll('.page');
       drawerTitle.textContent = item[0];
       drawerSubtitle.textContent = item[1];
       drawerBody.innerHTML = item[2];
+      setupProductLevels(drawerBody.querySelector('[data-product-editor]'), record);
       drawer.classList.add('open');
       drawer.setAttribute('aria-hidden', 'false');
     }
@@ -1701,19 +1775,7 @@ const pages = document.querySelectorAll('.page');
       if (filterAdd) {
         const layer = filterAdd.closest('[data-editable-filter]');
         const type = layer.dataset.editableFilter;
-        const name = prompt(`请输入新${type}名称`);
-        if (!name?.trim()) return;
-        const button = document.createElement('button');
-        button.type = 'button';
-        const label = document.createElement('span');
-        label.textContent = name.trim();
-        const remove = document.createElement('i');
-        remove.className = 'zone-remove';
-        remove.dataset.filterRemove = '';
-        remove.textContent = '×';
-        button.append(label, remove);
-        filterAdd.before(button);
-        showToast(`已新增${type}“${name.trim()}”（本页演示）`);
+        window.openInventoryTaxonomy(type);
         return;
       }
       const productEditToggle = event.target.closest('[data-product-edit-toggle]');

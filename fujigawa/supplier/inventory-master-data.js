@@ -2,6 +2,63 @@
 (() => {
   const brands = inventoryBrands;
   const groups = [];
+  const collections = { 品牌: brands, 物品组: groups };
+  Object.entries(collections).forEach(([type, entries]) => {
+    document.querySelectorAll(`[data-editable-filter="${type}"] button`).forEach(button => {
+      const label = button.querySelector('span');
+      if (label && !['无品牌', '未分组'].includes(label.textContent.trim())) {
+        const entry = { id: `local-${type}-${entries.length + 1}`, name: label.textContent.trim() };
+        entries.push(entry);
+        button.dataset.taxonomyId = entry.id;
+      }
+    });
+  });
+
+  window.openInventoryTaxonomy = function(type, select, entryId) {
+    const entries = collections[type];
+    if (!entries) return;
+    const entry = entries.find(item => item.id === entryId);
+    const dialog = document.createElement('dialog');
+    dialog.style.cssText = 'width:420px;max-width:calc(100vw - 48px);border:1px solid #e5e7eb;border-radius:14px;padding:24px;box-shadow:0 20px 60px #0003';
+    dialog.setAttribute('aria-label', `${entry ? '编辑' : '新增'}${type}`);
+    dialog.innerHTML = `<form><h3>${entry ? '编辑' : '新增'}${type}</h3><p class="sub">保存后可在物品资料中选择。</p><div class="field" style="margin:20px 0"><label for="taxonomy-name">${type}名称</label><input id="taxonomy-name" required maxlength="80" value="${escapeHtml(entry?.name || '')}" placeholder="请输入${type}名称" autofocus></div><p data-error role="alert" style="color:var(--red)" hidden></p><div class="actions"><button type="button" class="btn" data-cancel>取消</button><button class="btn primary" type="submit">保存${type}</button></div></form>`;
+    document.body.append(dialog);
+    dialog.addEventListener('keydown', event => event.stopPropagation());
+    dialog.addEventListener('close', () => dialog.remove());
+    dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
+    dialog.querySelector('form').onsubmit = event => {
+      event.preventDefault();
+      const name = dialog.querySelector('input').value.trim();
+      if (!name || entries.some(item => item !== entry && item.name === name)) {
+        const error = dialog.querySelector('[data-error]');
+        error.textContent = name ? '名称已存在，请使用其他名称。' : '请输入名称。';
+        error.hidden = false;
+        return;
+      }
+      const saved = entry || { id: `local-taxonomy-${sequence++}` };
+      saved.name = name;
+      if (!entry) entries.push(saved);
+      const layer = document.querySelector(`[data-editable-filter="${type}"]`);
+      let button = [...layer.querySelectorAll('[data-taxonomy-id]')].find(node => node.dataset.taxonomyId === saved.id);
+      if (!button) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.taxonomyId = saved.id;
+        button.innerHTML = '<span></span><i class="zone-remove" data-filter-remove>×</i>';
+        layer.querySelector('[data-filter-add]').before(button);
+      }
+      button.querySelector('span').textContent = name;
+      const target = select || document.querySelector(type === '品牌' ? '#im-brand' : '#im-group');
+      if (target) {
+        const previous = target.value;
+        target.innerHTML = options(entries, select ? saved.id : previous) + `<option value="__add__">＋ 新增${type}…</option>`;
+      }
+      dialog.close();
+      showToast(`已保存${type}“${name}”（本页演示）`);
+    };
+    dialog.showModal();
+  };
+
   let tab = 'items';
   let sequence = 1;
   const labels = { items: '物品' };
@@ -28,7 +85,7 @@
 
   function edit(id, supplier = '') {
     const record = records().find(entry => entry.id === id);
-    const itemFields = tab === 'items' ? `${field('sku', '物品编码', record?.sku || '')}${field('baseUnit', '基础单位', record?.baseUnit || '', 'placeholder="例如：瓶、kg、包"')}<div class="field"><label for="im-brand">品牌</label><select id="im-brand" name="brandId">${options(brands, record?.brandId)}</select></div><div class="field"><label for="im-group">物品组</label><select id="im-group" name="groupId">${options(groups, record?.groupId)}</select></div>${field('supplier', '供货商', record?.supplier || supplier)}` : field('code', '编码', record?.code || '');
+    const itemFields = tab === 'items' ? `${field('sku', '物品编码', record?.sku || '')}${field('baseUnit', '基础单位', record?.baseUnit || '', 'placeholder="例如：瓶、kg、包"')}<div class="field"><label for="im-brand">品牌</label><select id="im-brand" name="brandId">${options(brands, record?.brandId)}<option value="__add__">＋ 新增品牌…</option></select></div><div class="field"><label for="im-group">物品组</label><select id="im-group" name="groupId">${options(groups, record?.groupId)}<option value="__add__">＋ 新增物品组…</option></select></div>${field('supplier', '供货商', record?.supplier || supplier)}` : field('code', '编码', record?.code || '');
     show(`<form data-im-form data-im-id="${escapeHtml(id || '')}"><h3>${record ? '编辑' : '新增'}${labels[tab]}</h3><div class="form-grid">${field('name', `${labels[tab]}名称`, record?.name || '', 'required')}${itemFields}</div>${tab === 'items' ? `<section style="margin-top:20px"><div class="card-head"><h3>库存规格</h3><button type="button" class="btn" data-im-add-spec>新增规格</button></div><div data-im-specs>${(record?.specs || []).map(specRow).join('')}</div></section>` : ''}<p data-im-error role="alert" style="color:var(--red)" hidden></p><div class="actions" style="margin-top:20px"><button type="button" class="btn" data-im-cancel>取消</button><button type="submit" class="btn primary">保存${labels[tab]}</button></div></form>`);
   }
 
@@ -46,6 +103,24 @@
     if (editButton) edit(editButton.dataset.imEdit);
     if (event.target.closest('[data-im-cancel]')) list();
     if (event.target.closest('[data-im-add-spec]')) document.querySelector('[data-im-specs]').insertAdjacentHTML('beforeend', specRow());
+  });
+
+  document.addEventListener('focusin', event => {
+    if (event.target.matches('#im-brand, #im-group')) event.target.dataset.previous = event.target.value;
+  });
+  document.addEventListener('change', event => {
+    const select = event.target;
+    if (!select.matches('#im-brand, #im-group')) return;
+    if (select.value === '__add__') {
+      select.value = select.dataset.previous || '';
+      window.openInventoryTaxonomy(select.id === 'im-brand' ? '品牌' : '物品组', select);
+    } else select.dataset.previous = select.value;
+  });
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-taxonomy-id]');
+    if (button && !event.target.closest('[data-filter-remove]') && button.closest('.warehouse-filter-editing')) {
+      window.openInventoryTaxonomy(button.closest('[data-editable-filter]').dataset.editableFilter, null, button.dataset.taxonomyId);
+    }
   });
 
   document.addEventListener('input', event => {
