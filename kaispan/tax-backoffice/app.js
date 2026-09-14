@@ -507,6 +507,7 @@ const deTranslations = {
   "当前月份没有员工问题。": "Für den aktuellen Monat gibt es keine Mitarbeiterprobleme.",
   "查看全部信息和编辑": "Alle Informationen ansehen und bearbeiten",
   "邀请客户": "Mandant einladen",
+  "邀请朋友": "Freund einladen",
   "截止时间段": "Fristzeitraum",
   "全部时间": "Alle Zeiträume",
   "全部客户": "Alle Mandanten",
@@ -1142,7 +1143,7 @@ function taxOfficeTodoHome() {
       <div><h1>待办事项</h1><p>税务师 backoffice 首页，优先处理高风险、临期、客户回复和可导出 DATEV 的事项。</p></div>
       <div class="button-row">
         <a class="ghost-btn" href="#tax-office/clients">客户总览</a>
-        <a class="primary-btn" href="#tax-office/invite">邀请客户</a>
+        <a class="primary-btn" href="#tax-office/invite">邀请朋友</a>
       </div>
     </div>
     <section class="card tax-todo-filter-bar">
