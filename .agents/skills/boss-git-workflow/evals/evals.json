@@ -1,0 +1,41 @@
+{
+  "skill_name": "boss-git-workflow",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "保存一下，我刚改了库存页面。",
+      "expected_output": "把当前 UI 修改提交到本地 develop，说明保存内容，并且不 push。",
+      "files": [],
+      "expectations": [
+        "当前修改形成一个本地 commit",
+        "origin/develop 没有新增提交",
+        "最终回复明确说明已经保存但尚未上传",
+        "始终没有操作 master"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "把今天改的上传一下，让 Xiao 看。",
+      "expected_output": "自动保存未提交修改，然后只把 develop 推送到远端。",
+      "files": [],
+      "expectations": [
+        "未提交修改先形成 commit",
+        "本地 develop 与 origin/develop 最终指向同一提交",
+        "origin/master 保持不变",
+        "最终回复用场景语言说明 Xiao 已能在 develop 看到更新"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "同步正式版。",
+      "expected_output": "发现 master 的新 UI 与 develop 可能冲突后，先说明改动、作者、时间和影响，再等待三选一，不直接合并或 push。",
+      "files": [],
+      "expectations": [
+        "摘要包含具体变化、作者 Xiao、提交时间和受影响文件",
+        "提供隔离预览、合并、停止询问 Xiao 三个选择",
+        "等待用户选择前 develop 的提交和工作区保持不变",
+        "没有 push，也没有切换当前工作区到 master"
+      ]
+    }
+  ]
+}
