@@ -265,10 +265,20 @@ const pages = document.querySelectorAll('.page');
     }
 
     function readProductMapping(root) {
+      const conversions = [...root.querySelectorAll('[data-unit-conversion]')].map(row => ({
+        saleUnit: row.querySelector('[data-sale-unit]')?.value || '',
+        quantity: (() => {
+          const numerator = row.querySelector('[data-inventory-numerator]')?.value.trim();
+          const denominator = row.querySelector('[data-inventory-denominator]')?.value.trim();
+          if (numerator !== undefined || denominator !== undefined) return numerator && denominator ? `${numerator}/${denominator}` : '';
+          return row.querySelector('[data-inventory-quantity]')?.value.trim() || '';
+        })()
+      })).filter(item => item.saleUnit || item.quantity);
       return {
         inventoryProductId: root.querySelector('[data-inventory-product]')?.value || '',
         inventorySpecId: root.querySelector('[data-inventory-spec]')?.value || '',
-        quantity: root.querySelector('[data-inventory-quantity]')?.value.trim() || ''
+        quantity: conversions[0]?.quantity || '',
+        conversions
       };
     }
 
@@ -281,10 +291,28 @@ const pages = document.querySelectorAll('.page');
       return `每售卖 1 份，扣减 ${mapping.quantity} ${spec.label}；库存商品：${product.name} · ${product.supplier}`;
     }
 
+    function saleUnitOptions(selected = '') {
+      const standardUnits = ['包', '箱'];
+      const selectedUnit = selected || '包';
+      const units = standardUnits.includes(selectedUnit) ? standardUnits : [...standardUnits, selectedUnit];
+      return `${units.map(unit => `<option value="${escapeHtml(unit)}"${unit === selectedUnit ? ' selected' : ''}>${escapeHtml(unit)}</option>`).join('')}<option value="__new__">＋ 添加单位</option>`;
+    }
+
+    function inventoryConversionRow(conversion = {}, index = 0, inventoryUnit = '库存单位') {
+      const saleUnit = conversion.saleUnit || '包';
+      const [numerator = '', denominator = ''] = String(conversion.quantity || '').split('/');
+      return `<div class="unit-conversion-row" data-unit-conversion>
+        <div class="field"><label>售卖单位</label><div class="unit-add-control"><span>1</span><select data-sale-unit aria-label="售卖单位">${saleUnitOptions(saleUnit)}</select></div><div class="unit-add-control" data-new-unit-control hidden><input data-sale-unit-new placeholder="输入单位名称" aria-label="新售卖单位"><button class="btn" type="button" data-save-sale-unit>添加</button></div></div>
+        <span class="unit-equals">=</span>
+        <div class="field"><div class="unit-field-heading"><label>库存单位</label>${index === 0 ? '<div class="inventory-spec-inline" data-product-spec-note><span>产品规格：6 包 / 箱</span><button class="btn" type="button" data-edit-product-spec>编辑</button></div>' : ''}</div><div class="unit-fraction-input"><input type="text" inputmode="decimal" data-inventory-numerator value="${escapeHtml(numerator)}" placeholder="—" aria-label="库存单位分子"><span>/</span><input type="text" inputmode="decimal" data-inventory-denominator value="${escapeHtml(denominator)}" placeholder="—" aria-label="库存单位分母"><span>箱</span></div></div>
+        <button class="btn" type="button" data-remove-sale-spec${index === 0 ? ' hidden' : ''}>删除</button>
+      </div>`;
+    }
+
     function inventoryMappingDetail(sku) {
       const mapping = productMappings.get(sku) || {};
       const selectedProduct = getInventoryProduct(mapping.inventoryProductId);
-      const suppliers = [...new Set(inventoryProducts.map(product => product.supplier))];
+      const selectedSpec = getInventorySpec(mapping.inventoryProductId, mapping.inventorySpecId);
       const productOptions = [
         '<option value="">未绑定库存商品</option>',
         ...inventoryProducts.map(product => `<option value="${product.id}" data-inventory-option data-inventory-search="${escapeHtml(`${product.name} ${product.sku || ''} ${product.supplier}`.toLowerCase())}"${product.id === mapping.inventoryProductId ? ' selected' : ''}>${escapeHtml(inventoryProductLabel(product))}</option>`)
@@ -292,43 +320,12 @@ const pages = document.querySelectorAll('.page');
       const specOptions = selectedProduct
         ? [`<option value="">请选择库存规格</option>`, ...selectedProduct.specs.map(spec => `<option value="${spec.id}"${spec.id === mapping.inventorySpecId ? ' selected' : ''}>${escapeHtml(spec.label)} · 当前库存 ${escapeHtml(spec.stock)}</option>`)].join('')
         : '<option value="">请先选择库存商品</option>';
+      const conversions = mapping.conversions?.length ? mapping.conversions : [{ saleUnit: '包', quantity: mapping.quantity || '' }];
+      const inventoryUnit = selectedSpec?.label || '库存单位';
       return `
         <div class="detail-block inventory-mapping" data-inventory-mapping data-product-sku="${escapeHtml(sku)}">
-          <div class="card-head" style="margin-bottom:0">
-            <div>
-              <h3>关联库存商品</h3>
-              <p class="sub">商品管理与库存管理分开维护；这里选择销售商品对应的库存商品和库存规格。</p>
-            </div>
-            <span class="badge blue">单商品单库存记录</span>
-          </div>
-          <div class="form-grid">
-            <div class="field">
-              <label for="inventorySearch-${escapeHtml(sku)}">搜索库存商品</label>
-              <input id="inventorySearch-${escapeHtml(sku)}" type="search" data-inventory-search placeholder="搜索名称或 SKU">
-            </div>
-            <div class="field">
-              <label for="inventorySupplier-${escapeHtml(sku)}">供货商筛选</label>
-              <select id="inventorySupplier-${escapeHtml(sku)}" data-inventory-supplier>
-                <option value="">全部供货商</option>
-                ${suppliers.map(supplier => `<option value="${escapeHtml(supplier)}">${escapeHtml(supplier)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field full">
-              <label for="inventoryProduct-${escapeHtml(sku)}">库存商品</label>
-              <select id="inventoryProduct-${escapeHtml(sku)}" data-inventory-product>${productOptions}</select>
-              <span class="field-error" data-inventory-error="product" role="alert" hidden></span>
-            </div>
-            <div class="field">
-              <label for="inventorySpec-${escapeHtml(sku)}">库存规格</label>
-              <select id="inventorySpec-${escapeHtml(sku)}" data-inventory-spec>${specOptions}</select>
-              <span class="field-error" data-inventory-error="spec" role="alert" hidden></span>
-            </div>
-            <div class="field">
-              <label for="inventoryQuantity-${escapeHtml(sku)}">每售卖 1 份扣减数量</label>
-              <input id="inventoryQuantity-${escapeHtml(sku)}" type="text" inputmode="decimal" data-inventory-quantity value="${escapeHtml(mapping.quantity || '')}" placeholder="例如 1、0.5 或 1/6">
-              <span class="field-error" data-inventory-error="quantity" role="alert" hidden></span>
-            </div>
-          </div>
+          <div class="unit-conversions" data-unit-conversions>${conversions.map((conversion, index) => inventoryConversionRow(conversion, index, inventoryUnit)).join('')}</div>
+          <button class="btn" type="button" data-add-sale-spec>＋ 添加售卖单位</button>
           <div class="mapping-summary" data-inventory-summary>${escapeHtml(productMappingSummary(mapping))}</div>
         </div>`;
     }
@@ -345,6 +342,12 @@ const pages = document.querySelectorAll('.page');
       }
       const summary = root.querySelector('[data-inventory-summary]');
       if (summary) summary.textContent = productMappingSummary(readProductMapping(root));
+      const spec = getInventorySpec(mapping.inventoryProductId, root.querySelector('[data-inventory-spec]')?.value || '');
+      root.querySelectorAll('[data-inventory-unit-label]').forEach(label => { label.textContent = spec?.label || '库存单位'; });
+      const originalSpec = root.querySelector('[data-inventory-original-spec]');
+      if (originalSpec) originalSpec.textContent = spec?.stock || '选择库存单位后显示';
+      const editButton = root.querySelector('[data-edit-inventory-spec]');
+      if (editButton) editButton.disabled = !spec;
     }
 
     function filterInventoryProducts(root) {
@@ -380,6 +383,9 @@ const pages = document.querySelectorAll('.page');
     function validateProductMapping(root) {
       ['product', 'spec', 'quantity'].forEach(field => setInventoryError(root, field, ''));
       const mapping = readProductMapping(root);
+      if (!root.querySelector('[data-inventory-product]')) {
+        return { valid: true, mapping: mapping.conversions.length ? mapping : null };
+      }
       if (!mapping.inventoryProductId && !mapping.inventorySpecId && !mapping.quantity) return { valid: true, mapping: null };
       if (!mapping.inventoryProductId) {
         setInventoryError(root, 'product', '请选择库存商品，或清空其他映射字段');
@@ -397,13 +403,13 @@ const pages = document.querySelectorAll('.page');
       return { valid: true, mapping: { ...mapping, quantity } };
     }
 
-    function productLevelRows(prices = [], levels = templateLevels) {
+    function productLevelRows(prices = [], levels = templateLevels.slice(0, 3)) {
       return levels.map(([level, label], index) => `<tr>
         <td><strong>${level === '1' ? '默认' : ''}${label}</strong></td>
         <td><input class="control" data-product-price="${level}" type="text" value="${escapeHtml(prices[index] || '')}" placeholder="请输入售价" aria-label="${label}售价" style="width:110px"></td>
         <td>—</td><td>—</td>
         <td><select class="select" aria-label="${label}启用状态"><option>启用</option><option>停用</option></select></td>
-        <td>${index < 3 ? '现有价格等级' : '待设置价格'}</td>
+        <td>${Number(level) <= 3 ? '现有价格等级' : '待设置价格'}</td>
       </tr>`).join('');
     }
 
@@ -416,7 +422,11 @@ const pages = document.querySelectorAll('.page');
       add.type = 'button';
       add.textContent = '＋ 添加价格等级';
       add.style.margin = '12px';
-      panel.prepend(add);
+      add.setAttribute('aria-label', '添加价格等级');
+      const addWrap = document.createElement('div');
+      addWrap.className = 'product-price-level-actions';
+      addWrap.append(add);
+      panel.append(addWrap);
       const heading = document.createElement('th');
       heading.textContent = '操作';
       panel.querySelector('thead tr').append(heading);
@@ -506,7 +516,7 @@ const pages = document.querySelectorAll('.page');
             </div>
           </div>
           <div class="table-card product-price-levels" style="margin-top:14px">
-            <div class="card-head"><div><h3>价格等级</h3><p class="sub">最多维护 10 个等级，客户按商品选择对应等级。</p></div></div>
+            <div class="card-head"><div><h3>价格等级</h3><p class="sub">默认提供 3 个等级；如有特殊客户需求，可继续添加，最多 10 个等级。</p></div></div>
             <table style="min-width:760px"><thead><tr><th>价格等级</th><th>对应售价</th><th>适用客户</th><th>预计毛利</th><th>启用</th><th>备注</th></tr></thead><tbody>${productLevelRows(defaultPrices)}</tbody></table>
           </div>
           ${inventoryMappingDetail('__new__')}
@@ -975,7 +985,6 @@ const pages = document.querySelectorAll('.page');
                 <tr><td><strong>默认等级1</strong></td><td><input class="control" data-product-price="1" value="${escapeHtml(savedPrices[0] || '')}" style="width:110px"></td><td>普通老客户</td><td><span class="badge green">约 39%</span></td><td><select class="select"><option>启用</option><option>停用</option></select></td><td>默认 webshop 售价</td></tr>
                 <tr><td><strong>等级2</strong></td><td><input class="control" data-product-price="2" value="${escapeHtml(savedPrices[1] || '')}" style="width:110px"></td><td>大客户 / 高频客户</td><td><span class="badge green">约 36%</span></td><td><select class="select"><option>启用</option><option>停用</option></select></td><td>批量采购价格</td></tr>
                 <tr><td><strong>等级3</strong></td><td><input class="control" data-product-price="3" value="${escapeHtml(savedPrices[2] || '')}" style="width:110px"></td><td>加盟商 / 特批客户</td><td><span class="badge orange">约 32%</span></td><td><select class="select"><option>启用</option><option>停用</option></select></td><td>需要管理层确认</td></tr>
-                ${templateLevels.slice(3).map(([level, label]) => `<tr><td><strong>${label}</strong></td><td><input class="control" data-product-price="${level}" type="text" value="${escapeHtml(savedPrices[Number(level) - 1] || '')}" placeholder="请输入售价" aria-label="${label}售价" style="width:110px"></td><td>—</td><td>—</td><td><select class="select" aria-label="${label}启用状态"><option>启用</option><option>停用</option></select></td><td>待设置价格</td></tr>`).join('')}
               </tbody>
             </table>
           </div>
@@ -1692,6 +1701,86 @@ const pages = document.querySelectorAll('.page');
 
     navButtons.forEach(button => button.addEventListener('click', () => goToPage(button.dataset.pageTarget)));
     document.addEventListener('click', event => {
+      const addSaleSpec = event.target.closest('[data-add-sale-spec]');
+      if (addSaleSpec) {
+        const mapping = addSaleSpec.closest('[data-inventory-mapping]');
+        const list = mapping?.querySelector('[data-unit-conversions]');
+        if (mapping && list) {
+          const unit = mapping.querySelector('[data-inventory-spec]')?.selectedOptions[0]?.textContent?.split(' · ')[0] || '库存单位';
+          const index = list.querySelectorAll('[data-unit-conversion]').length;
+          list.insertAdjacentHTML('beforeend', inventoryConversionRow({}, index, unit));
+          list.lastElementChild.querySelector('[data-sale-unit]')?.focus();
+        }
+        return;
+      }
+      const removeSaleSpec = event.target.closest('[data-remove-sale-spec]');
+      if (removeSaleSpec) {
+        removeSaleSpec.closest('[data-unit-conversion]')?.remove();
+        const mapping = removeSaleSpec.closest('[data-inventory-mapping]');
+        if (mapping) refreshInventoryMapping(mapping);
+        return;
+      }
+      const showSaleUnitInput = event.target.closest('[data-show-sale-unit-input]');
+      if (showSaleUnitInput) {
+        const row = showSaleUnitInput.closest('[data-unit-conversion]');
+        const control = row?.querySelector('[data-new-unit-control]');
+        if (control) {
+          control.hidden = false;
+          control.querySelector('[data-sale-unit-new]')?.focus();
+        }
+        return;
+      }
+      const saveSaleUnit = event.target.closest('[data-save-sale-unit]');
+      if (saveSaleUnit) {
+        const row = saveSaleUnit.closest('[data-unit-conversion]');
+        const input = row?.querySelector('[data-sale-unit-new]');
+        const select = row?.querySelector('[data-sale-unit]');
+        const unit = input?.value.trim();
+        if (unit && select) {
+          select.add(new Option(unit, unit, true, true), select.querySelector('option[value="__new__"]'));
+          row.querySelector('[data-new-unit-control]').hidden = true;
+          input.value = '';
+        }
+        return;
+      }
+      const editInventorySpec = event.target.closest('[data-edit-inventory-spec]');
+      if (editInventorySpec) {
+        const mapping = editInventorySpec.closest('[data-inventory-mapping]');
+        const productId = mapping?.querySelector('[data-inventory-product]')?.value;
+        const specId = mapping?.querySelector('[data-inventory-spec]')?.value;
+        const spec = getInventorySpec(productId, specId);
+        if (!mapping || !spec) return;
+        const dialog = document.createElement('dialog');
+        dialog.setAttribute('aria-label', '编辑原始规格');
+        dialog.innerHTML = `<form method="dialog" class="detail-block"><h3>编辑原始规格</h3><div class="field"><label for="originalSpecValue">原始规格</label><input id="originalSpecValue" value="${escapeHtml(spec.stock)}"></div><div class="actions"><button class="btn" value="cancel">取消</button><button class="btn primary" type="button" data-save-original-spec>保存</button></div></form>`;
+        dialog.querySelector('[data-save-original-spec]').addEventListener('click', () => {
+          const value = dialog.querySelector('#originalSpecValue').value.trim();
+          if (value) spec.stock = value;
+          refreshInventoryMapping(mapping);
+          dialog.close();
+        });
+        dialog.addEventListener('close', () => dialog.remove());
+        document.body.append(dialog);
+        dialog.showModal();
+        return;
+      }
+      const editProductSpec = event.target.closest('[data-edit-product-spec]');
+      if (editProductSpec) {
+        const note = editProductSpec.closest('[data-product-spec-note]');
+        const current = note?.querySelector('span')?.textContent.replace('产品规格：', '').trim() || '';
+        const dialog = document.createElement('dialog');
+        dialog.setAttribute('aria-label', '编辑产品规格');
+        dialog.innerHTML = `<form method="dialog" class="detail-block"><h3>编辑产品规格</h3><div class="field"><label for="productSpecValue">产品规格</label><input id="productSpecValue" value="${escapeHtml(current)}" placeholder="例如 6 包 / 箱"></div><div class="actions"><button class="btn" value="cancel">取消</button><button class="btn primary" type="button" data-save-product-spec>保存</button></div></form>`;
+        dialog.querySelector('[data-save-product-spec]').addEventListener('click', () => {
+          const value = dialog.querySelector('#productSpecValue').value.trim();
+          if (value && note) note.querySelector('span').textContent = `产品规格：${value}`;
+          dialog.close();
+        });
+        dialog.addEventListener('close', () => dialog.remove());
+        document.body.append(dialog);
+        dialog.showModal();
+        return;
+      }
       const productSaveButton = event.target.closest('[data-product-save]');
       if (productSaveButton) {
         const editor = productSaveButton.closest('[data-product-editor]');
@@ -1855,6 +1944,18 @@ const pages = document.querySelectorAll('.page');
     });
 
     document.addEventListener('change', event => {
+      if (event.target.matches('[data-primary-sale-unit]')) {
+        const mapping = event.target.closest('[data-inventory-mapping]');
+        const firstConversion = mapping?.querySelector('[data-sale-unit]');
+        if (firstConversion) firstConversion.value = event.target.value;
+      }
+      if (event.target.matches('[data-sale-unit]')) {
+        const control = event.target.closest('[data-unit-conversion]')?.querySelector('[data-new-unit-control]');
+        if (control) {
+          control.hidden = event.target.value !== '__new__';
+          if (!control.hidden) control.querySelector('[data-sale-unit-new]')?.focus();
+        }
+      }
       if (event.target.matches('[data-inventory-product]')) {
         const mapping = event.target.closest('[data-inventory-mapping]');
         if (mapping) refreshInventoryMapping(mapping);
@@ -1888,7 +1989,7 @@ const pages = document.querySelectorAll('.page');
         const mapping = event.target.closest('[data-inventory-mapping]');
         if (mapping) filterInventoryProducts(mapping);
       }
-      if (event.target.matches('[data-inventory-quantity]')) {
+      if (event.target.matches('[data-inventory-quantity], [data-inventory-numerator], [data-inventory-denominator]')) {
         const mapping = event.target.closest('[data-inventory-mapping]');
         if (mapping) refreshInventoryMapping(mapping);
       }
