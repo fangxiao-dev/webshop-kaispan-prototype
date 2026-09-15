@@ -2,6 +2,7 @@
 (() => {
   const brands = inventoryBrands;
   const groups = [];
+  const warehouses = ['冷冻房', '冷藏房', '常温库', '干货库', '未分组'];
   const collections = { 品牌: brands, 物品组: groups };
   Object.entries(collections).forEach(([type, entries]) => {
     document.querySelectorAll(`[data-editable-filter="${type}"] button`).forEach(button => {
@@ -85,7 +86,7 @@
 
   function edit(id, supplier = '') {
     const record = records().find(entry => entry.id === id);
-    const itemFields = tab === 'items' ? `${field('sku', '物品编码', record?.sku || '')}${field('baseUnit', '基础单位', record?.baseUnit || '', 'placeholder="例如：瓶、kg、包"')}<div class="field"><label for="im-brand">品牌</label><select id="im-brand" name="brandId">${options(brands, record?.brandId)}<option value="__add__">＋ 新增品牌…</option></select></div><div class="field"><label for="im-group">物品组</label><select id="im-group" name="groupId">${options(groups, record?.groupId)}<option value="__add__">＋ 新增物品组…</option></select></div>${field('supplier', '供货商', record?.supplier || supplier)}` : field('code', '编码', record?.code || '');
+    const itemFields = tab === 'items' ? `${field('sku', '物品编码', record?.sku || '')}${field('baseUnit', '基础单位', record?.baseUnit || '', 'placeholder="例如：瓶、kg、包"')}<div class="field"><label for="im-brand">品牌</label><select id="im-brand" name="brandId">${options(brands, record?.brandId)}<option value="__add__">＋ 新增品牌…</option></select></div><div class="field"><label for="im-group">物品组</label><select id="im-group" name="groupId">${options(groups, record?.groupId)}<option value="__add__">＋ 新增物品组…</option></select></div>${field('supplier', '供货商', record?.supplier || supplier)}<div class="field"><label for="im-warehouse">仓库</label><select id="im-warehouse" name="warehouse">${options(warehouses.map(name => ({ id: name, name })), record?.warehouse)}</select></div>` : field('code', '编码', record?.code || '');
     show(`<form data-im-form data-im-id="${escapeHtml(id || '')}"><h3>${record ? '编辑' : '新增'}${labels[tab]}</h3><div class="form-grid">${field('name', `${labels[tab]}名称`, record?.name || '', 'required')}${itemFields}</div>${tab === 'items' ? `<section style="margin-top:20px"><div class="card-head"><h3>库存规格</h3><button type="button" class="btn" data-im-add-spec>新增规格</button></div><div data-im-specs>${(record?.specs || []).map(specRow).join('')}</div></section>` : ''}<p data-im-error role="alert" style="color:var(--red)" hidden></p><div class="actions" style="margin-top:20px"><button type="button" class="btn" data-im-cancel>取消</button><button type="submit" class="btn primary">保存${labels[tab]}</button></div></form>`);
   }
 
@@ -163,7 +164,7 @@
         const previous = existing?.specs.find(spec => spec.id === row.dataset.imSpec);
         specs.push({ ...previous, id: row.dataset.imSpec || `local-spec-${sequence++}`, label, stock: previous?.stock || '未登记', baseQuantity: quantity });
       }
-      Object.assign(record, { sku: value('sku'), baseUnit: value('baseUnit'), brandId: value('brandId'), groupId: value('groupId'), supplier: value('supplier'), stock: existing?.stock || '未登记', specs });
+      Object.assign(record, { sku: value('sku'), baseUnit: value('baseUnit'), brandId: value('brandId'), groupId: value('groupId'), supplier: value('supplier'), warehouse: value('warehouse'), stock: existing?.stock || '未登记', specs });
       // 编辑资料只更新名称；点货和库存数量仍由原工作台管理。
       if (existing) document.querySelectorAll('.warehouse-product-info > strong').forEach(node => { if (node.textContent === existing.name) node.textContent = record.name; });
     } else record.code = value('code');
