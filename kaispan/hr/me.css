@@ -1,0 +1,391 @@
+/* ==========================================================================
+   KaiSpan · 员工视角（手机端）
+   窄屏优先：所有尺寸按 390px 宽写，桌面上把整块居中成一条 420px 的列。
+   这不是为了好看 —— 是为了让人一眼看出这一页的目标设备不是电脑，
+   免得有人按桌面排版去改它。
+   ========================================================================== */
+.me-app {
+  min-height: 100vh; background: #eef1f8; padding: 0 0 40px;
+  display: flex; justify-content: center;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif;
+}
+.me-phone {
+  width: 100%; max-width: 420px; min-height: 100vh; background: var(--bg);
+  display: flex; flex-direction: column; position: relative;
+  box-shadow: 0 0 0 1px var(--line), 0 24px 60px rgba(14, 23, 75, .12);
+}
+
+.me-top {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 14px 16px 12px; background: var(--card); border-bottom: 1px solid var(--line);
+}
+.me-top span { display: block; font-size: 11px; letter-spacing: .08em; color: var(--purple); font-weight: 700; }
+.me-top strong { display: block; font-size: 17px; line-height: 1.2; margin-top: 1px; }
+.me-top small { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
+.me-exit {
+  font-size: 12px; color: var(--muted); text-decoration: none; white-space: nowrap;
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; background: #fff;
+}
+.me-exit:hover { color: var(--purple); border-color: var(--purple); }
+
+.me-body { flex: 1; padding: 14px 14px 84px; display: flex; flex-direction: column; gap: 12px; }
+
+/* 底部 tab：拇指够得到的位置，跟着手机列一起居中 */
+/* 2026-09-04：列数写死成 3，后来加了第四个 tab（「我的」）没跟着改 ——
+   于是每一页底部都是「班表 报班 工时」一行、「我的」自己掉到第二行。
+   底部导航是这个 app 唯一的导航，它折行等于每一页都错。用 tabs 的实际条数。 */
+.me-tabs {
+  position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--card); border-top: 1px solid var(--line); padding: 6px 0 8px;
+}
+.me-tabs a {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  text-decoration: none; color: var(--muted); font-size: 11px; padding: 4px 0;
+}
+.me-tabs a i { font-style: normal; font-size: 17px; line-height: 1; }
+.me-tabs a.is-on { color: var(--purple); font-weight: 600; }
+
+/* ---------------------------------------------------------- 下一个班 ----- */
+.me-next {
+  background: linear-gradient(135deg, var(--purple), #8a6bff); color: #fff;
+  border-radius: 16px; padding: 16px 18px;
+}
+.me-next span { font-size: 12px; opacity: .85; }
+.me-next strong { display: block; font-size: 22px; margin: 4px 0 2px; }
+.me-next small { font-size: 12px; opacity: .85; }
+
+/* ------------------------------------------------------------ 周切换 ----- */
+.me-weekbar {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 6px;
+}
+/* 两个 tab 各写两行：哪一周 + 到底是哪几天。
+   日期原来只挂在右边一个灰角落里，而且只写当前选中那一周的 ——
+   「下周」是哪几天，得先点进去才知道。 */
+.me-weekbar a {
+  flex: 0 0 auto; display: grid; gap: 1px; padding: 6px 13px; border-radius: 9px;
+  color: var(--muted); text-decoration: none; text-align: center;
+}
+.me-weekbar a b { font-size: 13px; font-weight: 600; }
+.me-weekbar a i {
+  font-style: normal; font-size: 10.5px; opacity: .75; font-variant-numeric: tabular-nums;
+}
+.me-weekbar a.is-on { background: var(--purple); color: #fff; }
+.me-weekbar a.is-on i { opacity: .85; }
+.me-weekbar .pill { margin-left: auto; }
+.me-month { flex: 1; text-align: center; font-size: 15px; }
+
+/* -------------------------------------------------------------- 一周 ----- */
+.me-days { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.me-day {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.me-day.is-today { background: #f7f4ff; }
+.me-day-when { width: 62px; flex: 0 0 auto; }
+.me-day-when b { display: block; font-size: 14px; }
+.me-day-when i { font-style: normal; font-size: 11px; color: var(--muted); }
+.me-day-what { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; }
+.me-day-what em {
+  font-style: normal; font-size: 14px; font-weight: 600; color: var(--ink);
+  background: #eef1f8; border-radius: 8px; padding: 3px 9px;
+}
+.me-day-what u { text-decoration: none; font-size: 13px; color: #b6bdd0; }
+.me-day-h { font-size: 12px; color: var(--muted); }
+.me-day.is-off .me-day-when b { color: var(--muted); font-weight: 500; }
+.me-days-sum { padding: 11px 14px; font-size: 13px; color: var(--muted); background: #fbfcfe; }
+
+
+
+.me-wait { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 16px; text-align: center; }
+.me-wait strong { display: block; font-size: 16px; }
+.me-wait p { margin: 8px 0 14px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+.me-wait .primary-btn { display: inline-block; padding: 11px 18px; text-decoration: none; }
+
+/* -------------------------------------------------------------- 报班 ----- */
+.me-note { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.me-lock {
+  background: #fffaf2; border: 1px solid #ffe4bd; border-radius: 12px;
+  padding: 10px 13px; font-size: 13px; line-height: 1.5;
+}
+.me-avail { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.me-av-day {
+  display: flex; align-items: center; gap: 10px; padding: 11px 13px;
+  border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.me-av-day:last-child { border-bottom: 0; }
+.me-av-day.is-on { background: #f7f4ff; }
+.me-av-when { display: flex; align-items: center; gap: 8px; width: 108px; flex: 0 0 auto; }
+.me-av-when input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--purple); }
+.me-av-when b { font-size: 14px; }
+.me-av-when i { font-style: normal; font-size: 11px; color: var(--muted); }
+.me-av-time { display: flex; align-items: center; gap: 5px; flex: 1; }
+.me-av-time input[type="time"] {
+  flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 9px;
+  padding: 7px 6px; font-size: 13px; color: var(--ink); background: #fff; text-align: center;
+}
+.me-av-time input:disabled { background: #f4f6fb; color: #b6bdd0; }
+.me-av-time em { font-style: normal; color: var(--muted); }
+/* 提交前把要交的内容用 24 小时制整句写一遍。两个理由：
+   ① 原生 time 控件按看的人手机的地区显示，手机设成英语就是 03:00 PM，
+      而界面是中文德文，读的人容易把下午看成上午；交上去的永远是 24 小时那个值。
+   ② 七行勾选是逐行看的，"我到底交了什么" 要一句话能读完。 */
+.me-av-echo {
+  margin: 12px 0 8px; font-size: 12.5px; line-height: 1.6; color: var(--muted);
+}
+.me-av-echo b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.me-av-echo.is-none b { color: var(--orange); }
+
+/* 每周从零勾七行 → 三条捷径 */
+.me-av-quick { display: flex; flex-wrap: wrap; gap: 8px; }
+.me-av-quick .ghost-btn { flex: 1 1 auto; padding: 8px 12px; font-size: 12.5px; }
+.me-note.is-late { color: var(--orange); }
+.me-avail.is-locked { opacity: .72; }
+.me-av-submit { width: 100%; padding: 13px; font-size: 15px; }
+
+/* -------------------------------------------------------------- 工时 ----- */
+.me-big { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.me-big > div {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
+}
+.me-big strong { display: block; font-size: 22px; color: var(--ink); }
+.me-big span { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+.me-bar { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.me-bar-track { position: relative; height: 9px; border-radius: 999px; background: #eef1f8; overflow: hidden; }
+.me-bar-track i { display: block; height: 100%; background: var(--purple); }
+/* 合同下限画成一道刻度线，上限就是整条的右端 —— 没有刻度的进度条没有参照物 */
+.me-bar-track u { position: absolute; top: 0; bottom: 0; width: 2px; background: #b9a7ff; }
+.me-bar-scale {
+  position: relative; display: flex; justify-content: space-between; margin-top: 5px;
+  font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+/* 下限那个标要落在它自己那道刻度线底下，不是三个标平均分 —— 对不齐的刻度是错的刻度 */
+.me-bar-scale .is-mark { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.me-bar p { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.me-hint {
+  background: #e8f1ff; border: 1px solid #cfe1ff; border-radius: 12px;
+  padding: 11px 13px; font-size: 13px; line-height: 1.6;
+}
+.me-hint.is-warn { background: #fffaf2; border-color: #ffe4bd; }
+.me-list { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.me-list h3 { margin: 0 0 10px; font-size: 14px; }
+.me-kv { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; }
+.me-kv span { font-size: 13px; color: var(--muted); }
+.me-kv strong { font-size: 17px; }
+.me-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px;
+}
+.me-row i { font-style: normal; flex-basis: 100%; font-size: 12px; color: var(--muted); }
+.me-empty { margin: 0; font-size: 13px; color: var(--muted); }
+/* 空的那几段压成一行：标题和「没有」并排，不占一整张卡的高度 */
+.me-list.is-empty { padding: 11px 14px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.me-list.is-empty h3 { margin: 0; flex: none; }
+.me-list.is-empty .me-empty { font-size: 12.5px; }
+.me-list.is-empty .me-ot-new { flex-basis: 100%; margin-top: 4px; }
+
+/* 报一笔加班：一个月用一次，收起来 */
+.me-ot-new summary { font-size: 12.5px; color: var(--purple); cursor: pointer; list-style: none; }
+.me-ot-new summary::-webkit-details-marker { display: none; }
+.me-ot-new summary::before { content: "＋ "; }
+.me-ot-new[open] summary::before { content: "− "; }
+.me-ot-new .me-note { margin: 9px 0 8px; }
+
+/* ------------------------------------------------------------ 演示入口 --- */
+.me-picklist { display: flex; flex-direction: column; gap: 8px; }
+.me-pick {
+  display: block; text-decoration: none; color: inherit; background: var(--card);
+  border: 1px solid var(--line); border-radius: 13px; padding: 12px 14px;
+}
+.me-pick:hover { border-color: var(--purple); }
+.me-pick strong { display: block; font-size: 15px; }
+.me-pick span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* ------------------------------------------------------------- 打卡 ------ */
+/* 一天里只点两次，所以按钮做满宽、做大 —— 站在门口单手点得到。 */
+.me-punch {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  padding: 14px 16px 16px; display: grid; gap: 10px;
+}
+.me-punch-state { display: grid; gap: 2px; }
+.me-punch-state span { font-size: 12px; color: var(--muted); }
+.me-punch-state strong { font-size: 20px; }
+.me-punch-state small { font-size: 12px; color: var(--muted); }
+.me-punch-state.is-on strong { color: var(--green, #12b76a); }
+.me-punch-state.is-done strong { color: var(--muted); font-size: 17px; }
+.me-punch-state.is-quiet strong { font-size: 16px; }
+.me-punch .primary-btn {
+  width: 100%; justify-content: center; min-height: 46px; font-size: 15px;
+}
+.me-punch .primary-btn:disabled { opacity: .6; }
+.me-punch-issue {
+  margin: 0; font-size: 12px; line-height: 1.5; color: var(--orange, #b54708);
+  background: #fffaf2; border: 1px solid #ffe4bd; border-radius: 10px; padding: 8px 10px;
+}
+.me-punch-geo { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.5; }
+.me-punch .ghost-btn { width: 100%; justify-content: center; min-height: 40px; }
+/* 今天没你的班时那个「临时顶班，打卡」：例外动作，不占整行 —— 一年用几次的东西
+   拉成满屏宽，读起来还是这一屏最重的那件事，跟「今天没有你的班」自相矛盾。 */
+.me-punch-state.is-quiet + .ghost-btn { width: auto; min-height: 34px; padding: 7px 14px; font-size: 12.5px; }
+.me-punch .ghost-btn:disabled { opacity: .6; }
+.me-punch.is-blocked { border-color: #ffc9c9; }
+.me-punch-far {
+  background: #fff5f5; border: 1px solid #ffd4d4; border-radius: 12px; padding: 10px 12px;
+  display: grid; gap: 8px;
+}
+.me-punch-far strong { font-size: 13px; color: #b42318; line-height: 1.45; }
+.me-punch-far p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.me-punch-far input {
+  min-height: 38px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; font: inherit; background: #fff;
+}
+
+/* ------------------------------------------------------------- 请假 ------ */
+.me-leave-new summary {
+  font-size: 13px; font-weight: 750; color: var(--purple); cursor: pointer; margin-top: 8px;
+}
+.me-leave-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 8px; }
+.me-leave-grid label:first-child { grid-column: 1 / -1; }
+.me-leave-grid label { display: grid; gap: 5px; font-size: 12px; font-weight: 750; color: var(--muted); }
+.me-leave-grid input, .me-leave-grid select, .me-lv-reason {
+  min-height: 38px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; font: inherit; background: #fff; width: 100%;
+}
+.me-leave .primary-btn { width: 100%; justify-content: center; margin-top: 8px; }
+
+
+/* ====================================================== 登录 / 我的（2026-09-03）
+   员工有自己的账号了：这一页是登录，不再是「先选一个人」。
+   「我的」里两件事 —— 店里要他补的材料（原来靠邮件）和他自己的密码。 */
+.me-login { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.me-login h2 { margin: 0 0 12px; font-size: 16px; }
+.me-login label { display: block; margin-bottom: 10px; }
+.me-login label span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.me-login input {
+  width: 100%; border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; font-size: 14px; background: #fff; color: var(--ink);
+}
+.me-login .primary-btn { width: 100%; margin-top: 4px; }
+.me-login-msg { margin: 0 0 10px; font-size: 12px; color: var(--red); }
+.me-demo { margin-top: 14px; }
+.me-demo summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+
+.me-topup, .me-account { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+.me-topup h3, .me-account h3 { margin: 0 0 6px; font-size: 15px; }
+.me-topup .emp-onboard { margin-top: 10px; }
+.me-topup .card { padding: 0; border: 0; box-shadow: none; background: transparent; }
+.me-account-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 5px 0; font-size: 13px; }
+.me-account-row span { color: var(--muted); font-size: 12px; }
+.me-account-row strong { word-break: break-all; text-align: right; font-size: 13px; }
+.me-pass { margin-top: 10px; }
+.me-pass label { display: block; margin-bottom: 8px; }
+.me-pass label span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.me-pass input {
+  width: 100%; border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 12px; font-size: 14px; background: #fff; color: var(--ink);
+}
+.me-pass .primary-btn { width: 100%; }
+.me-account .me-logout { width: 100%; margin-top: 10px; }
+/* 改密码收起来：一年用一次的东西不该是这一页唯一的主按钮。
+   还在用初始密码的人例外 —— 那一条要催，所以默认展开（HTML 上直接给 open）。 */
+.me-pass-new-box { margin-top: 8px; }
+.me-pass-new-box summary { font-size: 12.5px; color: var(--purple); cursor: pointer; list-style: none; }
+.me-pass-new-box summary::-webkit-details-marker { display: none; }
+.me-pass-new-box summary::before { content: "▸ "; }
+.me-pass-new-box[open] summary::before { content: "▾ "; }
+/* 合同 / 证件两张卡里带药丸的那种行 */
+.me-account-row .pill { flex: none; }
+.me-account .me-note { margin: 9px 0 0; }
+.me-topup-none { margin: 0 0 2px; }
+.me-lang-row select {
+  border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px;
+  font: inherit; font-size: 13px; background: #fff; max-width: 62%;
+}
+
+/* 底部「我的」上的红点：有要补的材料才出现 */
+.me-tabs i { position: relative; }
+.me-dot {
+  position: absolute; top: -4px; right: -10px; min-width: 15px; height: 15px;
+  border-radius: 999px; background: var(--red); color: #fff;
+  font-size: 10px; line-height: 15px; text-align: center; padding: 0 3px; font-style: normal;
+}
+
+/* 三段小标题：现在 / 等你处理 / 接下来。
+   原来这一屏是七块没有标题的卡片，轻重一样，读不出这是干什么的一页。 */
+.me-h {
+  display: flex; align-items: center; gap: 8px;
+  margin: 4px 2px -4px; font-size: 12px; font-weight: 700;
+  letter-spacing: .06em; color: var(--muted);
+}
+.me-h + * { margin-top: 0; }
+.me-h b {
+  min-width: 18px; height: 18px; border-radius: 999px; background: var(--orange); color: #fff;
+  font-size: 10.5px; line-height: 18px; text-align: center; padding: 0 5px; letter-spacing: 0;
+}
+
+/* 等你处理：三处散落的提醒收成一张清单，一条一行，都点得进去 */
+.me-todos { display: grid; gap: 8px; }
+.me-todo {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--orange);
+  border-radius: 12px; padding: 11px 13px; text-decoration: none; color: inherit;
+}
+.me-todo.is-bad { border-left-color: var(--red); }
+.me-todo span { display: grid; gap: 2px; min-width: 0; }
+.me-todo strong { font-size: 13.5px; }
+.me-todo small { font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+.me-todo i { flex: none; font-style: normal; font-size: 17px; color: #b9c0d2; }
+
+/* 整周没班：一句话 + 折起来的七天 */
+.me-days-none {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 15px 16px;
+}
+.me-days-none strong { display: block; font-size: 15px; }
+.me-days-none p { margin: 5px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.me-days-none summary {
+  margin-top: 11px; font-size: 12.5px; color: var(--purple); cursor: pointer; list-style: none;
+}
+.me-days-none summary::-webkit-details-marker { display: none; }
+.me-days-none summary::before { content: "▸ "; }
+.me-days-none details[open] summary::before { content: "▾ "; }
+.me-days-none .me-days { margin-top: 10px; }
+
+/* 「报班」上的小点：只说「有事」，不带数字 —— 该报的永远只有一周 */
+.me-dot.is-plain { min-width: 9px; height: 9px; padding: 0; top: -2px; right: -8px; }
+.me-note.is-remind { color: var(--orange); }
+
+
+/* 员工自己报一笔加班 */
+.me-ot-form { display: grid; gap: 8px; margin-bottom: 10px; }
+.me-ot-form input {
+  width: 100%; border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 12px; font-size: 14px; background: #fff; color: var(--ink);
+}
+.me-ot .me-row u { text-decoration: none; color: var(--purple); font-size: 11px; }
+
+/* ------------------------------------------------- 派到手的那张 HACCP 表 --
+   复用店长那边的 .hc-page 填表页，只把它塞进手机壳的宽度里。 */
+.me-form-back {
+  display: inline-block; margin-bottom: 10px; font-size: 12.5px;
+  color: var(--purple); text-decoration: none;
+}
+.me-form .hc-page { padding: 0; }
+.me-form .hc-page .page-head { display: block; margin-bottom: 12px; }
+.me-form .hc-page .page-head h1 { font-size: 18px; }
+.me-form .hc-page .page-head p { font-size: 11.5px; }
+/* 「返回 HACCP」是店长那边的出口，员工这一侧用上面那条「回今天」。
+   它就挂在 .page-head 下面（不在 .button-row 里），所以直接按类名收掉。 */
+.me-form .hc-page .page-head .button-row,
+.me-form .hc-page .page-head > .accent-back-btn,
+.me-form .hc-page .page-head > .primary-btn { display: none; }
+.me-form .form-grid { grid-template-columns: 1fr; }
+/* .hc-fields 的列数是按**视口**宽度切的媒体查询，可员工端是宽屏幕里的一条窄栏 ——
+   于是在大屏上它照样铺三列，温度数字被切成「0.(」。这里按真实可用宽度压成两列。 */
+.me-form .hc-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.me-form .hc-field input, .me-form .hc-field .hc-input { min-width: 0; width: 100%; }
+/* 提交那一行：手机宽度上三个按钮挤成竖排，「提交记录」被折成两行 */
+.me-form .hc-actionrow { flex-wrap: wrap; gap: 8px; }
+.me-form .hc-actionrow .hc-submit-status { flex: 1 1 100%; }
+.me-form .hc-actionrow .primary-btn,
+.me-form .hc-actionrow .ghost-btn { flex: 1 1 auto; white-space: nowrap; }

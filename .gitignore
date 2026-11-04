@@ -1,1 +1,5 @@
 /.agents/skills/*-workspace/
+node_modules/
+__MACOSX/
+.DS_Store
+*.inspect.ndjson

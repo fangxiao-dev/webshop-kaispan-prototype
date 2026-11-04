@@ -1,0 +1,102 @@
+/* ==========================================================================
+   KaiSpan · 工时与 Arbeitszeitkonto
+   复用 .emp-bar / .sch-weekbar / .table.employee-table，这里只写这一页特有的。
+   ========================================================================== */
+/* 「待处理事项」是表格最后一列（2026-09-03 Mingrong：不要挂在他自己那一行下面，加一列）。
+   同日再改：一格写三层 —— 出了什么事（红字标题）、数字怎么来的（灰字）、一个动作。
+   理由不再只挂在 title 上：鼠标停上去才看得见的解释，在手机上等于不存在，
+   而这一列是整张表唯一要人做决定的地方。 */
+.hrs-fix-col { min-width: 236px; }
+.hrs-fix { display: grid; gap: 5px; justify-items: start; }
+.hrs-fix-what { font-size: 12.5px; line-height: 1.4; color: #b45309; }
+.hrs-fix-why { font-size: 11.5px; line-height: 1.5; color: var(--muted); white-space: normal; }
+.hrs-fix .primary-btn, .hrs-fix .ghost-btn { margin-top: 2px; padding: 5px 11px; font-size: 12px; }
+
+/* 合同工时：右边那两个「超上限 / 不达下限」判断的参照物 */
+.hrs-contract { white-space: nowrap; }
+.hrs-range { display: inline-block; white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
+
+/* 工时账户明细里一行一行累起来的余额 */
+.hrs-run { font-weight: 600; }
+
+.hrs-table td { vertical-align: middle; }
+.hrs-table td small { display: block; font-size: 11px; color: var(--muted); }
+.hrs-table .emp-name-link { text-decoration: none; color: inherit; }
+.hrs-table .emp-name-link:hover strong { color: var(--purple); text-decoration: underline; }
+.hrs-off { color: var(--orange); }
+.hrs-table .pill { margin-left: 6px; }
+
+.hrs-card .section-title p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.hrs-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 1px solid var(--line); border-radius: 11px; padding: 9px 12px;
+}
+.hrs-item strong { display: block; font-size: 13px; }
+.hrs-item span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.hrs-empty { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+
+/* ------------------------------------------------------------- 加班卡 ---
+   按「谁在等我」分层：要批的在上面、橙色、按钮就在那一行；办完的收进 details。
+   手动录入也收起来 —— 员工自己在 App 里报，店长绝大多数时候是在批。 */
+.hrs-ot-new { position: relative; }
+.hrs-ot-new > summary { list-style: none; cursor: pointer; white-space: nowrap; }
+.hrs-ot-new > summary::-webkit-details-marker { display: none; }
+.hrs-ot-new[open] > summary { border-color: var(--purple); color: var(--purple); }
+.hrs-ot-form {
+  position: absolute; z-index: 18; top: calc(100% + 8px); right: 0; width: min(560px, calc(100vw - 48px));
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+  padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #fff;
+  box-shadow: 0 18px 50px rgba(25, 34, 62, .16);
+}
+.hrs-ot-form label { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+.hrs-ot-form label.is-wide { grid-column: 1 / -1; }
+.hrs-ot-form select, .hrs-ot-form input {
+  width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px;
+  font-size: 13px; color: var(--ink); background: #fff;
+}
+.hrs-ot-unit { position: relative; display: block; }
+.hrs-ot-unit input { padding-right: 24px; }
+.hrs-ot-unit i { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 12px; color: var(--muted); }
+.hrs-ot-form .primary-btn { grid-column: 1 / -1; justify-self: end; }
+
+.hrs-ot-todo { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.hrs-ot-todo-head { margin: 0; font-size: 12px; font-weight: 600; color: #a85d00; }
+.hrs-ot-todo .hrs-item { border-color: #ffd9a8; background: #fffaf2; }
+
+.hrs-ot-done { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.hrs-ot-done > summary {
+  list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--muted);
+}
+.hrs-ot-done > summary::-webkit-details-marker { display: none; }
+.hrs-ot-done > summary::before { content: "▸"; color: var(--purple); }
+.hrs-ot-done[open] > summary::before { content: "▾"; }
+.hrs-ot-done .hrs-item { margin-top: 8px; border-color: #eef0f6; }
+.hrs-ot-state { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.hrs-ot-state.is-approved { color: var(--green); }
+.hrs-ot-state.is-rejected { color: var(--muted); }
+/* 记录里的「原因」是当时写下的原话：数据不是界面文案，德语界面下照原样显示 */
+.hrs-item span i[data-user-text] { font-style: normal; }
+
+@media (max-width: 760px) {
+  .hrs-ot-form { grid-template-columns: 1fr; }
+}
+
+/* 导出给税务师：替掉原来「合同及工资资料」那个假页面 */
+.hrs-export { align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.hrs-export span { font-size: 12px; color: var(--muted); line-height: 1.6; flex: 1 1 320px; }
+
+/* 工时账户明细：一个月看一次的东西，默认收起。summary 上就把结论写完。 */
+.hrs-azk { margin-top: 16px; padding: 0; }
+.hrs-azk > summary {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 14px 18px; cursor: pointer; list-style: none;
+}
+.hrs-azk > summary::-webkit-details-marker { display: none; }
+.hrs-azk > summary::after { content: "＋"; margin-left: auto; color: var(--purple); font-weight: 700; }
+.hrs-azk[open] > summary::after { content: "−"; }
+.hrs-azk > summary strong { font-size: 15px; }
+.hrs-azk > summary span { font-size: 12px; color: var(--muted); }
+.hrs-azk-body { padding: 0 18px 16px; }
+.hrs-azk-note { margin: 0 0 4px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.hrs-azk-note a { color: var(--purple); font-weight: 600; }

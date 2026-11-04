@@ -1,0 +1,19 @@
+{
+  "name": "kaispan-hr-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "KaiSpan 人事流程本机演示交接包",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5174 --strictPort",
+    "start": "vite --host 127.0.0.1 --port 5174 --strictPort",
+    "check": "node tests/check-source.cjs",
+    "test": "node tests/employee-sync.cjs && node tests/payroll-policy.cjs && node tests/document-expiry.cjs && node tests/expiry-notifications.cjs && node tests/contract-flow.cjs && node tests/contract-todos.cjs"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "devDependencies": {
+    "vite": "8.2.2"
+  }
+}
