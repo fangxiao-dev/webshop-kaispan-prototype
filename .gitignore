@@ -3,3 +3,4 @@ node_modules/
 __MACOSX/
 .DS_Store
 *.inspect.ndjson
+dist/
