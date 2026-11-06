@@ -767,3 +767,40 @@ a.emp-file.is-open { color: var(--purple); text-decoration: underline; }
 .emp-file.is-hidden-name { color: var(--muted); font-size: 11px; }
 @media (max-width: 640px) { .emp-health-grid { grid-template-columns: 1fr; } }
 .emp-replace-hint { flex: 1 1 100%; color: var(--muted); }
+
+/* ============================ B2-b2：合同与入职 ============================ */
+.emp-notice-editor { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.emp-notice-editor h3 { margin: 0 0 4px; font-size: 14px; }
+.emp-contract-hint p { margin: 6px 0; }
+.emp-contract-hint p.is-over { color: #b42318; font-weight: 600; }
+.emp-contract-hint p.is-warn { color: #8a5a00; }
+.emp-contract-versions summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+.emp-contract-versions summary::-webkit-details-marker { display: none; }
+.emp-proposal-table td { font-size: 12px; }
+.emp-probation-confirm { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.emp-probation-confirm .field { min-width: 170px; margin: 0; }
+.emp-expired { border-color: #f0b4ae; }
+.emp-expiry-actions { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.emp-expiry-renew { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.emp-expiry-renew .field { margin: 0; min-width: 170px; }
+.emp-handover-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 8px; }
+.emp-handover-item { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 12px; cursor: pointer; }
+.emp-handover-item.is-done { border-color: #b9e3c6; background: #f3fbf5; }
+.emp-handover-item input { accent-color: #1f8a4c; }
+.emp-revoke-leave { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.emp-revoke-leave .field { flex: 1 1 240px; margin: 0; }
+.emp-retention-due { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; padding: 9px 11px; border: 1px solid #f0c98a; border-radius: 8px; background: #fff9ee; }
+.emp-retention tr.is-due td { color: #b42318; font-weight: 600; }
+.emp-dispatch-prepare { display: grid; gap: 10px; margin-top: 8px; }
+.emp-dispatch-rows { display: grid; gap: 10px; margin-top: 10px; }
+.emp-dispatch-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .9fr); gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.emp-dispatch-info { display: grid; gap: 4px; font-size: 12px; }
+.emp-dispatch-info span { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.emp-dispatch-review { display: grid; gap: 8px; }
+.emp-dispatch-review input { border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font: inherit; }
+.emp-dispatch-void, .emp-dispatch-offline { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.emp-dispatch-void summary, .emp-dispatch-offline summary { cursor: pointer; font-size: 12px; color: var(--purple); }
+.emp-sofort-nosv { margin-top: 8px; font-size: 12px; }
+.emp-sofort-alt { margin-top: 8px; }
+.emp-rehire-link a { color: var(--purple); }
+@media (max-width: 760px) { .emp-dispatch-row { grid-template-columns: 1fr; } }
