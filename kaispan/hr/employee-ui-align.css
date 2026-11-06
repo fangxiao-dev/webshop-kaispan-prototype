@@ -1,0 +1,87 @@
+/* 员工端对齐一期规则的补充样式（HR-ONB-26～36/43、HR-DOC-02/09/12、HR-ACCESS-43）。
+   只作用于 #employee-ui 渲染出的 .eu-* 结构；不改 styles.css / pay.css 的既有规则。 */
+
+.eu-head-actions{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.eu-demo-switch{border:1px dashed #cfc6ea;border-radius:10px;background:#faf8ff;padding:6px 10px;font-size:11px;color:#6b5887;max-width:260px}
+.eu-demo-switch>summary{cursor:pointer;list-style:none;font-weight:700;color:#6f4bd0}
+.eu-demo-switch>summary::-webkit-details-marker{display:none}
+.eu-demo-switch p{margin:8px 0 6px;font-size:10px;line-height:1.6;color:#8b82a3}
+.eu-demo-switch label{display:grid;gap:4px;font-size:10px;font-weight:600}
+.eu-demo-switch select{width:100%;box-sizing:border-box;border:1px solid #ddd5f2;border-radius:7px;padding:5px;font:inherit;font-size:11px;background:#fff}
+
+.eu-prepare{border:1px solid #e9e5f7;border-radius:10px;padding:12px 14px;margin:10px 0;background:#fcfbff}
+.eu-prepare strong{font-size:12px;color:#4b4066}
+.eu-prepare ul{margin:8px 0 0;padding-left:18px}
+.eu-prepare li{font-size:11px;line-height:1.75;color:#6c7488}
+.eu-prepare-fold{border:1px solid #e9e5f7;border-radius:10px;background:#fcfbff;margin:12px 0;padding:0 12px}
+.eu-prepare-fold>summary{padding:11px 0;font-size:12px;font-weight:700;color:#6746cf;cursor:pointer}
+.eu-prepare-fold .eu-prepare{border:0;padding:0 0 10px;margin:0;background:none}
+
+.eu-mode-note{border:1px solid #d8e7ff;border-radius:12px;background:#f4f9ff;padding:14px;margin:14px 0}
+.eu-mode-note strong{font-size:12px;color:#255b9c}
+.eu-mode-note p{margin:6px 0 0;font-size:11px;color:#4a6684!important}
+
+.eu-return-banner{border:1px solid #f4c7c7;border-radius:12px;background:#fff5f5;padding:14px;margin:14px 0}
+.eu-return-banner strong{font-size:12px;color:#b4232f}
+.eu-return-banner p{margin:6px 0 0;font-size:11px;color:#8c3d45!important}
+.eu-flag{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:20px;background:#f1eefc;color:#6b48bf;font-size:9px;font-weight:700;white-space:nowrap;vertical-align:middle}
+.eu-flag.is-required{background:#eef3ff;color:#2f5fb3}
+.eu-flag.is-approved{background:#e9f7f0;color:#2c7a5b}
+.eu-flag.is-pending{background:#fff5e5;color:#a8690a}
+.eu-flag.is-rejected{background:#ffecef;color:#b42434}
+.eu-flags{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.eu-flags .eu-flag{margin-left:0}
+
+.eu-layer{border:1px solid #e6e3f2;border-radius:14px;padding:6px 14px 16px;margin:16px 0;background:#fff}
+.eu-layer-head{display:flex;gap:10px;align-items:center;border-bottom:1px solid #efecf8;padding:12px 0;margin-bottom:6px}
+.eu-layer-head>span{flex:0 0 auto;background:#f0eaff;color:#6f45dc;border-radius:7px;padding:4px 8px;font-size:10px;font-weight:700}
+.eu-layer-head strong{display:block;font-size:13px}
+.eu-layer-head small{display:block;color:#8b93a7;font-size:10px;margin-top:3px}
+
+.eu-waiting{border:1px dashed #d8cff0;border-radius:10px;background:#faf7ff;color:#7b64b5!important;padding:12px;font-size:11px}
+.eu-zusatz{display:flex;align-items:center;gap:8px;background:#f7f5fd;border-radius:9px;padding:10px 12px;font-size:11px;color:#5a5470}
+.eu-zusatz small{font-size:9px;color:#9a94ad}
+.eu-optional{border-top:1px dashed #e7e4f2;padding-top:8px;margin-top:4px}
+.eu-optional>summary{cursor:pointer;font-size:11px;font-weight:600;color:#7a72a0}
+.eu-identity{gap:12px}
+.eu-check{display:flex!important;align-items:center;gap:8px;font-size:11px!important;font-weight:500!important}
+
+.eu-lock-card{border:1px solid #e6e3f2;border-radius:12px;background:#faf9ff;padding:14px;margin:14px 0}
+.eu-lock-card strong{font-size:12px}
+.eu-lock-card p{margin:6px 0 0;font-size:11px}
+
+.eu-coming-soon{border:1px dashed #d5cbf3;border-radius:14px;background:#faf8ff;padding:22px;margin:18px 0;text-align:center}
+.eu-coming-soon strong{display:block;font-size:15px;color:#6f45dc}
+.eu-coming-soon p{margin:8px 0 0;font-size:11px;color:#7a7395!important}
+.eu-coming-soon small{display:block;margin-top:8px;font-size:10px;color:#9a93b2}
+
+.eu-supplement,.eu-update-request{border:1px solid #f0d8b8;border-radius:12px;background:#fffaf2;padding:14px;margin:14px 0}
+.eu-update-request{border-color:#d8e3f7;background:#f7faff}
+.eu-supplement strong,.eu-update-request strong{font-size:12px;color:#8a5b12}
+.eu-update-request strong{color:#2b5591}
+.eu-supplement p,.eu-update-request p{margin:6px 0;font-size:11px}
+.eu-update-items{margin:8px 0;padding-left:18px}
+.eu-update-items li{font-size:11px;line-height:1.7;color:#4f586e}
+
+.eu-update-row.is-changed input,.eu-update-row.is-changed select{border-color:#e0b96f;background:#fffdf7}
+.eu-old-value{font-size:10px!important;color:#9a7a3d!important;font-weight:500!important}
+.eu-keep-date{display:flex!important;align-items:center;gap:6px;font-size:10px!important;font-weight:500!important;color:#7b6a4a!important}
+.eu-keep-reason{font-size:11px!important;padding:7px!important}
+.eu-doc.is-changed{background:#fffdf7}
+.eu-doc.is-rejected{background:#fff7f7}
+.eu-doc-actions{display:flex;align-items:center;gap:6px}
+.eu-doc .eu-doc-actions .eu-upload{font-size:11px}
+
+.eu-contract-file{border:1px solid #e6e8f1;border-radius:11px;padding:12px;margin:10px 0;display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.eu-contract-file.is-approved{border-color:#bfe3cf;background:#f7fdf9}
+.eu-contract-file.is-returned{border-color:#f3c5c5;background:#fff7f7}
+.eu-contract-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.eu-reason{color:#b42434!important}
+.eu-offline-tag{display:inline-block;background:#eaf5ef;color:#2b7a58!important;border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700}
+
+.eu-demo-link{border:0;background:none;color:#9a93b2;font-size:10px;text-decoration:underline;cursor:pointer;margin-top:8px}
+.eu-approval{background:#f3f8f5;border-radius:8px;padding:8px 10px;font-size:11px;color:#2f6d55!important}
+.eu-special{border:1px solid #e8e4f4;border-radius:12px;padding:14px;margin:14px 0;background:#fff}
+.eu-special>strong{font-size:12px;color:#52467a}
+
+@media(max-width:600px){.eu-head-actions{width:100%}.eu-layer{padding:4px 10px 12px}.eu-contract-file{flex-direction:column;align-items:flex-start}}

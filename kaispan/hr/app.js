@@ -722,6 +722,7 @@ function topbar(params) {
         <button class="store-select" id="storeToggle"><strong>${contextLabel}</strong><span>${contextValue}</span><span>⌄</span></button>
       </div>
       <div class="top-actions">
+        ${typeof hrViewSwitch === "function" ? hrViewSwitch() : ""}
         <select class="lang-select" id="languageSelect" data-no-translate aria-label="Language">
           <option value="zh" ${language === "zh" ? "selected" : ""}>◎ 中文</option>
           <option value="de" ${language === "de" ? "selected" : ""}>◎ Deutsch</option>
@@ -1638,6 +1639,7 @@ function employeeSectionPage(child) {
     "合规设置": () => empPage(employeeRulesPage()),      /* employee.js */
     "新增员工": () => empPage(employeeNewPage()),        /* employee.js */
     "入职邀请": () => empPage(employeeInviteListPage()),  /* employee.js */
+    "税务师权限": () => empPage(employeeTaxAccessPage()),  /* tax-access.js */
     "邀请详情": () => empPage(employeeInviteDetailPage()),/* employee.js */
     /* 工时结算 2026-09-03 先搬到「工时与工资」，当天又搬进「考勤与工时」的月视图 ——
        它算的就是这个月的考勤加起来该付多少小时。老书签一路转过去，
@@ -5956,6 +5958,7 @@ function bindTaxMailbox() {
 }
 
 function bindGlobal() {
+  if (typeof hrBindViewSwitch === "function") hrBindViewSwitch();
   document.getElementById("collapseBtn")?.addEventListener("click", () => {
     document.getElementById("sidebar")?.classList.toggle("collapsed");
     document.querySelector(".layout")?.classList.toggle("sidebar-collapsed");

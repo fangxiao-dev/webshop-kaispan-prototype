@@ -1,0 +1,80 @@
+.tax-crumb { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+.tax-crumb a { color: var(--purple); font-weight: 700; text-decoration: none; }
+.tax-crumb a:hover { text-decoration: underline; }
+.tax-crumb span[aria-hidden] { color: #b6bccd; }
+
+.tax-demo-toggle { white-space: nowrap; }
+
+.tax-deny-banner { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 16px; padding: 12px 16px; border: 1px solid #f0d9a8; border-radius: 12px; background: #fff8ec; color: #7a4a06; }
+.tax-deny-banner strong { font-size: 13px; }
+.tax-deny-banner span { font-size: 12px; line-height: 1.6; }
+
+.tax-summary { margin-bottom: 16px; }
+.tax-summary .compact-stat small { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+
+.tax-conn { margin-bottom: 16px; }
+.tax-conn .section-title { align-items: flex-start; }
+.tax-conn .section-title p { margin: 4px 0 0; }
+.tax-conn-note { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: #fff7e9; color: #7a4a06; font-size: 12px; line-height: 1.7; }
+.tax-conn-foot { margin: 12px 0 0; }
+
+.tax-grant-table th:first-child { width: 30%; }
+.tax-grant-table th:nth-child(2) { width: 22%; }
+.tax-grant-table td { vertical-align: middle; }
+.tax-grant-table td strong { display: block; }
+.tax-grant-table td small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+
+.tax-toggle { display: inline-flex; align-items: center; gap: 9px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); cursor: pointer; }
+.tax-toggle strong { font-size: 12px; line-height: 1.2; }
+.tax-toggle-track { position: relative; width: 38px; height: 20px; border-radius: 999px; background: #c5ccdc; transition: background .16s ease; }
+.tax-toggle-track i { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .16s ease; }
+.tax-toggle.is-on { border-color: #c9b8ff; background: #f7f3ff; }
+.tax-toggle.is-on .tax-toggle-track { background: var(--purple); }
+.tax-toggle.is-on .tax-toggle-track i { transform: translateX(18px); }
+.tax-toggle.is-disabled { cursor: not-allowed; opacity: .55; background: #f6f7fa; }
+.tax-toggle.is-disabled.is-on .tax-toggle-track { background: #b9a8ee; }
+
+.tax-grant-state { display: block; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.tax-grant-state.is-on { color: #1f7a4d; }
+.tax-grant-state .pill { margin-left: 4px; }
+
+.tax-scope { margin-top: 4px; }
+.tax-scope .card { display: flex; flex-direction: column; }
+.tax-scope .section-title { align-items: center; }
+.tax-scope .section-title h2 { font-size: 15px; }
+.tax-scope p { margin: 0 0 8px; }
+.tax-scope-list { margin: 6px 0 10px; padding-left: 18px; display: grid; gap: 5px; font-size: 12px; line-height: 1.65; color: var(--ink); }
+.tax-scope-list li::marker { color: var(--purple); }
+
+.tax-note { margin-top: 16px; }
+.tax-note p { margin: 0; font-size: 12px; line-height: 1.75; color: var(--muted); }
+.tax-note strong { color: var(--ink); }
+
+.tax-log-card { margin-top: 16px; }
+.tax-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tax-log li { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; }
+.tax-log-time { font-variant-numeric: tabular-nums; color: var(--muted); }
+.tax-log-where { color: var(--muted); }
+
+.tax-empty { padding: 32px; text-align: center; }
+.tax-empty h2 { margin: 0 0 8px; }
+.tax-empty p { margin: 0 auto; max-width: 640px; line-height: 1.75; }
+
+@media (max-width: 720px) {
+  .tax-log li { align-items: flex-start; }
+}
+
+/* 待办事项类型清单（hr-todos.js 没有独立样式表，按分工只能写在本文件）。 */
+.hr-todo-type-table { min-width: 1020px; }
+.hr-todo-type-table th:nth-child(1) { width: 7%; }
+.hr-todo-type-table th:nth-child(2) { width: 17%; }
+.hr-todo-type-table th:nth-child(3) { width: 15%; }
+.hr-todo-type-table th:nth-child(4) { width: 22%; }
+.hr-todo-type-table th:nth-child(5) { width: 20%; }
+.hr-todo-type-table th:nth-child(6) { width: 19%; }
+.hr-todo-type-table td strong { display: block; margin-top: 6px; }
+.hr-todo-code { font-size: 11px; font-weight: 750; color: #6a5ae0; white-space: nowrap; }
+.hr-todo-later-table td { vertical-align: top; line-height: 1.65; }
+.hr-todo-later-table td:first-child { white-space: nowrap; }
+.hr-todo-later-table small { display: block; margin-top: 6px; }
+.hr-todo-table tr.is-muted td { opacity: .5; }

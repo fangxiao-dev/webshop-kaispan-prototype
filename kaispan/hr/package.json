@@ -8,7 +8,7 @@
     "dev": "vite --host 127.0.0.1 --port 5174 --strictPort",
     "start": "vite --host 127.0.0.1 --port 5174 --strictPort",
     "check": "node tests/check-source.cjs",
-    "test": "node tests/employee-sync.cjs && node tests/payroll-policy.cjs && node tests/document-expiry.cjs && node tests/expiry-notifications.cjs && node tests/contract-flow.cjs && node tests/contract-todos.cjs"
+    "test": "node tests/employee-sync.cjs && node tests/payroll-policy.cjs && node tests/document-expiry.cjs && node tests/expiry-notifications.cjs && node tests/contract-flow.cjs && node tests/contract-todos.cjs && node tests/tax-access.cjs && node tests/hr-b2b1-rules.cjs && node tests/hr-b2b2-rules.cjs && node tests/employee-ui-flow.cjs && node tests/hr-b2b3-rules.cjs && node tests/hr-b2b4a-rules.cjs && node tests/hr-b2b4b-rules.cjs && node tests/hr-b2b4c-rules.cjs && node tests/hr-b2b4d-rules.cjs && node tests/hr-draft-progress.cjs && node tests/hr-closeout.cjs"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
