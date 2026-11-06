@@ -722,6 +722,7 @@ function topbar(params) {
         <button class="store-select" id="storeToggle"><strong>${contextLabel}</strong><span>${contextValue}</span><span>⌄</span></button>
       </div>
       <div class="top-actions">
+        ${typeof hrViewSwitch === "function" ? hrViewSwitch() : ""}
         <select class="lang-select" id="languageSelect" data-no-translate aria-label="Language">
           <option value="zh" ${language === "zh" ? "selected" : ""}>◎ 中文</option>
           <option value="de" ${language === "de" ? "selected" : ""}>◎ Deutsch</option>
@@ -5956,6 +5957,7 @@ function bindTaxMailbox() {
 }
 
 function bindGlobal() {
+  if (typeof hrBindViewSwitch === "function") hrBindViewSwitch();
   document.getElementById("collapseBtn")?.addEventListener("click", () => {
     document.getElementById("sidebar")?.classList.toggle("collapsed");
     document.querySelector(".layout")?.classList.toggle("sidebar-collapsed");
