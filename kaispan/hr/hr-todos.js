@@ -91,7 +91,7 @@ function hrTodosPage(){
  const isAll=category==='全部';
  const visible=x=>(isAll||x.category===category)&&(audience==='owner'||x.audience==='双方'||x.audience==='员工');
  const types=HR_TODO_TYPE_LIST.filter(visible);
- const live=[...hrContractTodoItems(scope).filter(visible),...hrTodoLiveItems(scope).filter(visible),...hrTodoStallItems(scope).filter(visible)];
+ const live=hrTodoEntryItems(scope).filter(visible);
  const liveRow=x=>`<tr><td><span class="pill ${x.risk==='高'?'red':x.risk==='中'?'orange':'blue'}">${empEsc(x.category)}</span></td><td><strong>${empEsc(x.title)}</strong><small>${empEsc(x.trigger)}</small></td><td><span class="pill ${x.audience==='双方'?'purple':'gray'}">${x.audience==='双方'?'员工 + 老板':x.audience+'端'}</span></td><td>${empEsc(audience==='owner'?x.owner:x.employee)}</td><td><a class="ghost-btn" href="${hrTodoHref(x.target,audience,x.id)}">查看档案 →</a></td></tr>`;
  const categories=['全部','材料','合同','入职','审批','离职','账号','保存期','变更'];
  return `<div class="page-head"><div><h1>待办事项</h1><p>人事待办的事项类型清单 · 用来核对一期规则是否齐全，不当作真实待办页使用。</p></div><span class="pill purple">本机演示</span></div>
@@ -120,9 +120,14 @@ function hrTodosPage(){
  <p class="small" style="margin-top:12px">“员工 + 老板”表示同一事项分别通知双方，各自看到相应的处理内容。当前仅展示本地提醒与示例，不实际发送通知或执行审批。</p>`;
 }
 
-function hrTodoStallItems(scope){
- if(typeof empOnboardingStalls!=='function')return [];
- return empOnboardingStalls(scope,empToday()).map(x=>({id:x.id,category:'入职',title:x.name+'：入职流程停滞',trigger:'入职流程超过设定天数没有前进，详情在邀请页查看',employee:'',owner:'打开邀请详情，催员工、退回重提或继续审核。',audience:'老板',risk:'中',target:'review',example:false}));
+function hrTodoEntryItems(scope){
+ if(typeof empPendingEntries!=='function')return [];
+ const types=new Map(HR_TODO_TYPE_LIST.map(t=>[t.code,t]));
+ return empRoster().filter(e=>!scope||e.store===scope).flatMap(e=>empPendingEntries(e,empToday()).map(entry=>{
+  const type=types.get('HR-TODO-'+entry.code);
+  if(!type)return null;
+  return {id:e.id,category:type.category,title:e.name+'：'+type.name,trigger:'详情在员工档案里查看',employee:'',owner:'打开员工档案处理“'+type.name+'”。',audience:type.audience,risk:type.risk,target:type.target,example:false};
+ }).filter(Boolean));
 }
 
 function hrContractTodoItems(scope){return empRoster().filter(e=>!scope||e.store===scope).flatMap(e=>{const inv=e.invite;if(!inv||(!inv.portalVersion&&!e.employeePortal?.submittedAt&&!inv.contractSentAt))return [];let item;
