@@ -91,7 +91,7 @@ function hrTodosPage(){
  const isAll=category==='全部';
  const visible=x=>(isAll||x.category===category)&&(audience==='owner'||x.audience==='双方'||x.audience==='员工');
  const types=HR_TODO_TYPE_LIST.filter(visible);
- const live=[...hrContractTodoItems(scope).filter(visible),...hrTodoLiveItems(scope).filter(visible)];
+ const live=[...hrContractTodoItems(scope).filter(visible),...hrTodoLiveItems(scope).filter(visible),...hrTodoStallItems(scope).filter(visible)];
  const liveRow=x=>`<tr><td><span class="pill ${x.risk==='高'?'red':x.risk==='中'?'orange':'blue'}">${empEsc(x.category)}</span></td><td><strong>${empEsc(x.title)}</strong><small>${empEsc(x.trigger)}</small></td><td><span class="pill ${x.audience==='双方'?'purple':'gray'}">${x.audience==='双方'?'员工 + 老板':x.audience+'端'}</span></td><td>${empEsc(audience==='owner'?x.owner:x.employee)}</td><td><a class="ghost-btn" href="${hrTodoHref(x.target,audience,x.id)}">查看档案 →</a></td></tr>`;
  const categories=['全部','材料','合同','入职','审批','离职','账号','保存期','变更'];
  return `<div class="page-head"><div><h1>待办事项</h1><p>人事待办的事项类型清单 · 用来核对一期规则是否齐全，不当作真实待办页使用。</p></div><span class="pill purple">本机演示</span></div>
@@ -120,9 +120,14 @@ function hrTodosPage(){
  <p class="small" style="margin-top:12px">“员工 + 老板”表示同一事项分别通知双方，各自看到相应的处理内容。当前仅展示本地提醒与示例，不实际发送通知或执行审批。</p>`;
 }
 
+function hrTodoStallItems(scope){
+ if(typeof empOnboardingStalls!=='function')return [];
+ return empOnboardingStalls(scope,empToday()).map(x=>({id:x.id,category:'入职',title:x.name+'：入职流程停滞',trigger:'入职流程超过设定天数没有前进，详情在邀请页查看',employee:'',owner:'打开邀请详情，催员工、退回重提或继续审核。',audience:'老板',risk:'中',target:'review',example:false}));
+}
+
 function hrContractTodoItems(scope){return empRoster().filter(e=>!scope||e.store===scope).flatMap(e=>{const inv=e.invite;if(!inv||(!inv.portalVersion&&!e.employeePortal?.submittedAt&&!inv.contractSentAt))return [];let item;
  if(inv.state==='submitted')item={category:'入职',label:'入职资料待审核',trigger:'员工已提交个人资料与证件',employee:'等待老板审核；如退回则补充资料。',owner:'审核员工入职资料，确认无误后制作劳动合同。',audience:'老板',target:'review'};
- else if(inv.state==='approved'&&!inv.contractSentAt)item={category:'合同',label:'待生成并发送合同',trigger:'资料审核完成，尚未向员工发送文件',employee:'等待老板发送入职文件。',owner:'生成并核对劳动合同和个人调查问卷，再发送给员工。',audience:'老板',target:'contract'};
+ else if(inv.state==='approved'&&!inv.contractSentAt)item={category:'合同',label:'待发合同',trigger:'资料审核完成，尚未向员工发送文件',employee:'等待老板发送入职文件。',owner:'生成并核对劳动合同和个人调查问卷，再发送给员工。',audience:'老板',target:'contract'};
  else if(inv.state==='approved'&&inv.contractSentAt&&!inv.contractSignedSubmittedAt)item={category:'合同',label:'待员工签回合同',trigger:'老板已发送劳动合同和个人调查问卷',employee:'下载两份文件，填写签字后上传并提交。',owner:'等待员工签署上传。',audience:'员工',target:'contract'};
  else if(inv.contractSignedSubmittedAt&&!inv.contractSignedReviewedAt)item={category:'合同',label:'待核对归档合同',trigger:'员工已提交签署版本',employee:'等待店长核对。',owner:'核对合同及个人调查问卷，确认归档后完成入职。',audience:'老板',target:'contract'};
  return item?[{...item,id:e.id,title:e.name+'：'+item.label,risk:'中',example:false}]:[];});}
