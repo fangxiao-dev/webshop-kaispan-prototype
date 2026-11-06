@@ -33,7 +33,9 @@ assert.equal(ctx.empNoticeEarliestDate('2026-11-06', { format: 'struct', unit: '
 const e18 = ctx.empById('e18');
 const hintIn = ctx.empEarliestLastDay({ ...e18, entryDate: '2026-09-01', probationEnd: '2027-02-28' }, '2026-11-06', 'company');
 assert.equal(hintIn.inProbation, true);
-assert.equal(hintIn.earliest, '2026-11-20');
+/* 试用期内也要取“法定 2 周”和“合同 4 周 zum 15./Monatsende”中较晚的那个：
+   11/06 + 4 周 = 12/04 → 到 12/15，而不是 11/20（HR-LIFE-15） */
+assert.equal(hintIn.earliest, '2026-12-15');
 
 /* 离职：最后工作日当天仍在岗，次日起已离职（HR-LIFE-02/18） */
 assert.equal(ctx.empSetLeave('e18', { who: 'employee', noticeDate: '2026-11-01', lastDay: '2026-11-30', reason: '' }).ok, true);
@@ -117,8 +119,10 @@ assert.equal(ctx.empById('e18').invite.contractReview.questionnaire.state, 'retu
 assert.equal(ctx.empContractDispatchState(ctx.empById('e18')).id, 'sent');
 /* 员工重传被退回的一份，再核对通过 → 归档 */
 signed = JSON.parse(JSON.stringify(ctx.empById('e18')));
-signed.docs.personalquestionnaire = { state: 'ok', file: 'fragebogen_signed_v2.pdf', dataUrl: 'data:,', at: '2026-11-06T10:00:00.000Z' };
-signed.invite.contractSignedSubmittedAt = '2026-11-06T10:00:00.000Z';
+/* 重传时间必须晚于退回时间（退回时间用的是真实 empNow） */
+const reuploadAt = new Date(Date.now() + 60000).toISOString();
+signed.docs.personalquestionnaire = { state: 'ok', file: 'fragebogen_signed_v2.pdf', dataUrl: 'data:,', at: reuploadAt };
+signed.invite.contractSignedSubmittedAt = reuploadAt;
 ctx.empSaveStaff(signed);
 assert.equal(ctx.empReviewContractAsset('e18', 'questionnaire', 'approved', '').ok, true);
 assert.equal(ctx.empContractArchived(ctx.empById('e18')), true);

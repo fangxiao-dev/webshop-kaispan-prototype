@@ -143,7 +143,9 @@ ctx.hrSetView('owner');
 const e20 = clone('e18', { id: 't-special', entryDate: '2026-11-20', invite: { ...clone('e18').invite, state: 'approved', approvedAt: '2026-11-01T09:00:00.000Z' } });
 e20.employeePortal = { specialSubmission: { state: 'pending', items: ['steuerId', 'rentenversicherung'], labels: ['Steuer-ID', 'Sozialversicherungsnummer'], reason: '还在办', at: '2026-11-05T09:00:00.000Z' } };
 save(e20);
-const special1 = ctx.empResolveSpecialSubmission('t-special', 'approved', '', '', 'steuerId');
+/* 批准必须显式给最晚补交日；空值不再自动补默认（HR-ONB-32） */
+assert.equal(ctx.empResolveSpecialSubmission('t-special', 'approved', '', '', 'steuerId').code, 'deadline');
+const special1 = ctx.empResolveSpecialSubmission('t-special', 'approved', '2026-12-06', '', 'steuerId');
 assert.equal(special1.ok, true);
 assert.equal(ctx.empById('t-special').missingApprovals.find(x => x.item === 'steuerId').deadline, '2026-12-06');
 assert.equal(ctx.empResolveSpecialSubmission('t-special', 'approved', '2027-02-01', '', 'rentenversicherung').code, 'deadline_over_max');

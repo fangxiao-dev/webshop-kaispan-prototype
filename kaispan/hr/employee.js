@@ -873,7 +873,7 @@ function empSeedStaff() {
         street: "Lindenstrasse", houseNo: "5", zip: "44137", city: "Dortmund",
         krankenkasse: "AOK", steuernummer: "314/158/64010", rv: "12 123456 M 010",
         iban: "DE25 3704 0044 0808 0808 08", bic: "COBADEFFXXX",
-        probationEnd: empAddMonths(empShiftDate(t, 3), 6),
+        probationEnd: empProbationDefaultEndAt(empShiftDate(t, 3), 6),
         docs: D({ id: { state: "ok", file: "personalausweis_marco.jpg" },
                   kv: { state: "ok", file: "aok.jpg" }, bank: { state: "ok", file: "iban.pdf" },
                   contract: { state: "missing" },
@@ -1071,6 +1071,10 @@ function empAllStaff() {
       const fresh = empDeriveStatus(e);
       if (e.status !== fresh) { e.status = fresh; changed = true; }
       if (empNormalizeAccount(e)) changed = true;
+      /* 合同条件到生效日才切换：读档案时把 e.contract 拉回“今天有效”的版本 */
+      if (empSyncEffectiveContract(e, empToday())) changed = true;
+      /* 暂缺审批结果由管理端持有，不能被员工端旧副本改回 pending */
+      if (empNormalizeSpecialSubmission(e)) changed = true;
       /* 旧存档没有 migrated 字段：按“升级前就在册的人”处理，避免把老员工的
          “仅记录、无文件”误判成新员工缺文件 */
       if (e.migrated === undefined) { e.migrated = e.status !== "invited"; changed = true; }
@@ -1329,7 +1333,8 @@ function empAlertsFor(e, today) {
   if (empIsNewHire(e)) {
     const open = empNewHireOpen(e);
     const days = e.entryDate ? empDaysBetween(day, e.entryDate) : 0;
-    out.push({ kind: "newhire", employee: e, level: days < 0 ? "expired" : "warn", days: days < 0 ? days : days,
+    /* 入职当天仍未办完（即时申报等）就算逾期，不再只标“提醒”（HR-ONB-39/40） */
+    out.push({ kind: "newhire", employee: e, level: days <= 0 ? "expired" : "warn", days: days,
       title: empRaw({ zh: `新人上工前还有 ${open.length} 件事`, de: `${open.length} Punkte vor Arbeitsaufnahme` }),
       why: open.map(t => empRaw(t.name)).join("、"), date: e.entryDate });
   }
@@ -1427,9 +1432,10 @@ function empWorkflowEntries(e, today) {
 /* 名单页每行「待处理」列和首页数人共用这一份清单，避免两处口径不一样。 */
 function empPendingEntries(e, today) {
   const day = today || empToday();
-  if (e.status === "left" || empStatusHidden(e)) return [];
+  if (empStatusHidden(e)) return [];
   const out = [];
-  empAlertsFor(e, day).forEach(a => {
+  /* 离职交接和保存期到期是离职之后才出现的待办，不能因为 status=left 就整行清空 */
+  if (e.status !== "left") empAlertsFor(e, day).forEach(a => {
     const key = a.kind === "doc" ? "doc" : a.kind === "profile" ? "profile" : a.kind === "newhire" ? "newhire"
       : a.kind === "probation" ? "probation" : a.kind === "befristet" ? "befristet" : "doc";
     out.push(empTodoEntry(e, key, a.level, { alert: a, days: a.days, detail: a }));
@@ -1663,6 +1669,20 @@ function empApprovalState(a, today) {
   return a.status || "";
 }
 
+/* 审批结果由管理端持有：只要写入过 resolutions，状态就按已决项重新推导，
+   员工端旧副本（pending）即使被写回也不能把已批准的结果改回等待（HR-ONB-31/32）。 */
+function empNormalizeSpecialSubmission(e) {
+  const special = e?.employeePortal?.specialSubmission;
+  if (!special || !Array.isArray(special.resolutions) || !special.resolutions.length) return false;
+  const decided = new Set(special.resolutions.map(x => x.item));
+  const items = Array.isArray(special.items) ? special.items : [];
+  const remaining = items.filter(x => !decided.has(x));
+  const state = remaining.length ? "pending" : (special.resolutions.some(x => x.status === "approved") ? "approved" : "rejected");
+  if (special.state === state) return false;
+  special.state = state;
+  return true;
+}
+
 /* 暂缺审批：可按单一项处理；不传 item 时一次处理整条申请（兼容旧调用）。 */
 function empResolveSpecialSubmission(id, decision, deadline, reason, item) {
   const e = empById(id);
@@ -1674,12 +1694,18 @@ function empResolveSpecialSubmission(id, decision, deadline, reason, item) {
   if (!allowed.length) return { ok: false, code: "item_not_allowed", message: empT("申请里没有可批准的项目", "Keine zulässigen Positionen") };
   const targets = item ? [item] : allowed;
   if (targets.some(x => !allowed.includes(x))) return { ok: false, code: "item_not_allowed", message: empT("这一项不在可暂缺清单里", "Position nicht zulässig") };
+  /* 同一项只能决定一次；延期只能走延期函数，不能再点“批准”把日期往后推（HR-ONB-34） */
+  const decided = new Set((special.resolutions || []).map(x => x.item));
+  if (targets.some(x => decided.has(x))) {
+    return { ok: false, code: "decided", message: empT("这一项已经有审批结果，不能重复处理；要改日期请用延期。", "Diese Position ist bereits entschieden — Datum nur über Verlängerung.") };
+  }
   const note = String(reason || "").trim();
   if (decision === "rejected" && !note) return { ok: false, code: "reason", message: empT("驳回必须写原因", "Begründung nötig") };
   const maxDate = empSpecialMaxDeadline(e);
-  const finalDeadline = decision === "approved" ? String(deadline || empSpecialDefaultDeadline(e)).trim() : "";
+  /* 默认值只在页面预填；执行时留空直接拒绝，也不接受不存在的日历日期（HR-ONB-32） */
+  const finalDeadline = decision === "approved" ? String(deadline || "").trim() : "";
   if (decision === "approved") {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(finalDeadline)) return { ok: false, code: "deadline", message: empT("批准时必须填最晚补交日", "Spätestes Nachreichdatum nötig") };
+    if (!empValidExpiry(finalDeadline)) return { ok: false, code: "deadline", message: empT("批准时必须填有效的最晚补交日", "Gültiges spätestes Nachreichdatum nötig") };
     if (maxDate && finalDeadline > maxDate) {
       return { ok: false, code: "deadline_over_max", message: empT(`最晚补交日不能晚于入职日 + ${empRule("deferralMaxDays")} 天（${empFormatDate(maxDate)}）。`, `Spätestens ${empFormatDate(maxDate)} (Eintritt + ${empRule("deferralMaxDays")} Tage).`) };
     }
@@ -1738,7 +1764,7 @@ function empExtendMissingApproval(id, item, deadline, reason) {
     return { ok: false, code: "extension_limit", message: empT(`这一项最多延期 ${allowedExtensions} 次，不能再延（HR-ONB-34）。`, `Maximal ${allowedExtensions} Verlängerung(en) (HR-ONB-34).`) };
   }
   const nextDate = String(deadline || "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) return { ok: false, code: "deadline", message: empT("延期必须填新的最晚补交日", "Neues Datum nötig") };
+  if (!empValidExpiry(nextDate)) return { ok: false, code: "deadline", message: empT("延期必须填有效的新最晚补交日", "Gültiges neues Datum nötig") };
   const maxDate = empSpecialMaxDeadline(e);
   if (maxDate && nextDate > maxDate) return { ok: false, code: "deadline_over_max", message: empT(`最晚补交日不能晚于入职日 + ${empRule("deferralMaxDays")} 天（${empFormatDate(maxDate)}）。`, `Spätestens ${empFormatDate(maxDate)}.`) };
   if (hit.deadline && nextDate <= hit.deadline) return { ok: false, code: "deadline_earlier", message: empT("延期日期必须晚于原来的最晚补交日", "Neues Datum muss später liegen") };
@@ -2994,22 +3020,55 @@ function empPushContractVersion(e, validFrom, by, prevContract) {
   return e.contractVersions;
 }
 
+/* 合同条件的版本化字段。员工端 employee-ui.js 直接读 e.contract，
+   所以 e.contract 必须始终等于“今天有效的版本”，未来版本只留在版本列表里（HR-CONTRACT-03）。 */
+const EMP_CONTRACT_VERSION_FIELDS = EMP_CONTRACT_CONDITION_FIELDS.map(([path]) => path.replace(/^contract\./, ""));
+
+function empApplyEffectiveContract(e, day) {
+  const version = empContractVersionAt(e, day || empToday());
+  if (!version?.data) return e;
+  const contract = { ...(e.contract || {}) };
+  EMP_CONTRACT_VERSION_FIELDS.forEach(key => {
+    contract[key] = version.data[key] === undefined ? "" : version.data[key];
+  });
+  contract.notice = version.data.notice ? { ...version.data.notice } : null;
+  contract.validFrom = version.validFrom || "";
+  e.contract = contract;
+  return e;
+}
+
+/* 读档案时把 e.contract 拉回今天有效的版本；改了才写盘，不每次读都写 */
+function empSyncEffectiveContract(e, day) {
+  if (!Array.isArray(e?.contractVersions) || !e.contractVersions.length) return false;
+  const before = `${JSON.stringify(empContractSnapshot(e.contract || {}))}|${e.contract?.validFrom || ""}`;
+  empApplyEffectiveContract(e, day);
+  const after = `${JSON.stringify(empContractSnapshot(e.contract || {}))}|${e.contract?.validFrom || ""}`;
+  return before !== after;
+}
+
 /* 定期合同续签/转不定期等单点改动：老板直接写新版本，店长走提案。 */
-function empRequestContractChange(id, patch, note) {
+function empRequestContractChange(id, patch, note, effectiveDate) {
   const e = empById(id);
   if (!e) return { ok: false, code: "missing" };
+  const from = String(effectiveDate || "").trim();
+  if (!empValidExpiry(from)) return { ok: false, code: "date", message: empT("请填有效的生效日期", "Gültiges Wirksamkeitsdatum angeben") };
+  if (e.entryDate && from < e.entryDate) {
+    return { ok: false, code: "before_entry", message: empT(`生效日期不得早于入职日 ${empFormatDate(e.entryDate)}`, `Wirksamkeit nicht vor Eintritt ${empFormatDate(e.entryDate)}`) };
+  }
   const next = JSON.parse(JSON.stringify(e));
   const beforeContract = JSON.parse(JSON.stringify(next.contract || {}));
-  next.contract = { ...(next.contract || {}), ...patch, validFrom: empToday() };
+  next.contract = { ...(next.contract || {}), ...patch, validFrom: from };
   const changes = empContractConditionChanges(e.contract || {}, next.contract);
   if (!changes.length) return { ok: false, code: "nochange", message: empT("没有变化", "Keine Änderung") };
   if (!empCan("confirmProposal")) {
-    empSubmitContractProposal(e, next, changes, empToday());
+    const submitted = empSubmitContractProposal(e, next, changes, from);
+    if (!submitted?.ok) return submitted;
     return { ok: true, proposal: true };
   }
-  empPushContractVersion(next, empToday(), empActorLabel(), beforeContract);
-  empLogEvent(next, "contract.confirmed", note || `生效日期 ${empToday()} · ${changes.length} 项改动`, empActorLabel(), empToday());
-  empSaveWithHistory(next, empActorLabel(), { effectiveDate: empToday() });
+  empPushContractVersion(next, from, empActorLabel(), beforeContract);
+  empApplyEffectiveContract(next, empToday());
+  empLogEvent(next, "contract.confirmed", note || `生效日期 ${from} · ${changes.length} 项改动`, empActorLabel(), from);
+  empSaveWithHistory(next, empActorLabel(), { effectiveDate: from });
   return { ok: true };
 }
 
@@ -3041,17 +3100,47 @@ function empContractChangeDiff(changes) {
 
 /* 店长的合同条件/薪资改动先形成提案，老板确认后才写新版本（HR-ACCESS-07、旅程 J5）。 */
 function empSubmitContractProposal(prev, nextIn, changes, validFrom) {
+  if (!prev) return { ok: false, code: "missing" };
+  if (prev.contractProposal?.state === "pending") {
+    return { ok: false, code: "proposal_pending", message: empT("已有一份合同条件提案在等老板确认，先处理那一份。", "Es liegt bereits ein Vorschlag zur Bestätigung vor.") };
+  }
+  if (!empValidExpiry(validFrom)) return { ok: false, code: "date", message: empT("请填有效的生效日期", "Gültiges Wirksamkeitsdatum angeben") };
+  if (prev.entryDate && validFrom < prev.entryDate) {
+    return { ok: false, code: "before_entry", message: empT(`生效日期不得早于入职日 ${empFormatDate(prev.entryDate)}`, `Wirksamkeit nicht vor Eintritt ${empFormatDate(prev.entryDate)}`) };
+  }
   const next = JSON.parse(JSON.stringify(nextIn));
+  /* 提案只接收合同条件；入职日期、试用期、状态、离职记录不属于店长可提案范围（HR-ACCESS-07、HR-LIFE-10） */
+  next.entryDate = prev.entryDate;
+  next.probationEnd = prev.probationEnd;
+  next.status = prev.status;
+  next.leave = prev.leave;
+  const allowedContract = { ...(prev.contract || {}) };
+  EMP_CONTRACT_VERSION_FIELDS.forEach(key => {
+    if (nextIn?.contract?.[key] !== undefined) allowedContract[key] = nextIn.contract[key];
+  });
+  if (nextIn?.contract?.notice !== undefined) {
+    allowedContract.notice = nextIn.contract.notice ? { ...nextIn.contract.notice } : null;
+  }
+  next.contract = allowedContract;
   const proposed = empContractSnapshot(next.contract);
   next.contractProposal = {
+    id: `cp${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     state: "pending", at: empNow(), by: empActorLabel(), validFrom,
     data: proposed,
-    changes: empContractChangeDiff(changes)
+    changes: empContractChangeDiff(changes),
+    /* 基线：提案提交时的合同快照与入职日。期间档案被别人改过就不能直接确认（HR-ACCESS-07/56） */
+    baseline: {
+      at: empNow(),
+      entryDate: prev.entryDate || "",
+      validFrom: empContractVersions(prev)[0]?.validFrom || "",
+      data: empContractSnapshot(prev.contract || {})
+    }
   };
   /* 提案期间正式档案保持原值 */
   next.contract = JSON.parse(JSON.stringify(prev.contract || {}));
   empLogEvent(next, "contract.proposal", `生效日期 ${validFrom} · ${changes.length} 项改动`);
-  return empSaveWithHistory(next);
+  empSaveWithHistory(next);
+  return { ok: true };
 }
 
 /* 兼容旧调用；现在“提前转正”必须填转正日期，只有老板能做（HR-LIFE-10） */
@@ -3081,11 +3170,24 @@ function empConfirmContractProposal(id) {
   if (!e?.contractProposal || e.contractProposal.state !== "pending") return { ok: false, code: "missing" };
   if (!empCan("confirmProposal")) return { ok: false, code: "permission", message: empDenyReason("confirmProposal") };
   const p = e.contractProposal;
+  /* 基线冲突：店长提交提案后，档案又被改过（薪资、工时、入职日）→ 拒绝确认，提案保留待重新提交 */
+  if (p.baseline) {
+    const baselineData = JSON.stringify(p.baseline.data || {});
+    const currentData = JSON.stringify(empContractSnapshot(e.contract || {}));
+    if (baselineData !== currentData || String(p.baseline.entryDate || "") !== String(e.entryDate || "")) {
+      return { ok: false, code: "stale", message: empT("提交提案后档案已被修改，请让店长按当前条件重新提交。", "Die Akte wurde nach dem Vorschlag geändert — bitte neu einreichen.") };
+    }
+  }
+  if (!empValidExpiry(p.validFrom)) return { ok: false, code: "date", message: empT("提案的生效日期无效", "Wirksamkeitsdatum ungültig") };
+  if (e.entryDate && p.validFrom < e.entryDate) {
+    return { ok: false, code: "before_entry", message: empT(`提案生效日期早于入职日 ${empFormatDate(e.entryDate)}`, `Wirksamkeit vor Eintritt ${empFormatDate(e.entryDate)}`) };
+  }
   const next = JSON.parse(JSON.stringify(e));
   const beforeContract = JSON.parse(JSON.stringify(next.contract || {}));
   next.contract = { ...(next.contract || {}), ...(p.data || {}) };
   if (p.data?.notice) next.contract.notice = { ...p.data.notice };
   empPushContractVersion(next, p.validFrom, empActorLabel(), beforeContract);
+  empApplyEffectiveContract(next, empToday());
   next.contractProposal = null;
   empLogEvent(next, "contract.confirmed", `生效日期 ${p.validFrom}；提交人 ${p.by}；确认人 ${empActorLabel()}`,
     empActorLabel(), p.validFrom);
@@ -3141,11 +3243,17 @@ function empSetHandoverItem(id, itemId, done) {
 function empSetLeave(id, leave, options = {}) {
   const e = empById(id);
   if (!e) return { ok: false, code: "missing", message: "找不到员工档案" };
-  const who = empLeaveWho({ who: leave.who, type: leave.type });
-  const noticeDate = leave.noticeDate || empToday();
-  const lastDay = leave.lastDay || "";
+  if (!leave || typeof leave !== "object") return { ok: false, code: "input", message: empT("离职记录为空", "Austrittsdaten fehlen") };
+  /* 谁提出、通知日都必须由人来填；默认值只放在表单预填，入口不再兜底（HR-LIFE-13） */
+  const rawWho = leave.who || leave.type;
+  const hit = EMP_LEAVE_TYPES.find(t => t.id === rawWho || (t.legacy || []).includes(rawWho));
+  if (!hit) return { ok: false, code: "who", message: empT("请选择由谁提出（员工 / 公司 / 协商 / 合同到期）", "Bitte auswählen, wer kündigt") };
+  const who = hit.id;
+  const noticeDate = String(leave.noticeDate || "").trim();
+  if (!empValidExpiry(noticeDate)) return { ok: false, code: "notice", message: empT("请填有效的通知日期", "Gültiges Kündigungsdatum angeben") };
+  const lastDay = String(leave.lastDay || "").trim();
   const reason = String(leave.reason || "").trim();
-  if (!lastDay) return { ok: false, code: "last_day", message: empT("请填最后工作日", "Letzten Arbeitstag angeben") };
+  if (!empValidExpiry(lastDay)) return { ok: false, code: "last_day", message: empT("请填有效的最后工作日", "Gültigen letzten Arbeitstag angeben") };
   if (lastDay < noticeDate) {
     return { ok: false, code: "before_notice", message: empT("最后工作日不得早于通知日（HR-LIFE-13）", "Letzter Arbeitstag darf nicht vor dem Kündigungsdatum liegen (HR-LIFE-13)") };
   }
@@ -3173,6 +3281,15 @@ function empSetLeave(id, leave, options = {}) {
 function empApplyLeave(id, record, meta = {}) {
   const e = empById(id);
   if (!e) return { ok: false, code: "missing" };
+  /* 实际写入入口同样要校验权限与记录本身：不能靠调用方先判断（HR-ACCESS-07） */
+  if (!empCan("confirmProposal")) return { ok: false, code: "permission", message: empDenyReason("confirmProposal") };
+  const who = EMP_LEAVE_TYPES.find(t => t.id === record?.who || (t.legacy || []).includes(record?.who));
+  if (!who) return { ok: false, code: "who", message: empT("离职记录缺少“谁提出”", "Angabe „wer kündigt“ fehlt") };
+  if (!empValidExpiry(record.noticeDate)) return { ok: false, code: "notice", message: empT("离职记录的通知日期无效", "Kündigungsdatum ungültig") };
+  if (!empValidExpiry(record.lastDay)) return { ok: false, code: "last_day", message: empT("离职记录的最后工作日无效", "Letzter Arbeitstag ungültig") };
+  if (record.lastDay < record.noticeDate) {
+    return { ok: false, code: "before_notice", message: empT("最后工作日不得早于通知日（HR-LIFE-13）", "Letzter Arbeitstag darf nicht vor dem Kündigungsdatum liegen (HR-LIFE-13)") };
+  }
   const next = JSON.parse(JSON.stringify(e));
   next.leave = record;
   if (!next.leaveHandover) next.leaveHandover = { items: {}, createdAt: empNow(), doneAt: "" };
@@ -3239,12 +3356,38 @@ function empCompanyOfStore(store) {
 }
 
 /* 员工编号按“雇主内的人”唯一（HR-CONTRACT-17） */
+/* 重聘链：第三段沿用第二段编号时，要能追溯到第一段属于同一个人（HR-LIFE-32） */
+function empEmploymentChain(e) {
+  const list = empAllStaff();
+  const byId = new Map(list.map(x => [x.id, x]));
+  const ids = new Set([e?.id].filter(Boolean));
+  const queue = [e].filter(Boolean);
+  while (queue.length) {
+    const cur = queue.shift();
+    const linked = new Set();
+    if (cur.rehireOf) linked.add(cur.rehireOf);
+    if (cur.rehiredBy) linked.add(cur.rehiredBy);
+    list.forEach(x => {
+      if (x.rehireOf === cur.id) linked.add(x.id);
+      if (x.rehiredBy === cur.id) linked.add(x.id);
+    });
+    linked.forEach(id => {
+      if (!id || ids.has(id)) return;
+      ids.add(id);
+      const node = byId.get(id);
+      if (node) queue.push(node);
+    });
+  }
+  return ids;
+}
+
 function empEmployeeNoConflict(e, employeeNo) {
   const no = String(employeeNo || "").trim();
   if (!no || !e) return null;
   const company = empCompanyOfStore(e.store);
+  const chain = empEmploymentChain(e);
   return empAllStaff().find(other => other.id !== e.id
-    && other.id !== e.rehireOf && other.rehireOf !== e.id
+    && !chain.has(other.id)
     && String(other.employeeNo || "").trim() === no
     && empCompanyOfStore(other.store) === company) || null;
 }
@@ -3291,19 +3434,27 @@ function empTransferStore(id, store, effectiveDate) {
 function empEarliestLastDay(e, noticeDate, who) {
   /* 只有员工/公司/协商三种才受通知期约束；合同到期按到期日本身（HR-LIFE-15/16） */
   const inProbation = empLeaveInProbation(e, noticeDate);
-  if (inProbation) {
-    const weeks = Number(empRule("probationNoticeWeeks")) || 2;
-    return { inProbation, weeks, earliest: empShiftDate(noticeDate, weeks * 7),
-             source: empRaw({ zh: `试用期内通知期 ${weeks} 周（合规设置里可改）`, de: `Kündigungsfrist in der Probezeit: ${weeks} Wochen (änderbar)` }) };
-  }
   if (who === "contractEnd" && e.contract?.befristetUntil) {
     return { inProbation, weeks: null, earliest: e.contract.befristetUntil,
              source: empRaw({ zh: `定期合同到期日 ${e.contract.befristetUntil}`, de: `Befristung bis ${e.contract.befristetUntil}` }) };
   }
   const notice = empNoticeStruct(e.contract);
+  const contractEarliest = notice.format === "struct" && Number(notice.count) > 0
+    ? empNoticeEarliestDate(noticeDate, notice) : "";
+  if (inProbation) {
+    const weeks = Number(empRule("probationNoticeWeeks")) || 2;
+    const probationEarliest = empShiftDate(noticeDate, weeks * 7);
+    /* 试用期也有“约定长于法定”的情形：合同写了 4 周就不能只给 2 周（HR-LIFE-15） */
+    if (contractEarliest && contractEarliest > probationEarliest) {
+      return { inProbation, weeks: notice.unit === "weeks" ? notice.count : null, earliest: contractEarliest,
+               source: empRaw({ zh: `试用期内按合同通知期 ${empNoticeText(notice)}（长于试用期默认 ${weeks} 周）`, de: `In der Probezeit gilt die vertragliche Frist ${empNoticeText(notice)} (länger als ${weeks} Wochen)` }) };
+    }
+    return { inProbation, weeks, earliest: probationEarliest,
+             source: empRaw({ zh: `试用期内通知期 ${weeks} 周（合规设置里可改）`, de: `Kündigungsfrist in der Probezeit: ${weeks} Wochen (änderbar)` }) };
+  }
   if (notice.format === "struct" && Number(notice.count) > 0) {
     return { inProbation, weeks: notice.unit === "weeks" ? notice.count : null,
-             earliest: empNoticeEarliestDate(noticeDate, notice),
+             earliest: contractEarliest,
              source: empRaw({ zh: `合同通知期：${empNoticeText(notice)}`, de: `Laut Vertrag: ${empNoticeText(notice)}` }) };
   }
   return { inProbation, weeks: null, earliest: "",
@@ -3425,12 +3576,31 @@ function empInviteAccepted(e) {
   return ["submitted", "returned", "approved"].includes(e?.invite?.state);
 }
 
+/* 完整到期时间判断：到期当天过了具体时刻也算过期（HR-ACCESS-25）。
+   员工端 employee-ui.js 的 euInvitation 也要调用这个函数，不要只比日期。 */
+function empInviteExpiredAt(e, nowIso) {
+  const inv = e?.invite;
+  if (!inv) return false;
+  if (empInviteAccepted(e)) return false;
+  const until = empInviteExpiresAt(inv);
+  if (!until) return false;
+  const end = new Date(until);
+  if (Number.isNaN(end.getTime())) return false;
+  const now = new Date(nowIso || empNow());
+  if (Number.isNaN(now.getTime())) return false;
+  return now.getTime() > end.getTime();
+}
+
+/* 列表/按钮按“天”判断：到期日当天仍显示有效，次日起才标已过期 */
 function empInviteExpired(e, today) {
   const inv = e?.invite;
   if (!inv || inv.state !== "sent") return false;
   if (empInviteAccepted(e)) return false;
-  const left = empInviteDaysLeft(inv, today);
-  return left != null && left < 0;
+  if (today) {
+    const until = empInviteExpiresAt(inv);
+    return !!until && String(until).slice(0, 10) < today;
+  }
+  return empInviteExpiredAt(e);
 }
 
 function empInviteSubStates(e, today) {
@@ -3549,14 +3719,28 @@ const EMP_DOC_PORTAL_KEYS = {
 };
 
 /* 员工提交的版本和正式档案分开看：审核只看最后一版，预览永远不带草稿值（HR-ONB-15/55）。 */
+function empMergeDeep(base, patch) {
+  const out = { ...(base || {}) };
+  Object.entries(patch || {}).forEach(([key, value]) => {
+    out[key] = value && typeof value === "object" && !Array.isArray(value)
+      ? empMergeDeep(out[key], value) : value;
+  });
+  return out;
+}
+
+/* 草稿与提交快照分开：员工改到一半，审核区和预览不能跟着变（HR-ONB-15/16/55） */
+function empInviteDraftData(inv) {
+  return empMergeDeep(inv?.submitted || {}, inv?.draft || {});
+}
+
 function empInviteView(e, force) {
   const inv = e?.invite || {};
-  const sub = inv.submitted || {};
-  const useSub = force === "submitted" || (!force && ["submitted", "returned"].includes(inv.state));
+  const sub = force === "draft" ? empInviteDraftData(inv) : (inv.submitted || {});
+  const useSub = force === "draft" || force === "submitted" || (!force && ["submitted", "returned"].includes(inv.state));
   if (useSub) {
     const p = sub.profile || {};
     return {
-      source: "submitted",
+      source: force === "draft" ? "draft" : "submitted",
       name: sub.name || "",
       birthday: sub.birthday || p.birthday || "",
       contact: sub.contact || {},
@@ -3638,8 +3822,21 @@ function empOnbLayerProgress(e, force) {
 
 /* 兼容原来的调用：total/done/missing 指第一层（提交时必须有）。 */
 function empInviteProgress(e) {
-  /* 审核前看冻结的提交版本；通过后看正式档案（公司代填/老员工没有提交版本）。 */
-  const force = e?.invite?.state === "approved" ? undefined : "submitted";
+  /* 还没提交时只看草稿的完成度（不展示草稿值）；已提交后看冻结的提交版本；
+     通过后看正式档案（公司代填/老员工没有提交版本）。 */
+  const state = e?.invite?.state;
+  const force = state === "approved" ? undefined
+    : (state === "draft" || state === "sent") ? (e.invite.draft ? "draft" : "submitted")
+    : "submitted";
+  return empInviteItemsProgress(e, force);
+}
+
+/* 员工自填页自己的进度：退回后继续改草稿，也要按草稿实时算，不能拿旧提交版挡提交。 */
+function empInviteFillProgress(e) {
+  return empInviteItemsProgress(e, "draft");
+}
+
+function empInviteItemsProgress(e, force) {
   const items = empOnbItems(e, force);
   const layer1 = items.filter(x => x.layer === 1);
   const missing = layer1.filter(x => !x.done).map(x => ({ kind: x.type, name: x.label, path: x.key, doc: x.doc }));
@@ -3691,12 +3888,20 @@ function empSendInvite(id, opts) {
   if (!e || !e.invite) return { ok: false, code: "missing" };
   if (!empCan("invite")) return { ok: false, code: "permission", message: empDenyReason("invite") };
   const resend = !!(opts && opts.resend);
-  if (!["draft", "sent", "returned"].includes(e.invite.state)) {
+  /* 首次发送只允许“已建档、未发送”；其它状态一律走重发校验（HR-ACCESS-24/53） */
+  if (!resend && e.invite.state !== "draft") {
+    return { ok: false, code: "state", message: empT("这条邀请已经发过；需要再发请用“重新发送”。", "Bereits gesendet — bitte „erneut senden“ verwenden.") };
+  }
+  if (["submitted", "approved", "revoked", "cancelled"].includes(e.invite.state)) {
     return { ok: false, code: "state", message: empT("这个状态不能再发邀请", "In diesem Status nicht möglich") };
   }
+  if (empInviteAccepted(e)) {
+    return { ok: false, code: "accepted", message: empT("员工已接受邀请，重发按钮不可用；进度不变。", "Einladung bereits angenommen.") };
+  }
   if (resend) {
-    if (empInviteAccepted(e)) return { ok: false, code: "accepted", message: empT("员工已接受邀请，重发按钮不可用；进度不变。", "Einladung bereits angenommen.") };
     if (empInviteResendToday(e.invite)) return { ok: false, code: "daily_limit", message: empT("这个员工今天已经重发过一次，明天再发（HR-ACCESS-24）。", "Heute bereits einmal erneut gesendet (HR-ACCESS-24).") };
+  } else if (empInviteResendToday(e.invite)) {
+    return { ok: false, code: "daily_limit", message: empT("这个员工今天已经发过一次，明天再发（HR-ACCESS-24）。", "Heute bereits gesendet (HR-ACCESS-24).") };
   }
   const email = String(e.contact?.email || "").trim();
   if (!email) return { ok: false, code: "email", message: empT("需要先填邮箱才能发邀请", "Zuerst E-Mail eintragen") };
@@ -3833,7 +4038,9 @@ function empCancelOnboarding(id, reason) {
   next.invite.cancelReason = note;
   next.invite.cancelledAt = empNow();
   next.invite.cancelledBy = empActorLabel();
-  next.account = { ...(next.account || {}), state: "disabled" };
+  /* 取消入职只结束入职流程，不擅自关闭平台账号；账号由“成员与权限”单独处理（HR-ONB-46、HR-ACCESS-40） */
+  next.status = "invited";
+  if (next.account) next.account = { ...next.account, cancelledAt: next.invite.cancelledAt };
   empLogEvent(next, "onboarding.cancelled", note, empActorLabel());
   empSaveWithHistory(next, empActorLabel());
   return { ok: true };
@@ -3844,8 +4051,13 @@ function empSubmitInvite(token) {
   const e = empByToken(token);
   if (!e || !e.invite) return null;
   if (!["draft", "sent", "returned"].includes(e.invite.state)) return null;
-  if (empInviteExpired(e)) return null;
+  if (empInviteExpiredAt(e)) return null;
   const next = JSON.parse(JSON.stringify(e));
+  /* 提交时把草稿冻结成“最后一版”；草稿本身不再被审核端读取 */
+  if (next.invite.draft) {
+    next.invite.submitted = empInviteDraftData(next.invite);
+    next.invite.draft = null;
+  }
   next.invite.state = "submitted";
   next.invite.submittedAt = empNow();
   next.invite.returnNote = "";
@@ -3858,7 +4070,9 @@ function empSaveInviteDraft(token, patch) {
   const e = empByToken(token);
   if (!e || !e.invite) return null;
   if (!["draft", "sent", "returned"].includes(e.invite.state)) return null;
-  e.invite.submitted = { ...(e.invite.submitted || {}), ...patch };
+  if (empInviteExpiredAt(e)) return null;
+  /* 草稿单独存，退回后保存未提交的修改不会立刻改掉审核区的“最后一版” */
+  e.invite.draft = empMergeDeep(e.invite.draft || {}, patch || {});
   e.invite.savedAt = empNow();
   return empSaveStaff(e);
 }
@@ -3883,6 +4097,23 @@ function empReturnInvite(id, note, items) {
   return { ok: true };
 }
 
+/* 特殊审批项 ↔ 入职清单键。被驳回的项按必交项处理，缺了就不能通过（HR-ONB-32）。 */
+const EMP_SPECIAL_ONB_KEYS = {
+  steuerId: ["steuerId"],
+  rentenversicherung: ["rentenversicherung"],
+  krankenkasse: ["krankenkasse"],
+  healthCardNumber: ["healthCardNumber"],
+  healthPhotos: ["healthFront", "healthBack"],
+  hygiene: ["hygiene"]
+};
+
+function empRejectedSpecialMissing(e) {
+  const rejected = (e?.missingApprovals || []).filter(x => x.status === "rejected");
+  if (!rejected.length) return [];
+  const missing = new Set(empOnbItems(e, "submitted").filter(x => !x.done).map(x => x.key));
+  return rejected.filter(a => (EMP_SPECIAL_ONB_KEYS[a.item || a.key] || [a.item || a.key]).some(k => missing.has(k)));
+}
+
 /* 审核通过：把暂存快照里的个人信息合并进正式档案，合同条件保持公司值（HR-ONB-10/22）。 */
 function empApproveInvite(id, options) {
   const e = empById(id);
@@ -3893,8 +4124,14 @@ function empApproveInvite(id, options) {
   if (!pr.complete) {
     return { ok: false, code: "layer1_missing", message: empT(`提交层还差 ${pr.missing.length} 项，只能退回补充。`, `Pflichtangaben fehlen (${pr.missing.length}).`) };
   }
+  const rejectedMissing = empRejectedSpecialMissing(e);
+  if (rejectedMissing.length) {
+    return { ok: false, code: "special_rejected", message: empT(
+      `暂缺申请被驳回的项还没补齐：${rejectedMissing.map(a => a.label || a.item).join("、")}。按必交项处理，只能退回补充（HR-ONB-32）。`,
+      `Abgelehnte Sonderfreigaben fehlen noch: ${rejectedMissing.map(a => a.label || a.item).join(", ")}. Nur Rückgabe möglich (HR-ONB-32).`) };
+  }
   const entryDate = String(options?.entryDate || "").trim();
-  if (!entryDate) return { ok: false, code: "entry_date", message: empT("通过时必须填入职日期", "Eintrittsdatum nötig") };
+  if (!empValidExpiry(entryDate)) return { ok: false, code: "entry_date", message: empT("通过时必须填有效的入职日期", "Gültiges Eintrittsdatum nötig") };
   const next = JSON.parse(JSON.stringify(e));
   const sub = next.invite.submitted || {};
   next.contact = { ...(next.contact || {}), ...(sub.contact || {}) };
@@ -3903,8 +4140,13 @@ function empApproveInvite(id, options) {
   if (sub.contractFile && !next.docs.contract?.file) {
     next.docs.contract = { state: "ok", file: sub.contractFile, ref: sub.contractRef, by: "self" };
   }
-  /* 个人信息以员工为准；合同条件（岗位、工资、工时、年假）以公司为准（HR-ONB-10）。 */
-  if (sub.name && String(sub.name).trim()) next.name = sub.name;
+  /* 个人信息以员工为准；合同条件（岗位、工资、工时、年假）以公司为准（HR-ONB-10）。
+     姓名先同步 first/last，再统一生成 name，避免下一行被旧 first/last 覆盖（HR-ONB-10/22）。 */
+  if (sub.firstName !== undefined) next.firstName = sub.firstName;
+  if (sub.lastName !== undefined) next.lastName = sub.lastName;
+  const composedName = [next.firstName, next.lastName].filter(Boolean).join(" ").trim();
+  if (composedName) next.name = composedName;
+  else if (sub.name && String(sub.name).trim()) next.name = String(sub.name).trim();
   if (sub.birthday) next.birthday = sub.birthday;
   const nat = sub.contract?.nationalityClass ?? sub.profile?.nationalityClass;
   if (nat === "eu" || nat === "other" || nat === "") empSetNationality(next, nat);
@@ -3913,6 +4155,16 @@ function empApproveInvite(id, options) {
   next.entryDate = entryDate;
   next.probationEnd = options?.probationEnd ? options.probationEnd : null;
   next.status = "active";
+  /* 入职日改了，暂缺期限要按新的“入职日 + 60 天”重算；超出的收回到上限并留痕（HR-ONB-34） */
+  const newMax = empSpecialMaxDeadline(next);
+  const overflow = (next.missingApprovals || []).filter(a => a.status === "approved" && a.deadline && newMax && a.deadline > newMax);
+  if (overflow.length) {
+    next.missingApprovals = (next.missingApprovals || []).map(a =>
+      overflow.includes(a) ? { ...a, previousDeadline: a.deadline, deadline: newMax } : a);
+    empLogEvent(next, "approval.special",
+      `入职日期改为 ${entryDate}，暂缺最晚补交日收回到 ${newMax}：${overflow.map(a => a.label || a.item).join("、")}`,
+      empActorLabel(), entryDate);
+  }
   empNormalizeStatus(next);
   next.invite.state = "approved";
   next.invite.approvedAt = empNow();
@@ -4875,7 +5127,9 @@ function empContractArchived(e) {
 }
 
 function empContractSignedDoc(e, key) {
-  return (e?.docs || {})[key === "contract" ? "contract" : "personalquestionnaire"] || {};
+  const doc = (e?.docs || {})[key === "contract" ? "contract" : "personalquestionnaire"] || {};
+  /* 作废后旧件只留在历史里：state=missing 的不能算“这次发送的签回件” */
+  return doc.state === "missing" ? {} : doc;
 }
 
 function empContractSignedReady(e) {
@@ -4943,7 +5197,8 @@ function empContractDispatchPanel(e) {
       : signed.file ? empT("已上传，待核对", "Hochgeladen, Prüfung offen") : empT("员工还没上传", "Noch nicht hochgeladen");
     /* 被退回后要等员工重传（签回件时间晚于退回时间）才能再次核对 */
     const reuploaded = rv.state !== "returned" || !rv.at || (signed.at && signed.at > rv.at);
-    const canReview = inv.contractSentAt && !empContractArchived(e) && signed.file && rv.state !== "approved" && reuploaded && sensitiveOK;
+    const canReview = inv.contractSentAt && !empContractArchived(e) && !inv.contractVoid && empContractSignedReady(e)
+      && signed.file && rv.state !== "approved" && reuploaded && sensitiveOK;
     return `<div class="emp-dispatch-row">
       <div class="emp-dispatch-info">
         <strong>${label}</strong>
@@ -4972,7 +5227,7 @@ function empContractDispatchPanel(e) {
     <div class="section-title"><div><h2>${empT("合同与问卷 · 发送、签回、核对", "Vertrag und Fragebogen · Versand, Unterschrift, Prüfung")}</h2>
       <p>${empT("两份一起发；员工两份都上传才算签回；逐份核对，只退回没通过的那一份。", "Beide zusammen senden; zurück erst, wenn beide hochgeladen sind; einzeln prüfen und nur das beanstandete zurückgeben.")}</p></div>
       ${empPill(state.tone, empText(state.name))}</div>
-    ${inv.contractVoid ? `<p class="emp-approve-warn">${empT(`已作废：${empStamp(inv.contractVoid.at)} · ${inv.contractVoid.reason}`, `Storniert: ${empStamp(inv.contractVoid.at)} · ${inv.contractVoid.reason}`)}</p>` : ""}
+    ${inv.contractVoid ? `<p class="emp-approve-warn">${empT(`已作废：${empStamp(inv.contractVoid.at)} · ${empEsc(inv.contractVoid.reason)}`, `Storniert: ${empStamp(inv.contractVoid.at)} · ${empEsc(inv.contractVoid.reason)}`)}</p>` : ""}
     ${!inv.contractSentAt && !empContractArchived(e) ? `<div class="emp-dispatch-prepare">
       <div class="button-row">${upload("contract", empT("劳动合同发出件", "Arbeitsvertrag"))}${upload("questionnaire", empT("个人问卷发出件", "Personalfragebogen"))}</div>
       ${!inv.questionnaireTemplate && defaultQuestionnaire ? `<div class="emp-dispatch-default">
@@ -5030,8 +5285,30 @@ function empReviewContractAsset(id, key, decision, reason) {
   if (!e?.invite) return { ok: false, code: "missing" };
   if (!empCan("sensitive")) return { ok: false, code: "permission", message: empDenyReason("sensitive") };
   const label = key === "contract" ? "劳动合同" : "个人调查问卷";
+  const inv = e.invite;
+  /* 只核对“这一次发送”的签回件：没发过、已归档、已作废都不能再点通过（HR-ONB-36/37/53） */
+  if (!inv.contractSentAt || inv.contractVoid) {
+    return { ok: false, code: "state", message: empT("没有正在进行的合同发送记录，先发送合同。", "Kein laufender Vertragsversand.") };
+  }
+  if (empContractArchived(e)) {
+    return { ok: false, code: "archived", message: empT("这次发送已经归档，不能重复核对。", "Bereits abgelegt — keine erneute Prüfung.") };
+  }
+  /* 两份都上传才算签回；只有一份时不能逐份通过（HR-ONB-36） */
+  if (!empContractSignedReady(e)) {
+    return { ok: false, code: "files", message: empT("两份签回件都上传后才能核对。", "Erst prüfen, wenn beide Dateien vorliegen.") };
+  }
   const signed = empContractSignedDoc(e, key);
   if (!signed.file) return { ok: false, code: "file", message: empT("这一份员工还没上传", "Noch nicht hochgeladen") };
+  const previous = inv.contractReview?.[key];
+  if (previous?.state === "approved") {
+    return { ok: false, code: "decided", message: empT("这一份已经核对通过，不能重复通过。", "Bereits geprüft.") };
+  }
+  if (previous?.state === "returned" && (!signed.at || !previous.at || String(signed.at) <= String(previous.at))) {
+    return { ok: false, code: "reupload", message: empT("员工还没重传这一份，不能再次核对。", "Noch keine neue Datei — bitte neu hochladen lassen.") };
+  }
+  if (!inv.contractSignedSubmittedAt) {
+    return { ok: false, code: "state", message: empT("员工还没有提交签回件。", "Noch keine Abgabe der unterschriebenen Dateien.") };
+  }
   const note = String(reason || "").trim();
   if (decision === "returned" && !note) return { ok: false, code: "reason", message: empT("退回必须写原因", "Begründung nötig") };
   const next = JSON.parse(JSON.stringify(e));
@@ -5078,6 +5355,7 @@ function empReviewContractAsset(id, key, decision, reason) {
 function empVoidContractDispatch(id, reason) {
   const e = empById(id);
   if (!e?.invite) return { ok: false, code: "missing" };
+  if (!empCan("sensitive")) return { ok: false, code: "permission", message: empDenyReason("sensitive") };
   const note = String(reason || "").trim();
   if (!note) return { ok: false, code: "reason", message: empT("作废要写原因", "Begründung nötig") };
   const inv = e.invite;
@@ -5095,6 +5373,9 @@ function empVoidContractDispatch(id, reason) {
   next.invite.contractSignedReviewedAt = null;
   next.invite.archivedAt = null;
   next.invite.archivedBy = "";
+  /* 线下归档标记也要清，否则两端仍显示“已归档”，新人合同项还打勾（HR-ONB-37/53） */
+  next.invite.dispatchMode = "";
+  next.invite.offlineSignedAt = null;
   next.invite.contractReview = {};
   /* 签回件转已取消，旧件保留在历史里 */
   next.docs = { ...(next.docs || {}) };
@@ -5272,7 +5553,8 @@ function empContractVersionCard(e) {
       <thead><tr><th>${empT("生效日期", "Wirksam ab")}</th><th>${empT("记录时间 / 来源", "Erfasst / Quelle")}</th><th>${empT("类型 / 薪资", "Art / Vergütung")}</th><th>${empT("月工时", "Sollstunden")}</th><th>${empT("年假 / 通知期", "Urlaub / Frist")}</th><th>${empT("定期到期", "Befristet bis")}</th></tr></thead>
       <tbody>${versions.map(v => {
         const d = v.data || {};
-        return `<tr><td><strong>${v.validFrom ? empFormatDate(v.validFrom) : "—"}</strong>${current && current.validFrom === v.validFrom ? ` ${empPill("green", empT("现行", "Aktuell"))}` : ""}</td>
+        const future = v.validFrom && v.validFrom > empToday();
+        return `<tr><td><strong>${v.validFrom ? empFormatDate(v.validFrom) : "—"}</strong>${current && current.validFrom === v.validFrom && !future ? ` ${empPill("green", empT("现行", "Aktuell"))}` : ""}${future ? ` ${empPill("blue", empT("待生效", "Geplant"))}` : ""}</td>
           <td>${v.at ? empStamp(v.at) : "—"}<small>${empEsc(v.by || "—")}</small></td>
           <td>${empEsc(empRaw(empContractType(d.type).name))} · €${Number(d.rate || 0).toFixed(2)} ${d.payType === "pauschal" ? "/ 月" : "/ h"}</td>
           <td>${d.hoursMin ?? "—"}–${d.hoursMax ?? "—"} h</td>
@@ -5302,10 +5584,12 @@ function empContractExpiryCard(e) {
           <input type="date" class="emp-expiry-date" value="${empShiftDate(until, 365)}"></label>
         <button class="ghost-btn emp-expiry-renew-btn" data-id="${empEsc(e.id)}">${empT("续签并新增版本", "Verlängern und Version anlegen")}</button>
       </div>
+      <label class="field"><span>${empT("本次变更生效日期（必填，不早于入职日）", "Wirksam ab (Pflicht, nicht vor Eintritt)")}</span>
+        <input type="date" class="emp-expiry-effective" value="${empToday()}"></label>
       <button class="ghost-btn emp-expiry-permanent" data-id="${empEsc(e.id)}">${empT("转为不定期（清空到期日）", "Entfristen (Ende leeren)")}</button>
       <button class="ghost-btn danger-lite emp-expiry-leave" data-id="${empEsc(e.id)}">${empT("办离职（预选合同到期）", "Austritt (Ende der Befristung)")}</button>
     </div>
-    <p class="small">${empT("续签和转不定期都会新增一版合同条件，生效日期为今天；店长操作时同样先形成老板待确认提案。", "Verlängern/Entfristen erzeugt eine neue Version mit heutiger Wirksamkeit; bei Filialleitung als Vorschlag.")}</p>
+    <p class="small">${empT("续签和转不定期都会新增一版合同条件；生效日期按上面填的日期，不能早于入职日。店长操作时同样先形成老板待确认提案。", "Verlängern/Entfristen erzeugt eine neue Version zum oben gewählten Datum; bei Filialleitung als Vorschlag.")}</p>
   </section>`;
 }
 
@@ -5557,13 +5841,15 @@ function empContractHint(e) {
   /* 学生工：按 HR-CONTRACT-06 折算周工时（月上限 × 12 ÷ 52），不再用 ÷4.33（HR-CONTRACT-12/14） */
   if (c.type === "werkstudent") {
     const limit = Number(empRule("werkstudentWeeklyMax")) || 20;
+    /* 比较用未舍入值，只有展示才四舍五入；86.8h/月 = 20.03h/周 不能显示成“在 20h 以内”（HR-CONTRACT-06/12） */
+    const weeklyRaw = (Number(c.hoursMax) || 0) * 12 / 52;
     const weekly = typeof hrWeeklyFromMonthly === "function"
       ? hrWeeklyFromMonthly(c.hoursMax)
-      : Math.round((Number(c.hoursMax) || 0) * 12 / 52 * 10) / 10;
-    const over = weekly > limit;
+      : Math.round(weeklyRaw * 10) / 10;
+    const over = weeklyRaw > limit + 1e-9;
     hints.push(`<p class="${over ? "is-over" : ""}">${empT(
-      `学生工按“月上限 × 12 ÷ 52”折算：${c.hoursMax || 0}h / 月 ≈ <strong>${weekly}h / 周</strong>，${over ? `已超过 ${limit}h` : `在 ${limit}h 以内`}。`,
-      `Werkstudent: ${c.hoursMax || 0}h / Monat × 12 ÷ 52 ≈ <strong>${weekly}h / Woche</strong> — ${over ? `über ${limit}h` : `innerhalb ${limit}h`}.`)}</p>`);
+      `学生工按“月上限 × 12 ÷ 52”折算：${c.hoursMax || 0}h / 月 ≈ <strong>${weekly}h / 周</strong>（精确 ${weeklyRaw.toFixed(2)}h），${over ? `已超过 ${limit}h` : `在 ${limit}h 以内`}。`,
+      `Werkstudent: ${c.hoursMax || 0}h / Monat × 12 ÷ 52 ≈ <strong>${weekly}h / Woche</strong> (exakt ${weeklyRaw.toFixed(2)}h) — ${over ? `über ${limit}h` : `innerhalb ${limit}h`}.`)}</p>`);
   }
   /* Minijob：月收入 = 月工时上限 × 时薪，或 Pauschal 月薪，与月上限比较（HR-CONTRACT-12） */
   if (c.type === "minijob") {
@@ -6086,6 +6372,7 @@ function employeeInviteDetailPage() {
   const pr = empInviteProgress(e);
   const mail = empInviteMail(e);
   const subStates = empInviteSubStates(e);
+  const rejectedMissing = empRejectedSpecialMissing(e);
   const canInvite = empCan("invite");
   const canSensitive = empCan("sensitive");
   const accepted = empInviteAccepted(e);
@@ -6202,6 +6489,9 @@ function employeeInviteDetailPage() {
       <p class="small">${empT("在职状态由日期推算，不再手选。默认结束日 = 入职日 + 月数 − 1 天；有效结束日不超过入职日 + 6 个月。", "Status wird aus Daten abgeleitet. Standard: Eintritt + Monate − 1 Tag; wirksam höchstens Eintritt + 6 Monate.")} ${empBossMark("3.1")}</p>
       ${pr.complete ? "" : `<p class="emp-approve-warn">${empT(`还差 ${pr.missing.length} 项没填齐：${pr.missing.map(m => empRaw(m.name)).join("、")}。提交层缺项只能退回补充。`,
         `${pr.missing.length} Angaben fehlen: ${pr.missing.map(m => empRaw(m.name)).join(", ")}. Nur Rückgabe möglich.`)}</p>`}
+      ${rejectedMissing.length ? `<p class="emp-approve-warn">${empT(
+        `暂缺申请被驳回的项还没补齐：${rejectedMissing.map(a => a.label || a.item).join("、")}。按必交项处理，只能退回补充（HR-ONB-32）。`,
+        `Abgelehnte Sonderfreigaben fehlen noch: ${rejectedMissing.map(a => a.label || a.item).join(", ")}. Nur Rückgabe möglich (HR-ONB-32).`)}</p>` : ""}
       <div class="field" style="margin-top:12px"><label>${empT("退回理由（退回时必填）", "Begründung (bei Rückgabe nötig)")}</label>
         <textarea class="emp-return-note" rows="2" placeholder="${empT("例如：健康证拍得看不清到期日，麻烦重拍一张。", "z. B.: Ablaufdatum der Belehrung ist unleserlich, bitte neu fotografieren.")}"></textarea></div>
       <div class="emp-return-picks"><strong>${empT("标出被退回的项（可多选）", "Beanstandete Positionen markieren")}</strong>
@@ -6209,9 +6499,9 @@ function employeeInviteDetailPage() {
       </div>
       <div class="button-row" style="margin-top:12px">
         <button class="ghost-btn danger-lite emp-return-btn" data-id="${empEsc(e.id)}"${canSensitive ? "" : " disabled"}>${empT("退回补充", "Zur Ergänzung zurückgeben")}</button>
-        <button class="primary-btn emp-approve-btn" data-id="${empEsc(e.id)}"${canSensitive && pr.complete ? "" : " disabled"}>${empT("审核通过，建立正式档案", "Freigeben und Akte anlegen")}</button>
+        <button class="primary-btn emp-approve-btn" data-id="${empEsc(e.id)}"${canSensitive && pr.complete && !rejectedMissing.length ? "" : " disabled"}>${empT("审核通过，建立正式档案", "Freigeben und Akte anlegen")}</button>
       </div>
-      ${canSensitive && !pr.complete ? `<p class="emp-disabled-reason">${empT("提交层缺项时不能通过，只能退回。", "Bei fehlenden Pflichtangaben nur Rückgabe möglich.")}</p>` : ""}
+      ${canSensitive && (!pr.complete || rejectedMissing.length) ? `<p class="emp-disabled-reason">${empT("提交层缺项或被驳回的暂缺项未补齐时不能通过，只能退回。", "Bei fehlenden Pflichtangaben oder abgelehnten Sonderfreigaben nur Rückgabe möglich.")}</p>` : ""}
     </section>` : ""}`;
 }
 
@@ -6291,13 +6581,29 @@ function empInviteCompare(e) {
     row(empRaw({ zh: "是否学生", de: "Studierend" }), company.student, employee.student)
   ] : [];
   const c = e.invite?.submitted?.contract || {};
-  const contractRows = [
+  const contractValue = (key, value) => {
+    if (value == null || value === "") return "";
+    if (key === "type") return empRaw(empContractType(value).name);
+    if (key === "payType") return value === "pauschal" ? empRaw({ zh: "Pauschal 月薪", de: "Pauschale" }) : empRaw({ zh: "时薪", de: "Stundenlohn" });
+    return value;
+  };
+  /* 合同差异要覆盖岗位、合同类型、月工时下限等全部条件字段（HR-ONB-10） */
+  const contractFields = [
+    ["type", empRaw({ zh: "合同类型", de: "Vertragsart" })],
+    ["payType", empRaw({ zh: "薪资方式", de: "Vergütungsart" })],
     ["urlaubDays", empRaw({ zh: "年假天数", de: "Urlaubstage" })],
     ["noticePeriod", "Kündigungsfrist"],
     ["rate", empRaw({ zh: "薪资金额 €", de: "Betrag €" })],
-    ["hoursMax", empRaw({ zh: "月工时上限", de: "Sollstunden max." })]
-  ].filter(([key]) => c[key] != null && String(c[key]) !== String(e.contract?.[key] ?? ""))
-    .map(([key, label]) => ({ label, company: e.contract?.[key] ?? "", employee: c[key] }));
+    ["hoursMin", empRaw({ zh: "月工时下限", de: "Sollstunden min." })],
+    ["hoursMax", empRaw({ zh: "月工时上限", de: "Sollstunden max." })],
+    ["weeklyHours", empRaw({ zh: "每周约定工时", de: "Wochenstunden" })]
+  ];
+  const contractRows = contractFields
+    .filter(([key]) => c[key] != null && String(c[key]) !== String(e.contract?.[key] ?? ""))
+    .map(([key, label]) => ({ label, company: contractValue(key, e.contract?.[key]), employee: contractValue(key, c[key]) }));
+  if (c.position != null && String(c.position) !== String(empRaw(empRole(e.role).name))) {
+    contractRows.unshift({ label: empRaw({ zh: "岗位", de: "Position" }), company: empRaw(empRole(e.role).name), employee: c.position });
+  }
   return { rows, contractRows, hasSub };
 }
 
@@ -6305,6 +6611,13 @@ function empSensitiveCell(row) {
   if (!row.employee) return `<span class="emp-miss">${empT("没填", "fehlt")}</span>`;
   if (row.sensitive && !empCan("sensitive")) return `<span class="emp-history-mask">••••</span>`;
   return empEsc(row.employee);
+}
+
+/* 对照表两列都要过敏感权限：公司列也可能有生日、IBAN 等原值（HR-ACCESS-55） */
+function empCompareCell(value, sensitive) {
+  if (!value) return `<span class="emp-miss">—</span>`;
+  if (sensitive && !empCan("sensitive")) return `<span class="emp-history-mask">••••</span>`;
+  return empEsc(value);
 }
 
 function empInviteLayerBlock(e, pr) {
@@ -6335,7 +6648,7 @@ function empInviteReview(e, pr) {
       <table class="table emp-table emp-review-table">
         <thead><tr><th>${empT("项目", "Feld")}</th><th>${empT("公司填的", "Betrieb")}</th><th>${empT("员工填的", "Mitarbeiter")}</th></tr></thead>
         <tbody>${compare.rows.map(r => `<tr class="${r.diff ? "is-diff" : ""}">
-          <td>${r.label}</td><td>${r.company ? empEsc(r.company) : `<span class="emp-miss">—</span>`}</td><td>${empSensitiveCell(r)}</td>
+          <td>${r.label}</td><td>${empCompareCell(r.company, r.sensitive)}</td><td>${empSensitiveCell(r)}</td>
         </tr>`).join("")}</tbody>
       </table>
       <p class="small">${empT("个人信息（姓名、地址、证件号、IBAN、国籍、是否学生）以员工为准；合同条件以公司为准，员工填的合同值不会被采纳（HR-ONB-10）。", "Persönliche Daten gelten nach Mitarbeiter; Vertragsbedingungen nach Betrieb (HR-ONB-10).")}</p>
@@ -6379,7 +6692,7 @@ function empSpecialApprovalBlock(e) {
     <h3>${empT("特殊审批（暂缺）", "Sonderfreigabe (fehlende Unterlagen)")} ${empBossMark("6.1")} ${empBossMark("6.2")} ${empBossMark("6.3")}</h3>
     <p class="small">${empT(`可申请暂缺的只有 6 项：税号、社保号、医保公司、医保卡号、医保卡照片、健康证首次证明。批准必须填最晚补交日；默认取批准日 + ${empRule("deferralDefaultDays")} 天与入职日 + ${empRule("deferralMaxDays")} 天中较早者；同一项最多延期 ${empRule("deferralMaxExtensions")} 次（HR-ONB-30～34）。`, `Nur sechs Positionen; Standard min(Freigabe+${empRule("deferralDefaultDays")}, Eintritt+${empRule("deferralMaxDays")}); max. ${empRule("deferralMaxExtensions")} Verlängerung(en) (HR-ONB-30–34).`)}</p>
     ${pendingItems.length ? `<div class="emp-special-pending"><strong>${empT("等待审批", "Wartet auf Entscheidung")}</strong>
-      <p>${empT(`申请理由：${special.reason || "（没写）"} · 提交于 ${empStamp(special.at)}`, `Begründung: ${special.reason || "—"} · ${empStamp(special.at)}`)}</p>
+      <p>${empT(`申请理由：${empEsc(special.reason || "（没写）")} · 提交于 ${empStamp(special.at)}`, `Begründung: ${empEsc(special.reason || "—")} · ${empStamp(special.at)}`)}</p>
       <div class="emp-special-table">${pendingItems.map(item => `<div class="emp-special-row">
         <strong>${empEsc(empSpecialLabel(item))}</strong>
         <label><span>${empT("最晚补交日", "Spätestes Nachreichdatum")}</span>${deadlineRow(item)}</label>
@@ -6448,8 +6761,10 @@ function empInviteTimeline(e) {
   const items = [];
   const push = (at, label) => { if (at) items.push([at, label]); };
   push(inv.createdAt, empT("建档", "Angelegt"));
-  if (inv.sentAt) push(inv.sentAt, empT(`发送邀请邮件（${empRaw(empInviteSendResult(inv).name)}）`, `Einladung gesendet (${empRaw(empInviteSendResult(inv).name)})`));
+  /* 首次发送时间用 firstSentAt：重发会覆盖 sentAt，不能让首次发送从时间线消失（HR-ACCESS-24） */
+  if (empInviteSentAt(inv)) push(empInviteSentAt(inv), empT(`发送邀请邮件（${empRaw(empInviteSendResult(inv).name)}）`, `Einladung gesendet (${empRaw(empInviteSendResult(inv).name)})`));
   (inv.resendLog || []).forEach(r => push(r.at, empT("重发：换新链接，旧链接失效", "Erneut gesendet: neuer Link, alter ungültig")));
+  (inv.previousInvites || []).forEach(p => push(p.sentAt, empT("旧链接发送记录", "Frühere Einladung")));
   (inv.reminders || []).filter(r => r.kind !== "resend").forEach(r => push(r.at, empT("催办", "Erinnerung")));
   if (inv.submittedAt) push(inv.submittedAt, empT("员工提交（最后一版）", "Abgabe (letzte Version)"));
   if (inv.state === "returned") push(inv.reviewedAt, empT("退回补充", "Zurückgegeben"));
@@ -6477,7 +6792,7 @@ function empInviteTimeline(e) {
     return true;
   }).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
   return `<div class="emp-invite-timeline"><h3>${empT("时间线", "Verlauf")}</h3>
-    <ul class="emp-timeline">${uniq.map(i => `<li><span>${empStamp(i[0])}</span><strong>${i[1]}</strong></li>`).join("")}</ul></div>`;
+    <ul class="emp-timeline">${uniq.map(i => `<li><span>${empStamp(i[0])}</span><strong>${empEsc(i[1])}</strong></li>`).join("")}</ul></div>`;
 }
 
 /* ======================================================== 员工自填页 ======
@@ -6509,8 +6824,16 @@ function employeeOnboardingPage() {
       <button class="ghost-btn emp-onboard-edit" data-token="${empEsc(token)}">${empT("我还要改一下", "Noch etwas ändern")}</button>
     </div>`);
 
-  const sub = e.invite.submitted || {};
-  const pr = empInviteProgress(e);
+  /* 链接过了具体到期时刻就不再接受填写（HR-ACCESS-25）；员工端 employee-ui 同样要拦 */
+  if (empInviteExpiredAt(e)) return empOnboardShell(`
+    <div class="emp-onboard-msg">
+      <h1>${empT("链接已过期", "Link abgelaufen")}</h1>
+      <p>${empT("这个填写链接已经过期。请联系店长重新发一份，旧链接里的内容不会丢。", "Dieser Link ist abgelaufen. Bitte die Filiale um eine neue Einladung — bereits gespeicherte Angaben bleiben erhalten.")}</p>
+    </div>`);
+
+  /* 自填页显示“上次提交 + 本地草稿”的合并值，方便员工继续改 */
+  const sub = empInviteDraftData(e.invite);
+  const pr = empInviteFillProgress(e);
   const c = e.contract;
   const need = empSelfDocs(e);
   const val = path => { const v = empGetPath(sub, path); return v == null ? "" : v; };
@@ -6849,21 +7172,24 @@ function empBindAll() {
           empFlash(button, empT(`生效日期不得早于入职日 ${empFormatDate(e.entryDate)}`, `Wirksamkeit nicht vor Eintritt ${empFormatDate(e.entryDate)}`));
           return;
         }
-        const snapshot = empContractSnapshot(next.contract);
-        const latest = empContractVersions(e)[0];
-        const duplicate = latest && latest.validFrom === validFrom
-          && JSON.stringify(latest.data) === JSON.stringify(snapshot);
-        if (duplicate) {
-          /* 同一生效日、同一内容不重复造版本 */
-        } else if (!empCan("confirmProposal")) {
+        /* HR-CONTRACT-02：每次保存新增一版，同一内容同一生效日也照样留痕 */
+        if (!empCan("confirmProposal")) {
           if (contractChanges.length) {
-            empSubmitContractProposal(e, next, contractChanges, validFrom);
+            const submitted = empSubmitContractProposal(e, next, contractChanges, validFrom);
+            if (!submitted.ok) {
+              empFlash(button, submitted.message || empT("提案提交失败", "Vorschlag fehlgeschlagen"));
+              return;
+            }
             empMarkSaved(button.dataset.id);
             app();
             return;
           }
+          /* 没有条件改动：店长不能只改生效日期，正式档案保持原值 */
+          next.contract = JSON.parse(JSON.stringify(e.contract || {}));
         } else {
           empPushContractVersion(next, validFrom, empActorLabel(), e.contract || {});
+          /* 未来生效的版本只进版本列表，e.contract 仍是今天有效的版本 */
+          empApplyEffectiveContract(next, empToday());
           empLogEvent(next, "contract.confirmed", `生效日期 ${validFrom} · ${contractChanges.length} 项改动`, empActorLabel(), validFrom);
         }
       }
@@ -7116,7 +7442,8 @@ function empBindAll() {
   if (entryInput && probInput) {
     entryInput.addEventListener("change", () => {
       if (!entryInput.value || probInput.value) return;
-      probInput.value = empAddMonths(entryInput.value, empRule("probationMonths"));
+      /* HR-LIFE-06：结束日 = 入职 + 月数 − 1 天，与审核页和老板端共用同一算法 */
+      probInput.value = empProbationDefaultEndAt(entryInput.value, empRule("probationMonths"));
       probInput.dispatchEvent(new Event("change", { bubbles: true }));
     });
   }
@@ -7454,16 +7781,21 @@ function empBindAll() {
   /* --- 定期合同到期三选一 --- */
   document.querySelectorAll(".emp-expiry-renew-btn").forEach(button => {
     button.addEventListener("click", () => {
-      const until = button.closest(".emp-expiry-actions")?.querySelector(".emp-expiry-date")?.value || "";
+      const card = button.closest(".emp-expiry-actions");
+      const until = card?.querySelector(".emp-expiry-date")?.value || "";
+      const effective = card?.querySelector(".emp-expiry-effective")?.value || "";
       if (!until) { empFlash(button, empT("请填新的到期日", "Neues Ende angeben")); return; }
-      const result = empRequestContractChange(button.dataset.id, { befristetUntil: until }, `续签至 ${until}`);
+      if (!effective) { empFlash(button, empT("请填本次变更的生效日期", "Wirksamkeitsdatum angeben")); return; }
+      const result = empRequestContractChange(button.dataset.id, { befristetUntil: until }, `续签至 ${until}`, effective);
       if (!result.ok) { empFlash(button, result.message || empT("操作失败", "Aktion fehlgeschlagen")); return; }
       app();
     });
   });
   document.querySelectorAll(".emp-expiry-permanent").forEach(button => {
     button.addEventListener("click", () => {
-      const result = empRequestContractChange(button.dataset.id, { befristetUntil: null }, "转为不定期");
+      const effective = button.closest(".emp-expiry-actions")?.querySelector(".emp-expiry-effective")?.value || "";
+      if (!effective) { empFlash(button, empT("请填本次变更的生效日期", "Wirksamkeitsdatum angeben")); return; }
+      const result = empRequestContractChange(button.dataset.id, { befristetUntil: null }, "转为不定期", effective);
       if (!result.ok) { empFlash(button, result.message || empT("操作失败", "Aktion fehlgeschlagen")); return; }
       app();
     });
@@ -7737,9 +8069,12 @@ function empBindAll() {
   if (onboard) {
     const token = onboard.dataset.token;
     const topup = onboard.classList.contains("emp-topup");
-    const readSub = () => { const e = empByToken(token); return (topup ? e?.request?.submitted : e?.invite?.submitted) || {}; };
+    const readSub = () => {
+      const e = empByToken(token);
+      return topup ? (e?.request?.submitted || {}) : empInviteDraftData(e?.invite || {});
+    };
     const writeDraft = patch => (topup ? empSaveInviteDraftTopup(token, patch) : empSaveInviteDraft(token, patch));
-    const progress = () => { const e = empByToken(token); return topup ? empRequestProgress(e) : empInviteProgress(e); };
+    const progress = () => { const e = empByToken(token); return topup ? empRequestProgress(e) : empInviteFillProgress(e); };
     const submit = () => (topup ? empSubmitRequest(token) : empSubmitInvite(token));
     /* 把表单当前状态收成一份 patch。每次操作都存，填一半刷新不会丢。 */
     const collect = () => {
@@ -8058,7 +8393,33 @@ function empTodoItems() {
     risk: a.kind === "profile" ? "普通" : "高风险", status: "未处理",
     href: empStaffHref(a.employee.id)
   }));
-  return [...review, ...stalls, ...docs];
+  /* 流程类待办（交接、保存期、店长提案、特殊审批）也要进首页；
+     它们不属于“证件到期”，但都是老板/店长真正要动手的事（HR-TODO-20～39）。 */
+  const flowMeta = {
+    handover: { type: "离职交接未办完", risk: "高风险", due: "尽快处理" },
+    retention: { type: "离职资料保存期到期", risk: "普通", due: "尽快处理" },
+    managerChange: { type: "店长变更待老板确认", risk: "高风险", due: "尽快处理" },
+    specialPending: { type: "特殊审批待批", risk: "普通", due: "尽快处理" },
+    specialDue: { type: "特殊审批逾期未补交", risk: "高风险", due: "已逾期" }
+  };
+  const flow = [];
+  empRosterVisible(empScope()).forEach(emp => {
+    empWorkflowEntries(emp).forEach(item => {
+      const meta = flowMeta[item.key];
+      if (!meta) return;
+      const type = item.key === "managerChange"
+        ? (emp.contractProposal?.state === "pending" ? "店长合同提案待老板确认" : "离职办理待老板确认")
+        : meta.type;
+      flow.push({
+        type,
+        title: `${emp.name}：${type}`,
+        module: "员工助手", store: emp.store,
+        due: meta.due, risk: meta.risk, status: "未处理",
+        href: empStaffHref(emp.id)
+      });
+    });
+  });
+  return [...review, ...stalls, ...docs, ...flow];
 }
 
 function empContractOverview(e){const c=e.contract;return `<section class="card"><div class="section-title"><div><h2>合同摘要</h2><p>提取已签合同的重要条款；所有数值按本人合同填写，原文与摘要有差异时请核对原文。</p></div>${e.docs.contract?.file?empFileLink(e.docs.contract):'<span class="pill orange">合同原件待上传</span>'}</div><div class="emp-contract-overview"><div><small>薪酬约定</small><strong>€${Number(c.rate||0).toFixed(2)} / ${c.payType==='pauschal'?'月 · 固定 Brutto':'小时 · Brutto'}</strong></div><div><small>Workload · 工时</small><strong>${c.weeklyHours?c.weeklyHours+' h/周 · ':''}${c.hoursMin??'—'}–${c.hoursMax??'—'} h/月</strong></div><div><small>合同期限</small><strong>${empEsc(e.entryDate||'未填写')} → ${empEsc(c.befristetUntil||'不定期')}</strong></div><div><small>年假 / 通知期</small><strong>${c.urlaubDays??'—'} 天 / ${empEsc(c.noticePeriod||'未填写')}</strong></div></div><p class="small">周工时与月工时范围分别保留合同口径，不自动互相覆盖。补贴、发薪时间及加班安排在下方单列。参考 <a href="https://www.gesetze-im-internet.de/nachwg/__2.html" target="_blank" rel="noopener">NachwG §2</a> 的条款分类。</p></section>`;}

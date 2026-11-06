@@ -69,6 +69,7 @@ function euLinkPendingEmployee(){
 
 function euRender(){
  const d=euData();
+ if(euInvitation()?.expired)return euShell({...d,name:'',invitation:{key:'expired-link',store:''}},`<section class="eu-note eu-expired"><h2>链接已过期</h2><p>这个邀请链接已超过 7 天有效期，请联系店长重新发送邀请。</p></section>`,{linkOnly:true});
  const linkEmployee=euLinkPendingEmployee();
  if(linkEmployee)return euShell({...d,name:linkEmployee.name,invitation:{key:d.invitation?.key,store:''}},euLinkPage({name:linkEmployee.name}),{linkOnly:true});
  if(euSession.step==='register'){euSession.tab='tasks';if(euSession.demo)euSession.step='materials';}
@@ -182,7 +183,7 @@ function euInvitation(){
  const preview=state().params.get('preview');
  if(preview){const e=empById(preview);return e?euEmployeeInvitation(e):null;}
  const token=state().params.get('t')||state().params.get('token');
- if(token){const e=empRoster().find(x=>x.invite?.token===token||x.request?.token===token);return e?euEmployeeInvitation(e,token):null;}
+ if(token){const e=empRoster().find(x=>x.invite?.token===token||x.request?.token===token);if(e&&e.invite?.token===token&&typeof empInviteExpiredAt==='function'&&empInviteExpiredAt(e))return {expired:true,key:'expired-link',name:'',email:'',store:''};return e?euEmployeeInvitation(e,token):null;}
  return {key:'employee-ui-default-invitation',name:'Alex Chen',email:'alex.chen@example.com',store:'Martin Biergarten',demo:true};
 }
 
@@ -844,7 +845,7 @@ function euApplyUpdateItems(e,items,at){
    return;
   }
   if(item.key==='nationalityClass'){if(typeof hrSetNationalityClass==='function')hrSetNationalityClass(next,item.to);else{next.contract.nationalityClass=item.to==='eu'||item.to==='other'?item.to:'';next.contract.nonEU=next.contract.nationalityClass==='other';}return;}
-  if(item.key==='student'){next.contract.isStudent=item.to==='yes';return;}
+  if(item.key==='student'){next.contract.isStudent=item.to==='yes'?true:item.to==='no'?false:null;return;}
   if(item.key==='first'||item.key==='last'){next[item.key==='first'?'firstName':'lastName']=item.to;const name=[next.firstName||'',next.lastName||''].filter(Boolean).join(' ');if(name)next.name=name;return;}
   if(item.key==='birthday'){next.birthday=item.to;return;}
   const path=EU_EMPLOYEE_PROFILE_MAP[item.key];if(path)empSetPath(next,path,item.to);

@@ -8,6 +8,7 @@ for (const file of ['viewpoint.js', 'hr-model.js', 'employee.js', 'employee-ui-i
   vm.runInContext(fs.readFileSync(file, 'utf8'), ctx);
 }
 const run = code => vm.runInContext(code, ctx);
+const realEuInvitation = ctx.euInvitation;
 
 let staff = [];
 const store = {};
@@ -307,5 +308,16 @@ assert.equal(ctx.euMonthDay('2026-12-01'), '1.12.2026');
 assert.ok(ctx.euApprovalText({ status: 'approved', deadline: '2026-12-01' }).includes('Genehmigt'));
 assert.notEqual(ctx.euT('入职已完成，可在这里更新个人资料与材料。'), '入职已完成，可在这里更新个人资料与材料。');
 assert.ok(ctx.euTF('还要补：{items}。请先在资料修改里填写或上传新版本。', { items: 'Reisepass' }).includes('Noch nötig'));
+
+{
+  const keepInvitation = ctx.euInvitation;
+  ctx.euInvitation = realEuInvitation;
+  staff = [{ id: 'e-exp', name: 'Old Link', store: 'Martin Biergarten', invite: { token: 'tok-old', state: 'sent', sentAt: '2026-10-01T10:00:00.000Z', expiresAt: '2026-10-08T10:00:00.000Z' } }];
+  ctx.state = () => ({ route: 'employee-ui', params: new URLSearchParams('t=tok-old') });
+  assert.equal(ctx.euInvitation().expired, true, '过期 token 不进入填写页');
+  assert.ok(ctx.euRender().includes('链接已过期'), '员工端显示链接已过期');
+  ctx.state = () => ({ route: 'employee-ui', params: new URLSearchParams('') });
+  ctx.euInvitation = keepInvitation;
+}
 
 console.log('PASS: fill mode flags, three-state nationality, onboarding draft isolation + frozen submission, returned no auto-resubmit, update request items/merge, supplement item checks, contract re-upload versioning, link-pending first, veteran archived end-state, two-file contract, approval states, demo skip, render smoke, round2 archive refresh/adopt freeze/name freeze/no request resurrection/docs draft/supplement version/link shell/company fill/i18n');
