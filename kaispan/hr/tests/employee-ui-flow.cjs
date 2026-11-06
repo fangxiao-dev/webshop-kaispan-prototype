@@ -315,9 +315,155 @@ assert.ok(ctx.euTF('还要补：{items}。请先在资料修改里填写或上�
   staff = [{ id: 'e-exp', name: 'Old Link', store: 'Martin Biergarten', invite: { token: 'tok-old', state: 'sent', sentAt: '2026-10-01T10:00:00.000Z', expiresAt: '2026-10-08T10:00:00.000Z' } }];
   ctx.state = () => ({ route: 'employee-ui', params: new URLSearchParams('t=tok-old') });
   assert.equal(ctx.euInvitation().expired, true, '过期 token 不进入填写页');
+  run('euSession.key=""');
   assert.ok(ctx.euRender().includes('链接已过期'), '员工端显示链接已过期');
   ctx.state = () => ({ route: 'employee-ui', params: new URLSearchParams('') });
   ctx.euInvitation = keepInvitation;
 }
 
-console.log('PASS: fill mode flags, three-state nationality, onboarding draft isolation + frozen submission, returned no auto-resubmit, update request items/merge, supplement item checks, contract re-upload versioning, link-pending first, veteran archived end-state, two-file contract, approval states, demo skip, render smoke, round2 archive refresh/adopt freeze/name freeze/no request resurrection/docs draft/supplement version/link shell/company fill/i18n');
+/* 24. 有效期：未编辑的日期随正式文件刷新，只写实际修改项（HR-ONB-52） */
+const e24 = seed('e24', { status: 'active', contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' }, docs: { id: { state: 'ok', file: 'passport-new.png', dataUrl: 'data:new-pp', at: '2026-11-06T10:00:00.000Z', expiry: '2031-01-01' } } });
+const d24 = ctx.euBoundData({ employeeId: 'e24', profileEdited: [], profile: { passportExpiry: '2028-01-01' }, docs: { passport: { name: 'passport-old.png', at: '2026-01-01T00:00:00.000Z' } } });
+assert.equal(d24.profile.passportExpiry, '2031-01-01', '没编辑过的日期要跟正式文件走');
+const d24b = ctx.euBoundData({ employeeId: 'e24', profileEdited: ['passportExpiry'], profile: { passportExpiry: '2028-01-01' }, docs: { passport: { name: 'passport-old.png', at: '2026-01-01T00:00:00.000Z' } } });
+assert.equal(d24b.profile.passportExpiry, '2031-01-01', '正式文件换新版本时，旧草稿日期不能让新版退回旧值');
+d24.profile.passportExpiry = '2028-01-01';
+ctx.euSyncDocs(d24, ['passport']);
+assert.equal(emp('e24').docs.id.expiry, '2031-01-01', '未编辑日期不能把正式值写回旧值');
+d24.profileEdited = ['passportExpiry'];
+d24.profile.passportExpiry = '2027-12-31';
+ctx.euSyncDocs(d24, ['passport']);
+assert.equal(emp('e24').docs.id.expiry, '2027-12-31', '员工实际改过的日期要写入');
+
+/* 25. 正式 isStudent=null 明确投影为空回答，旧 profile 的 yes 不再复活（HR-DOC-07） */
+const e25 = seed('e25', { contract: { type: 'teilzeit', isStudent: null, nationalityClass: 'eu' } });
+const d25 = ctx.euBoundData({ employeeId: 'e25', profile: { student: 'yes' }, docs: {} });
+assert.equal(d25.profile.student, '', '正式 null 不能投影成已答“是”');
+assert.equal(ctx.euStudentAnswer(d25), '');
+assert.ok(!ctx.euDocumentList(d25).some(t => t.key === 'student'), '未回答学生身份不能要求在读证明');
+
+/* 26. 关联确认后统一清理 linkPending/pendingLink/link.state（HR-ACCESS-43） */
+const e26 = seed('e26', { account: { state: 'pending_link' }, invite: { portalVersion: 2, state: 'sent', accountLink: { state: 'pending' }, link: { state: 'pending' }, linkPending: true, pendingLink: true, submitted: {} } });
+ctx.euSyncInvite({ employeeId: 'e26', accountLinkConfirmedAt: '2026-11-06T11:00:00.000Z' });
+assert.equal(emp('e26').invite.accountLink.state, 'confirmed');
+assert.equal(emp('e26').invite.link.state, 'confirmed');
+assert.ok(!('linkPending' in emp('e26').invite) && !('pendingLink' in emp('e26').invite), '兼容标记要清掉');
+assert.equal(ctx.euLinkPending({ employeeId: 'e26' }), false, '确认后不能还停在关联页');
+assert.equal(emp('e26').account.state, 'active');
+
+/* 27. 作废重发后旧本机签回草稿不能混入新发送（HR-ONB-37/53） */
+const e27 = seed('e27', { status: 'approved', invite: { portalVersion: 2, state: 'approved', sentAt: '2026-11-06T10:00:00.000Z', contractSentAt: '2026-11-06T10:00:00.000Z', dispatchId: 'd-new', submitted: {} } });
+const oldFile27 = { name: 'old.pdf', at: '2026-11-06T09:00:00.000Z', dispatchId: 'd-old' };
+const currentFile27 = { name: 'new.pdf', at: '2026-11-06T11:00:00.000Z', dispatchId: 'd-new' };
+const d27 = ctx.euBoundData({ employeeId: 'e27', docs: { contract: oldFile27, questionnaire: currentFile27 } });
+assert.equal(d27.docs.contract, undefined, '旧发送的本机草稿要移除');
+assert.equal(d27.docs.questionnaire.name, 'new.pdf', '当前发送的文件要保留');
+const status27 = ctx.euContractStatus({ employeeId: 'e27', docs: { contract: oldFile27 } }, 'contract');
+assert.equal(status27.state, 'missing');
+assert.equal(status27.stale, true);
+assert.equal(ctx.euContractFreshUpload({ employeeId: 'e27', docs: { contract: oldFile27 } }, 'contract', status27), false);
+assert.equal(ctx.euContractFreshUpload({ employeeId: 'e27', docs: { contract: currentFile27 } }, 'contract', { state: 'missing' }), true, '带新 dispatchId/at 的重传要能通过');
+assert.equal(ctx.euContractFileCurrent({ employeeId: 'e27', docs: {} }, 'contract', { name: 'no-id.pdf', at: '2026-11-06T10:30:00.000Z' }), false, '新发送已编号时，无编号旧件不能冒充当前件');
+ctx.euSyncDocs({ employeeId: 'e27', docs: { contract: oldFile27 } }, ['contract']);
+assert.equal(emp('e27').docs.contract, undefined, '旧件不能被同步写进正式档案');
+const keepFileCurrent = ctx.empContractFileIsCurrent;
+ctx.empContractFileIsCurrent = undefined;
+assert.equal(ctx.euContractFileCurrent({ employeeId: 'e27', docs: {} }, 'contract', oldFile27), false, '无全局函数时旧 dispatchId 也判旧件');
+assert.equal(ctx.euContractFileCurrent({ employeeId: 'e27', docs: {} }, 'contract', currentFile27), true);
+ctx.empContractFileIsCurrent = keepFileCurrent;
+
+/* 28. 演示状态使用独立员工副本与存储键，不写回真实档案（HR-ONB-52） */
+const e28 = seed('e28', { invite: { portalVersion: 2, state: 'sent', employerCompleted: false, submitted: {} } });
+run('euSession={step:"materials",tab:"tasks",key:"k28",demo:"company",task:null}');
+const d28 = ctx.euData();
+d28.confirmedCompanyProfileAt = '2026-11-06T12:00:00.000Z';
+d28.demoCompanyConfirmedAt = '2026-11-06T12:00:00.000Z';
+ctx.euSave(d28, { archive: true });
+ctx.euPublishPortal(d28, { updateRequest: { state: 'pending', at: '2026-11-06T12:00:00.000Z', items: [] } });
+assert.equal(emp('e28').invite.state, 'sent', '演示确认不能把真实邀请改成 approved');
+assert.equal(emp('e28').employeePortal, undefined, '演示发布不能写真实门户');
+assert.ok(run('Object.keys(empRead("kaispanEmployeeUIDemoScratchV1",{})).length') > 0, '演示副本要写独立存储键');
+run('euSession={step:"register",tab:"tasks",key:null,demo:"",task:null}');
+
+/* 29. 补件交回与老板端结果同 requestId；采纳/退回后不再保留旧投影（HR-ONB-43/44） */
+const e29 = seed('e29', { status: 'active', request: { token: 'r29', state: 'submitted', sentAt: '2026-11-05T00:00:00.000Z', submitted: { docs: { id: { file: 'pp.png', at: '2026-11-06T09:00:00.000Z' } } } }, employeePortal: { supplementSubmission: { requestId: 'r29', status: 'submitted', at: '2026-11-06T09:00:00.000Z', submitted: { docs: {} } } } });
+ctx.euSyncInvite({ employeeId: 'e29' });
+assert.ok(emp('e29').employeePortal.supplementSubmission, '核对中的补件不能提前清掉');
+emp('e29').request.state = 'done';
+emp('e29').employeePortal.supplementSubmission.status = 'accepted';
+const d29 = ctx.euBoundData({ employeeId: 'e29', docs: {}, supplementSubmission: { at: '2026-11-06T09:00:00.000Z' }, supplementReturnedAt: '2026-11-06T09:00:00.000Z' });
+assert.equal(ctx.euSupplementRequest(d29), null, '老板端已采纳后不再显示补件请求');
+assert.equal(d29.supplementSubmission, undefined, '本机旧交回记录要清掉');
+ctx.euSyncInvite(d29);
+assert.equal(emp('e29').employeePortal.supplementSubmission, undefined, '门店已处理的门户投影不再保留');
+const e29b = seed('e29b', { status: 'active', contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' }, request: { token: 'r29b', state: 'sent', sentAt: '2026-11-05T00:00:00.000Z', items: [{ kind: 'doc', id: 'id' }] }, docs: { id: { file: 'old.png', at: '2026-01-01T00:00:00.000Z', expiry: '2031-01-01' } } });
+const d29b = ctx.euBoundData({ employeeId: 'e29b', docs: {}, updateDraft: { profile: { passportExpiry: '2031-01-01' }, docs: { passport: { name: 'new.png', data: 'data:new', at: '2026-11-06T09:00:00.000Z' } }, keepExpiry: { passport: true }, keepReason: { passport: '证件未换新' } } });
+const result29 = ctx.euSupplementSubmission(d29b, ctx.euSupplementRequest(d29b));
+assert.deepEqual(result29.missing, []);
+assert.equal(result29.sub.requestId, 'r29b');
+assert.equal(result29.sub.docs.id.keepExpiry, true);
+assert.equal(result29.sub.docs.id.keepReason, '证件未换新');
+const prior29 = { state: 'returned', requestId: 'req-29', items: [{ key: 'phone', kind: 'field', from: '111', to: '222' }] };
+const next29 = ctx.euBuildUpdateRequest(d29b, [{ key: 'phone', kind: 'field', from: '111', to: '333' }], prior29);
+assert.equal(next29.requestId, 'req-29', '退回后重新提交沿用同一 requestId');
+
+/* 30. 兼容只有 name 的提交格式：员工端同时写 name 与 firstName/lastName（HR-ONB-10/15） */
+const e30 = seed('e30', { name: 'Old Name', firstName: 'Old', lastName: 'Name', invite: { portalVersion: 2, state: 'submitted', submitted: { name: 'New Name' } } });
+const d30 = ctx.euBoundData({ employeeId: 'e30', name: 'Old Name', profile: {}, docs: {} });
+assert.equal(d30.name, 'New Name', '只有 name 的提交也要显示新姓名');
+assert.deepEqual([d30.profile.first, d30.profile.last], ['New', 'Name']);
+const snap30 = ctx.euSubmissionSnapshot({ name: 'Solo Name', profile: {}, docs: {}, materialSubmitted: '2026-11-06T10:00:00.000Z' });
+assert.equal(snap30.name, 'Solo Name');
+assert.ok(snap30.firstName && snap30.lastName, '快照必须同时写 firstName/lastName');
+
+/* 31. 资料退回卡按材料 ID 显示本地化名称，不透出 passport/hygiene 键（清单 10.6） */
+const e31 = seed('e31', { invite: { portalVersion: 2, state: 'returned', returnItems: ['passport', 'hygiene', 'id'], submitted: {} } });
+const d31 = ctx.euBoundData({ employeeId: 'e31', docs: {} });
+assert.deepEqual(ctx.euReturnItemLabels(d31), ['护照 / 身份证', '食品卫生指导证明（健康证）', '护照 / 身份证']);
+const banner31 = ctx.euReturnBanner(d31);
+assert.ok(!/>passport<|>hygiene</.test(banner31), '退回卡不能显示英文键');
+
+/* 32. 德/英新增整句翻译：过期链接、保留日期错误、医保卡正反面、缺项待办 */
+run('euSession={step:"materials",tab:"docs",key:"kde3",demo:"",task:null};empWrite("kaispanEmployeeUIDemoV1",{kde3:{profile:{language:"Deutsch"}}})');
+assert.notEqual(ctx.euT('链接已过期'), '链接已过期');
+assert.notEqual(ctx.euT('这个邀请链接已超过 7 天有效期，请联系店长重新发送邀请。'), '这个邀请链接已超过 7 天有效期，请联系店长重新发送邀请。');
+assert.notEqual(ctx.euT('现行版本没有可保留的有效期，请改填新有效期。'), '现行版本没有可保留的有效期，请改填新有效期。');
+assert.notEqual(ctx.euT('医保卡正面照片'), '医保卡正面照片');
+assert.notEqual(ctx.euT('医保卡反面照片'), '医保卡反面照片');
+assert.notEqual(ctx.euT('第一层已齐，可以提交审核'), '第一层已齐，可以提交审核');
+assert.ok(ctx.euTF('还缺 {n} 项：{items}{more}', { n: 2, items: 'Reisepass', more: '' }).includes('fehlen noch'));
+const d32 = { name: 'Alex Chen', profile: { nationalityClass: 'eu' }, docs: {} };
+const t32 = ctx.euDocumentList(d32).find(t => t.key === 'healthFront');
+assert.ok(ctx.euDocRow(d32, t32).includes('Vorderseite'), '医保卡正面照片要走德语翻译');
+const keepInvitation32 = ctx.euInvitation;
+ctx.euInvitation = () => ({ expired: true, key: 'expired-link' });
+const expiredHtml32 = ctx.euRender();
+assert.ok(expiredHtml32.includes('Link abgelaufen'), '过期链接页要走德语翻译');
+assert.ok(expiredHtml32.includes('älter als 7 Tage'));
+ctx.euInvitation = keepInvitation32;
+run('euSession={step:"register",tab:"tasks",key:null,demo:"",task:null}');
+
+/* 33. 过期邀请不能再同步写成 submitted（HR-ACCESS-25） */
+const e33 = seed('e33', { invite: { portalVersion: 2, state: 'sent', expiresAt: '2026-11-01T00:00:00.000Z', submitted: {} } });
+ctx.euSyncInvite({ employeeId: 'e33', submitActionAt: '2026-11-06T10:00:00.000Z', materialSubmitted: '2026-11-06T10:00:00.000Z', submitted: { name: 'Alex Chen' } });
+assert.equal(emp('e33').invite.state, 'sent', '过期邀请不能通过同步写入变成 submitted');
+
+/* 34. 已核对通过的合同项不能被本机草稿替换（HR-ONB-53） */
+const e34 = seed('e34', { status: 'approved', docs: { contract: { file: 'old.pdf', dataUrl: 'data:old', at: '2026-11-06T09:00:00.000Z' } }, invite: { portalVersion: 2, state: 'approved', sentAt: '2026-11-06T08:00:00.000Z', contractSentAt: '2026-11-06T08:00:00.000Z', dispatchId: 'd34', contractReview: { contract: { state: 'approved' } }, submitted: {} } });
+const d34 = ctx.euBoundData({ employeeId: 'e34', docs: { contract: { name: 'new.pdf', data: 'data:new', at: '2026-11-06T11:00:00.000Z', dispatchId: 'd34' } } });
+ctx.euSyncDocs(d34, ['contract']);
+assert.equal(emp('e34').docs.contract.file, 'old.pdf', '已通过的合同不能被替换');
+assert.equal(ctx.euContractStatus(d34, 'contract').state, 'approved');
+
+/* 35. 员工保存草稿只向老板端发布三层完成度，不发布草稿值（HR-ONB-15/52） */
+const e35 = seed('e35', { invite: { portalVersion: 2, state: 'sent', submitted: {} } });
+const d35 = ctx.euBoundData({ employeeId: 'e35', profile: { first: 'Alex', last: 'Chen', birthday: '1990-01-01', phone: '222', nationalityClass: 'eu', student: 'no' }, profileEdited: ['first', 'last', 'birthday', 'phone', 'nationalityClass', 'student'], docs: {} });
+ctx.euPublishDraftProgress(d35);
+const progress35 = emp('e35').invite.draftProgress;
+assert.equal(progress35.layers[1].total, 8);
+assert.equal(progress35.layers[1].done, 4, '第一层：姓名/生日/国籍/学生已填，地址/IBAN/证件未填');
+assert.equal(progress35.done, progress35.layers[1].done);
+const progressText = JSON.stringify(progress35);
+assert.ok(!/Alex|Chen|1990-01-01|222/.test(progressText), '草稿进度不能带草稿值');
+
+console.log('PASS: fill mode flags, three-state nationality, onboarding draft isolation + frozen submission, returned no auto-resubmit, update request items/merge, supplement item checks, contract re-upload versioning, link-pending first, veteran archived end-state, two-file contract, approval states, demo skip, render smoke, round2 archive refresh/adopt freeze/name freeze/no request resurrection/docs draft/supplement version/link shell/company fill/i18n, round3 expiry refresh/student-null/link cleanup/dispatch currency/demo isolation/supplement requestId/name-only/return labels/round3 i18n/expired-submit/approved contract lock/draft progress only');

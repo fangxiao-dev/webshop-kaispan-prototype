@@ -4116,8 +4116,14 @@ function empOnbLayerProgress(e, force) {
 /* 兼容原来的调用：total/done/missing 指第一层（提交时必须有）。 */
 function empInviteProgress(e) {
   /* 还没提交时只看草稿的完成度（不展示草稿值）；已提交后看冻结的提交版本；
-     通过后看正式档案（公司代填/老员工没有提交版本）。 */
+     通过后看正式档案（公司代填/老员工没有提交版本）。
+     员工端保存草稿时只发布各层“已填/总数”（invite.draftProgress），老板端据此显示，不读草稿值。 */
   const state = e?.invite?.state;
+  const published = e?.invite?.draftProgress?.layers;
+  if (published && ["draft", "sent", "returned"].includes(state) && published[1]) {
+    const layers = { 1: { ...published[1] }, 2: { ...(published[2] || { done: 0, total: 0 }) }, 3: { ...(published[3] || { done: 0, total: 0 }) } };
+    return { total: layers[1].total, done: layers[1].done, missing: [], complete: layers[1].done >= layers[1].total, layers };
+  }
   const force = state === "approved" ? undefined
     : (state === "draft" || state === "sent") ? (e.invite.draft ? "draft" : "submitted")
     : "submitted";

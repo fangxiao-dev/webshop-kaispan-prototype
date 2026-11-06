@@ -136,3 +136,32 @@ const EU_ROUND2_COPY={en:{
  Object.entries(EU_ROUND2_COPY).forEach(([lang,map])=>Object.assign(EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={}),map));
  ['vi','ko','ja'].forEach(lang=>{const map=EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={});Object.keys(EU_ROUND2_COPY.en).forEach(key=>{if(!map[key])map[key]=EU_ROUND2_COPY.en[key];});});
 })();
+
+/* 2026-11-06 第 3 轮审核修复：过期链接、保留日期错误、医保卡正反面、缺项待办等整句补齐。 */
+const EU_ROUND3_COPY={en:{
+"链接已过期":"Link expired","这个邀请链接已超过 7 天有效期，请联系店长重新发送邀请。":"This invitation link is older than 7 days. Please ask your manager to send a new invitation.",
+"邀请链接已过期，请联系店长重新发送邀请。":"The invitation link has expired. Please ask your manager to send a new invitation.",
+"现行版本没有可保留的有效期，请改填新有效期。":"The current version has no valid expiry date to keep. Enter a new expiry date.",
+"医保卡正面照片":"Photo of the health insurance card — front","医保卡反面照片":"Photo of the health insurance card — back",
+"第一层已齐，可以提交审核":"Layer 1 is complete; you can submit for review",
+"还缺 {n} 项：{items}{more}":"Still missing {n} item(s): {items}{more}",
+"打开资料页查看要补的项目":"Open the profile page to see the requested items",
+"共 {n} 项，核对期间档案保持原值":"{n} item(s); the record stays unchanged during review",
+"已批准暂缺：{label}":"Approved as pending: {label}","暂缺已逾期：{label}":"Pending item overdue: {label}",
+"旧版本，请重新上传":"Old version; please upload again","旧版本不可下载":"Old version cannot be downloaded"," 等":" etc."
+},de:{
+"链接已过期":"Link abgelaufen","这个邀请链接已超过 7 天有效期，请联系店长重新发送邀请。":"Dieser Einladungslink ist älter als 7 Tage. Bitte die Leitung um eine neue Einladung bitten.",
+"邀请链接已过期，请联系店长重新发送邀请。":"Der Einladungslink ist abgelaufen. Bitte die Leitung um eine neue Einladung bitten.",
+"现行版本没有可保留的有效期，请改填新有效期。":"Für die aktuelle Version gibt es kein gültiges Datum zum Behalten. Bitte ein neues Ablaufdatum eintragen.",
+"医保卡正面照片":"Foto der Versichertenkarte — Vorderseite","医保卡反面照片":"Foto der Versichertenkarte — Rückseite",
+"第一层已齐，可以提交审核":"Stufe 1 ist vollständig; Abgabe zur Prüfung möglich",
+"还缺 {n} 项：{items}{more}":"Es fehlen noch {n} Punkt(e): {items}{more}",
+"打开资料页查看要补的项目":"Profilseite öffnen, um die angeforderten Punkte zu sehen",
+"共 {n} 项，核对期间档案保持原值":"{n} Punkt(e); die Akte bleibt während der Prüfung unverändert",
+"已批准暂缺：{label}":"Genehmigt fehlend: {label}","暂缺已逾期：{label}":"Fehlender Punkt überfällig: {label}",
+"旧版本，请重新上传":"Alte Version; bitte erneut hochladen","旧版本不可下载":"Alte Version kann nicht heruntergeladen werden"," 等":" usw."
+}};
+(function(){
+ Object.entries(EU_ROUND3_COPY).forEach(([lang,map])=>Object.assign(EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={}),map));
+ ['vi','ko','ja'].forEach(lang=>{const map=EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={});Object.keys(EU_ROUND3_COPY.en).forEach(key=>{if(!map[key])map[key]=EU_ROUND3_COPY.en[key];});});
+})();
