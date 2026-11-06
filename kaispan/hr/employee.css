@@ -881,3 +881,36 @@ a.emp-file.is-open { color: var(--purple); text-decoration: underline; }
 .emp-review-card .emp-request-items { margin-top: 0; }
 .emp-review-card .emp-request-item strong a { color: var(--purple); }
 .emp-request-warning { margin: 10px 0 0; padding: 8px 10px; border: 1px solid #f0c98a; border-radius: 8px; background: #fff9ee; font-size: 11px; line-height: 1.7; color: #8a5a00; }
+
+/* ===== B2-b 第 4b 批：首页占位、档案列表、证件矩阵、合规设置 ===== */
+.emp-module.is-soon {
+  cursor: default;
+  border-style: dashed;
+  background: #fafbfe;
+  opacity: .82;
+}
+.emp-module.is-soon:hover { transform: none; border-color: var(--line); }
+.emp-module-cta.is-muted { color: var(--muted); font-weight: 400; }
+.emp-email-needed { color: #9a5a00; }
+.emp-list-perm { margin: -4px 0 10px; }
+.emp-row-push { margin-top: 6px; width: 100%; }
+.emp-row-push[disabled] { opacity: .45; cursor: not-allowed; }
+.emp-cell-todo .emp-disabled-reason { display: block; margin-top: 4px; }
+.button-cell .emp-disabled-reason { display: block; width: 140px; margin-top: 3px; }
+.emp-batch-result { margin-top: 12px; }
+.emp-batch-result ul { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.emp-batch-result li { display: flex; justify-content: space-between; gap: 12px; padding: 5px 8px; border-radius: 6px; background: #f8f9fc; font-size: 12px; }
+.emp-batch-result li.is-ok { background: #f3fbf6; }
+.emp-batch-result li.is-fail { background: #fff7f6; }
+.emp-batch-result li span { color: var(--muted); }
+.emp-matrix-mark { display: inline-block; margin-right: 4px; color: var(--orange); font-size: 10px; }
+.emp-matrix .is-record-only .emp-matrix-mark { color: #6b7390; }
+.emp-rule.is-readonly { background: #f8f9fc; }
+.emp-rule-fixed { font-size: 12px; font-weight: 600; color: var(--muted); }
+.emp-rule-meta { color: #6b7390; }
+.emp-rule-ref { margin: 0 0 10px; color: #8a5a00; }
+.emp-employer-card .form-grid { gap: 12px; }
+.emp-dispatch-default { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; padding: 9px 11px; border: 1px dashed #cfd5e6; border-radius: 8px; background: #fbfcff; font-size: 12px; }
+.emp-retention-cat { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px dashed var(--line); }
+.emp-retention-cat:first-of-type { border-top: none; }
+.emp-boss-confirm .hr-boss-table { margin-top: 8px; }
