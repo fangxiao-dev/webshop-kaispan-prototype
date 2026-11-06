@@ -915,7 +915,7 @@ function euSupplementSubmission(d,sup){
    否则发布会被当成终态重放丢弃；首次交回仍沿用店长这次请求的 ID（HR-ONB-43/44）。 */
 function euSupplementSubmissionFor(d,sup){
  const result=euSupplementSubmission(d,sup),e=euEmployee(d);
- if(!euDemo()&&e?.request&&euRequestClosed(e,result.sub.requestId))result.sub.requestId=euRequestId('topup');
+ if(!euDemo()&&e&&euRequestClosed(e,result.sub.requestId))result.sub.requestId=euRequestId('topup');
  return result;
 }
 /* 把交回写进老板端 e.request：先冻结提交，再同步这一轮的 requestId。 */

@@ -2277,7 +2277,7 @@ function empRequestClosed(e, requestId) {
 function empCloseRequestId(e, requestId) {
   if (!e || !requestId) return;
   const list = Array.isArray(e.closedRequestIds) ? e.closedRequestIds : [];
-  if (!list.includes(requestId)) e.closedRequestIds = [...list, requestId].slice(-50);
+  if (!list.includes(requestId)) e.closedRequestIds = [...list, requestId];
 }
 
 function empSameRequestId(a, b) {
