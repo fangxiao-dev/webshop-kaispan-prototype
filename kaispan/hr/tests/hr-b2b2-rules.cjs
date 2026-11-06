@@ -105,9 +105,11 @@ assert.ok(panel.includes('下载劳动合同') && panel.includes('下载个人�
 /* 员工签回两份 */
 let signed = JSON.parse(JSON.stringify(ctx.empById('e18')));
 signed.docs = signed.docs || {};
-signed.docs.contract = { state: 'ok', file: 'vertrag_signed.pdf', dataUrl: 'data:,', at: '2026-11-06T09:00:00.000Z' };
-signed.docs.personalquestionnaire = { state: 'ok', file: 'fragebogen_signed.pdf', dataUrl: 'data:,', at: '2026-11-06T09:00:00.000Z' };
-signed.invite.contractSignedSubmittedAt = '2026-11-06T09:00:00.000Z';
+/* 签回件必须晚于本次合同发出时间（HR-ONB-37/53 的版本校验） */
+const signedAt = new Date(Date.now() + 30000).toISOString();
+signed.docs.contract = { state: 'ok', file: 'vertrag_signed.pdf', dataUrl: 'data:,', at: signedAt };
+signed.docs.personalquestionnaire = { state: 'ok', file: 'fragebogen_signed.pdf', dataUrl: 'data:,', at: signedAt };
+signed.invite.contractSignedSubmittedAt = signedAt;
 ctx.empSaveStaff(signed);
 /* 只通过一份不能归档 */
 assert.equal(ctx.empReviewContractAsset('e18', 'contract', 'approved', '').ok, true);

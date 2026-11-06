@@ -41,14 +41,45 @@ function empQuestionnaireTemplate() {
   return {
     bodyZh: saved.bodyZh ?? "您好，欢迎加入我们。请完成个人调查问卷，并通过入职链接提交个人资料。",
     bodyDe: saved.bodyDe ?? "Willkommen im Team. Bitte füllen Sie den Personalfragebogen aus und reichen Sie Ihre Angaben über den Einladungslink ein.",
-    file: saved.file || null
+    file: saved.file || null,
+    /* 组织级默认问卷的版本引用（HR-ONB-50）：发送记录只认版本 ID，之后换默认问卷不影响已发出的那份 */
+    versionId: saved.versionId || (saved.file ? "qv-legacy" : ""),
+    version: Number(saved.version) || (saved.file ? 1 : 0),
+    at: saved.at || "",
+    history: Array.isArray(saved.history) ? saved.history.map(row => ({ ...row })) : []
   };
 }
 
 function empSaveQuestionnaireTemplate(value) {
-  empMemory[EMP_QUESTIONNAIRE_TEMPLATE_KEY] = value;
+  /* 组织级默认问卷只有老板/管理员能写；页面禁用之外，写入入口自己也要拦（HR-ACCESS-04、HR-DOC-40） */
+  if (!empCan("ownerOnly")) return false;
+  const prev = empRead(EMP_QUESTIONNAIRE_TEMPLATE_KEY, null) || {};
+  const nextIn = value || {};
+  const prevFile = prev.file || null;
+  const nextFile = nextIn.file || null;
+  const fileChanged = JSON.stringify(prevFile) !== JSON.stringify(nextFile);
+  const prevVersion = Number(prev.version) || (prevFile ? 1 : 0);
+  const version = nextFile ? (fileChanged ? prevVersion + 1 : prevVersion || 1) : 0;
+  const versionId = nextFile
+    ? (fileChanged || !prev.versionId ? `qv${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` : prev.versionId)
+    : "";
+  const history = Array.isArray(prev.history) ? prev.history.map(row => ({ ...row })) : [];
+  /* 旧默认问卷保留为组织级历史版本，删除/替换都不动已发出的发送记录引用 */
+  if (fileChanged && prevFile) {
+    history.unshift({ file: prevFile, versionId: prev.versionId || "", version: prevVersion, at: prev.at || "", replacedAt: empNow() });
+  }
+  const next = {
+    bodyZh: nextIn.bodyZh ?? prev.bodyZh,
+    bodyDe: nextIn.bodyDe ?? prev.bodyDe,
+    file: nextFile,
+    versionId,
+    version,
+    at: fileChanged ? empNow() : (prev.at || empNow()),
+    history
+  };
+  empMemory[EMP_QUESTIONNAIRE_TEMPLATE_KEY] = next;
   try {
-    localStorage.setItem(EMP_QUESTIONNAIRE_TEMPLATE_KEY, JSON.stringify(value));
+    localStorage.setItem(EMP_QUESTIONNAIRE_TEMPLATE_KEY, JSON.stringify(next));
     return true;
   } catch (error) {
     return false;
@@ -286,6 +317,28 @@ function empActorLabel() {
 
 function empBossMark(code) {
   return typeof hrBossMark === "function" ? hrBossMark(code) : "";
+}
+
+/* 门店范围（HR-ACCESS-01、HR-ACCESS-55）：老板看全部门店；店长只处理顶栏当前门店。
+   店长视角没有单独的“所属门店”状态，所以直接把 empScope() 当作范围；无法判断时（没有门店上下文）
+   不放宽也不误拦，按原流程继续。写入入口要自己调用，不能只靠按钮置灰。 */
+function empIsOwnerView() {
+  return typeof hrIsOwner === "function" ? hrIsOwner() : true;
+}
+
+function empStoreInScope(e) {
+  if (empIsOwnerView()) return true;
+  const scope = typeof empScope === "function" ? empScope() : null;
+  if (!scope) return true;
+  return !!e && e.store === scope;
+}
+
+function empStoreScopeError(e) {
+  if (empStoreInScope(e)) return null;
+  const scope = typeof empScope === "function" ? empScope() : "";
+  return { ok: false, code: "store_scope",
+    message: empT(`这个人不在当前门店范围（${scope || "—"}）内，店长只能处理本店员工（HR-ACCESS-01）。`,
+      `Diese Person liegt außerhalb der aktuellen Filiale (${scope || "—"}); Filialleitungen bearbeiten nur eigene Mitarbeitende (HR-ACCESS-01).`) };
 }
 
 function empNationalityClass(e) {
@@ -550,6 +603,13 @@ const EMP_RULE_LIMITS = {
   defaultHourlyWage: { min: 0.01, max: 200, allowBlank: true },
   internshipNoticeMonths: { min: 1, max: 12 },
   sofortmeldungRemindDays: { min: 1, max: 14 },
+  minijobMonthlyMax: { min: 1, max: 2000 },
+  werkstudentWeeklyMax: { min: 1, max: 48 },
+  dailyHoursMax: { min: 1, max: 12 },
+  restBetweenShifts: { min: 9, max: 24 },
+  lohnfortzahlungWeeks: { min: 1, max: 52 },
+  payslipToleranceEuro: { min: 0, max: 1000, allowZero: true },
+  lateRoundingMinutes: { allowed: [15, 30, 60] },
   inviteSubmitStallDays: { min: 1, max: 30 },
   inviteReturnStallDays: { min: 1, max: 30 },
   contractSignStallDays: { min: 1, max: 30 },
@@ -574,6 +634,7 @@ function empRuleRangeText(r) {
   const limit = empRuleLimit(r.id);
   if (!limit) return "";
   if (limit.fixed) return empT(`固定 ${limit.max}，只读`, `Fest ${limit.max}, nur lesen`);
+  if (Array.isArray(limit.allowed)) return empT(`可选 ${limit.allowed.join(" / ")}`, `Zulässig: ${limit.allowed.join(" / ")}`);
   const zero = limit.allowZero ? empT("，可设为 0", ", 0 erlaubt") : "";
   const blank = limit.allowBlank ? empT("，可留空", ", leer erlaubt") : "";
   return empT(`范围 ${limit.min}–${limit.max}${zero}${blank}`, `Bereich ${limit.min}–${limit.max}${zero}${blank}`);
@@ -603,6 +664,9 @@ function empRuleInputValid(id, raw) {
   if (!Number.isFinite(value)) return { ok: false, message: empT("请填数字", "Bitte eine Zahl eingeben") };
   if (limit) {
     if (limit.fixed) return { ok: false, message: empT("这一项是固定值，不能修改", "Dieser Wert ist fest") };
+    if (Array.isArray(limit.allowed) && !limit.allowed.includes(value)) {
+      return { ok: false, message: empT(`只能选 ${limit.allowed.join(" / ")}`, `Nur ${limit.allowed.join(" / ")} zulässig`) };
+    }
     if (!limit.allowZero && value === 0) return { ok: false, message: empT("这一项不能设为 0", "Dieser Wert darf nicht 0 sein") };
     if (value < limit.min || value > limit.max) {
       return { ok: false, message: empT(`范围 ${limit.min}–${limit.max}`, `Bereich ${limit.min}–${limit.max}`) };
@@ -626,9 +690,32 @@ function empRule(id) {
   return hit ? hit.value : null;
 }
 
+/* 参数之间的固定关系（HR-CONTRACT-19/20/40）。页面保存和直接 setter 共用这一处，
+   否则页面拦住、脚本调用还能写进互相矛盾的组合。 */
+function empRuleRelationError(ruleMap) {
+  const num = id => Number(ruleMap.has(id) ? ruleMap.get(id) : empRule(id));
+  if ((ruleMap.has("docSoonDays") || ruleMap.has("docWarnDays")) && num("docSoonDays") <= num("docWarnDays")) {
+    return empT("关注期天数必须大于提醒天数", "Beobachtungszeit muss größer als die Vorwarnzeit sein");
+  }
+  if ((ruleMap.has("residenceWarnDays") || ruleMap.has("docSoonDays")) && num("residenceWarnDays") >= num("docSoonDays")) {
+    return empT("居留许可预警期必须小于关注期", "Aufenthaltstitel-Vorwarnzeit muss kleiner als die Beobachtungszeit sein");
+  }
+  if ((ruleMap.has("deferralDefaultDays") || ruleMap.has("deferralMaxDays")) && num("deferralDefaultDays") > num("deferralMaxDays")) {
+    return empT("暂缺默认期限不能大于最长缺项期", "Standardfrist darf nicht größer als die Höchstfrist sein");
+  }
+  return "";
+}
+
 function empSetRule(id, value) {
   if (!empCan("ownerOnly")) return empRules();
-  const next = empRules().map(r => (r.id === id ? { ...r, value } : r));
+  const limit = empRuleLimit(id);
+  if (!empRules().some(r => r.id === id)) return empRules();
+  /* 固定值、允许的枚举、上下限和参数关联都在这里统一执行（HR-CONTRACT-19/20/40） */
+  if (limit?.fixed) return empRules();
+  const checked = empRuleInputValid(id, value);
+  if (!checked.ok) return empRules();
+  if (empRuleRelationError(new Map([[id, checked.value]]))) return empRules();
+  const next = empRules().map(r => (r.id === id ? { ...r, value: checked.value } : r));
   empWrite(EMP_RULES_KEY, next.map(r => ({ id: r.id, value: r.value })));
   return next;
 }
@@ -677,6 +764,12 @@ function empEmployer(store) {
 
 function empSetEmployer(store, id, value) {
   if (!empCan("ownerOnly")) return empEmployerAll();
+  /* Betriebsnummer 是劳动局的 8 位号，写错即时申报和社保申报都报不上去（HR-ORG-13、HR-ONB-41） */
+  if (id === "betriebsnummer") {
+    const text = String(value == null ? "" : value).trim();
+    if (text && !/^\d{8}$/.test(text)) return empEmployerAll();
+    value = text;
+  }
   const all = { ...empEmployerAll() };
   all[store] = { ...(all[store] || {}), [id]: value };
   empWrite(EMP_EMPLOYER_KEY, all);
@@ -1112,6 +1205,13 @@ function empRoster(store) {
   return empAllStaff().filter(e => !store || e.store === store);
 }
 
+/* 证件提醒/总览/矩阵的范围：在岗 + 待入职（审核通过、入职日在将来）。
+   待入职的人证件也可能先过期，漏掉就会在入职当天才发现（HR-LIFE-02、HR-ONB-22）。 */
+function empDocRoster(store) {
+  return empAllStaff().filter(e => !empStatusHidden(e) && (!store || e.store === store)
+    && (e.status === "pending" || !empStatus(e.status).leaving));
+}
+
 /* 已撤销 / 已取消入职默认从名册隐藏（HR-LIFE-02）；需要看记录时去「入职邀请」。 */
 function empStatusHidden(e) {
   const inv = e?.invite?.state;
@@ -1242,7 +1342,7 @@ const EMP_DOC_LEVELS = {
 function empDocAlerts(store, today) {
   const day = today || empToday();
   const out = [];
-  empStaff(store).forEach(employee => {
+  empDocRoster(store).forEach(employee => {
     EMP_DOC_TYPES.forEach(type => {
       const s = empDocState(employee, type.id, day);
       if (s.level === "ok" || s.level === "na") return;
@@ -1295,7 +1395,9 @@ function empLevelByDays(days, warnDays, soonDays) {
 function empAlertsFor(e, today) {
   const day = today || empToday();
   const out = [];
-  if (empStatus(e.status).leaving) return out;   /* 离职和入职中的不进提醒 */
+  /* 离职和邀请中的不进提醒；待入职（审核通过、入职日在将来）只查证件，不套试用期/新人清单（HR-LIFE-02、HR-ONB-22） */
+  const pendingEntry = e.status === "pending";
+  if (empStatus(e.status).leaving && !pendingEntry) return out;
 
   EMP_DOC_TYPES.forEach(type => {
     const st = empDocState(e, type.id, day);
@@ -1306,7 +1408,7 @@ function empAlertsFor(e, today) {
                title: empDocLabel(type), date: type.id === "belehrung" ? empNextRetrain(e) : (e.docs?.[type.id]?.expiry || null) });
   });
 
-  if (e.status === "probation" && e.probationEnd && !e.leave) {
+  if (!pendingEntry && e.status === "probation" && e.probationEnd && !e.leave) {
     const end = empProbationEndEffective(e) || e.probationEnd;
     const days = empDaysBetween(day, end);
     /* 试用期只有「到了提醒窗口」和「还早」两种，不套证件那个 90 天关注档 ——
@@ -1316,21 +1418,21 @@ function empAlertsFor(e, today) {
       title: empRaw({ zh: "试用期结束", de: "Ende der Probezeit" }), date: end });
   }
 
-  if (e.contract?.befristetUntil && !e.leave) {
+  if (!pendingEntry && e.contract?.befristetUntil && !e.leave) {
     const days = empDaysBetween(day, e.contract.befristetUntil);
     const level = empLevelByDays(days);
     if (level !== "ok") out.push({ kind: "befristet", employee: e, level, days,
       title: empRaw({ zh: "定期合同到期", de: "Befristung endet" }), date: e.contract.befristetUntil });
   }
 
-  EMP_KEY_FIELDS.forEach(f => {
+  if (!pendingEntry) EMP_KEY_FIELDS.forEach(f => {
     const v = empGetPath(e, f.path);
     if (v == null || String(v).trim() === "") out.push({ kind: "profile", employee: e, level: "missing",
       days: null, title: empRaw(f.name), why: empRaw(f.why), path: f.path });
   });
 
   /* 新人清单：上工日之前没办完就该催，过了上工日还没办就是逾期 */
-  if (empIsNewHire(e)) {
+  if (!pendingEntry && empIsNewHire(e)) {
     const open = empNewHireOpen(e);
     const days = e.entryDate ? empDaysBetween(day, e.entryDate) : 0;
     /* 入职当天仍未办完（即时申报等）就算逾期，不再只标“提醒”（HR-ONB-39/40） */
@@ -1352,7 +1454,8 @@ function empAlertsFor(e, today) {
 function empAlerts(store, today) {
   const day = today || empToday();
   const out = [];
-  empStaff(store).forEach(e => out.push(...empAlertsFor(e, day)));
+  /* 与 empDocAlerts 同一范围：在岗 + 待入职，待入职只在 empAlertsFor 里出证件项 */
+  empDocRoster(store).forEach(e => out.push(...empAlertsFor(e, day)));
   return out.sort((a, b) => {
     const r = EMP_DOC_LEVELS[a.level].rank - EMP_DOC_LEVELS[b.level].rank;
     if (r) return r;
@@ -1410,7 +1513,9 @@ function empWorkflowEntries(e, today) {
   }
   const special = e.employeePortal?.specialSubmission;
   if (special?.state === "pending") out.push(empTodoEntry(e, "specialPending", "warn"));
-  const approved = (e.missingApprovals || []).filter(x => x.status === "approved" && x.deadline && x.deadline < day);
+  /* 逾期暂缺：该项补齐后待办自动消失，不能只按“批准过且过期”一直挂着（HR-ONB-32） */
+  const approved = (e.missingApprovals || []).filter(x => x.status === "approved" && x.deadline && x.deadline < day
+    && empSpecialStillMissing(e, x));
   if (approved.length) out.push(empTodoEntry(e, "specialDue", "expired", { days: empDaysBetween(day, approved[0].deadline) }));
   if (e.leave && !empHandoverDone(e)) out.push(empTodoEntry(e, "handover", "warn"));
   if (e.account?.state === "pending_link" || e.accountLinkRequest?.state === "pending") {
@@ -1469,7 +1574,9 @@ function empSoonEntries(store, today) {
 
 function empPendingPeople(store, today) {
   const day = today || empToday();
-  return empRosterVisible(store).filter(e => e.status !== "left" && empPendingEntries(e, day).length);
+  /* 离职后的交接、保存期到期和合同提案也是待办，不能因为 status=left 就从首页人数里消失；
+     首页和档案列表「需要处理」共用这一份口径（HR-TODO-41/50/51）。 */
+  return empRosterVisible(store).filter(e => empPendingEntries(e, day).length);
 }
 
 function empSoonPeople(store, today) {
@@ -1529,7 +1636,8 @@ function empSofortRows(e, noSv) {
   const alt = e.sofortmeldung?.alt || {};
   const rows = [
     { name: { zh: "公司法定名称", de: "Firmenname" }, value: legal, fix: rules },
-    { name: { zh: "Betriebsnummer", de: "Betriebsnummer" }, value: emp.betriebsnummer, fix: rules },
+    { name: { zh: "Betriebsnummer", de: "Betriebsnummer" }, value: emp.betriebsnummer, fix: rules,
+      valid: /^\d{8}$/.test(String(emp.betriebsnummer || "").trim()) },
     { name: { zh: "经营地址", de: "Betriebsstätte" }, value: emp.address, fix: rules },
     { name: { zh: "员工姓名", de: "Name des Mitarbeiters" }, value: e.name, fix: prof },
     { name: { zh: "出生日期", de: "Geburtsdatum" }, value: e.birthday ? empFormatDate(e.birthday) : "", fix: prof },
@@ -1544,7 +1652,7 @@ function empSofortRows(e, noSv) {
       ["gender", { zh: "性别", de: "Geschlecht" }]
     ].forEach(([key, name]) => rows.push({ name, value: alt[key] || "", fix: prof, optional: true }));
   }
-  return rows.map(r => ({ ...r, ok: r.optional || (r.value != null && String(r.value).trim() !== "") }));
+  return rows.map(r => ({ ...r, ok: r.optional || ((r.value != null && String(r.value).trim() !== "") && r.valid !== false) }));
 }
 
 function empSofortText(e) {
@@ -1616,6 +1724,7 @@ function empSofortState(e, today) {
 function empMarkSofort(id, on, extra = {}) {
   const e = empById(id);
   if (!e) return null;
+  if (empStoreScopeError(e)) return null;
   e.sofortmeldung = on ? { at: empNow(), by: empActorLabel(), noSv: !!extra.noSv, alt: extra.noSv ? { ...(extra.alt || {}) } : {} } : null;
   e.history = [...(e.history || []), {
     at: empNow(), field: "sofortmeldung",
@@ -1638,6 +1747,16 @@ const EMP_SPECIAL_ITEMS = [
 
 function empSpecialItem(item) {
   return EMP_SPECIAL_ITEMS.find(x => x.item === item) || null;
+}
+
+/* 暂缺项现在是否仍缺：按入职清单的完成状态实时判断（HR-ONB-32）。 */
+function empSpecialStillMissing(e, approval) {
+  const key = approval?.item || approval?.key || "";
+  const keys = EMP_SPECIAL_ONB_KEYS[key] || [key];
+  /* 审核阶段看冻结的提交快照；审核通过后以正式档案为准（历史快照不能再证明“已补齐”） */
+  const lists = e?.invite?.state === "approved" ? [empOnbItems(e)] : [empOnbItems(e, "submitted"), empOnbItems(e)];
+  const filled = k => lists.some(list => list.find(x => x.key === k)?.done);
+  return keys.some(k => !filled(k));
 }
 
 function empSpecialLabel(item, fallback) {
@@ -1686,6 +1805,8 @@ function empNormalizeSpecialSubmission(e) {
 /* 暂缺审批：可按单一项处理；不传 item 时一次处理整条申请（兼容旧调用）。 */
 function empResolveSpecialSubmission(id, decision, deadline, reason, item) {
   const e = empById(id);
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   const special = e?.employeePortal?.specialSubmission;
   if (!special || special.state !== "pending") return { ok: false, code: "missing" };
   if (!empCan("sensitive")) return { ok: false, code: "permission", message: empDenyReason("sensitive") };
@@ -1751,15 +1872,21 @@ function empResolveSpecialSubmission(id, decision, deadline, reason, item) {
 }
 
 /* 同一项最多延期 1 次；延期必须重新批准并写理由（HR-ONB-34）。 */
+function empMaxExtensions() {
+  const value = Number(empRule("deferralMaxExtensions"));
+  return Number.isFinite(value) ? value : 1;
+}
+
 function empExtendMissingApproval(id, item, deadline, reason) {
   const e = empById(id);
   if (!e) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("sensitive")) return { ok: false, code: "permission", message: empDenyReason("sensitive") };
   const list = [...(e.missingApprovals || [])];
   const hit = list.find(x => (x.item || x.key) === item);
   if (!hit || hit.status !== "approved") return { ok: false, code: "not_approved", message: empT("只有已批准的暂缺可以延期", "Nur freigegebene Sonderfreigaben") };
-  const maxExtensions = Number(empRule("deferralMaxExtensions"));
-  const allowedExtensions = Number.isFinite(maxExtensions) ? maxExtensions : 1;
+  const allowedExtensions = empMaxExtensions();
   if ((Number(hit.extensionCount) || 0) >= allowedExtensions) {
     return { ok: false, code: "extension_limit", message: empT(`这一项最多延期 ${allowedExtensions} 次，不能再延（HR-ONB-34）。`, `Maximal ${allowedExtensions} Verlängerung(en) (HR-ONB-34).`) };
   }
@@ -1799,6 +1926,7 @@ function empFirstWeekShift(e) {
 function empUploadDoc(id, docId, file, ref) {
   const e = empById(id);
   if (!e || !file) return null;
+  if (empStoreScopeError(e)) return null;
   const next = JSON.parse(JSON.stringify(e));
   empReplaceDoc(next, docId, { file, ref, by: "manager" });
   return empSaveWithHistory(next);
@@ -1807,6 +1935,7 @@ function empUploadDoc(id, docId, file, ref) {
 function empClearDoc(id, docId) {
   const e = empById(id);
   if (!e) return null;
+  if (empStoreScopeError(e)) return null;
   const next = JSON.parse(JSON.stringify(e));
   next.docs = { ...(next.docs || {}) };
   delete next.docs[docId];
@@ -1872,6 +2001,7 @@ function empNewHireOpen(e) {
 function empSetNewHireTask(id, taskId, done) {
   const e = empById(id);
   if (!e) return null;
+  if (empStoreScopeError(e)) return null;
   e.onboardingTasks = { ...(e.onboardingTasks || {}), [taskId]: !!done };
   return empSaveStaff(e);
 }
@@ -1922,6 +2052,7 @@ function empHasRequest(e) {
 function empSendRequest(id, note) {
   const e = empById(id);
   if (!e || !empAccountActive(e)) return null;
+  if (empStoreScopeError(e)) return null;
   const items = empTopupItems(e);
   if (!items.length) return null;
   /* 同一员工同时只能有一条未结束的补件请求（HR-ONB-44） */
@@ -1930,6 +2061,7 @@ function empSendRequest(id, note) {
   if (empHasOpenUpdateRequest(e)) return null;
   if (empOpenSupplementSnapshot(e)) return null;
   e.request = {
+    requestId: empRequestId("topup"),
     token: empToken(),
     kind: "topup",
     state: "sent",
@@ -1945,6 +2077,16 @@ function empSendRequest(id, note) {
 function empCancelRequest(id) {
   const e = empById(id);
   if (!e || !e.request) return null;
+  if (empStoreScopeError(e)) return null;
+  /* 撤销时同一请求的第二份投影也要关闭，不能留下可被再次采纳的补件记录（HR-ONB-43/44） */
+  const other = e.employeePortal?.supplementSubmission;
+  if (other && empSameRequestId(other, e.request)) {
+    e.employeePortal = {
+      ...(e.employeePortal || {}),
+      supplementRequest: null,
+      supplementSubmission: { ...other, requestId: e.request.requestId || other.requestId || "", status: "cancelled", reviewedAt: empNow(), reviewedBy: empActorLabel() }
+    };
+  }
   e.request = null;
   return empSaveStaff(e);
 }
@@ -2065,8 +2207,9 @@ function empTopupReviewItems(e, req) {
       to: doc.file || "",
       file: doc.file ? { name: doc.file, data: doc.dataUrl || null, ref: doc.ref, at: doc.at || "" } : null,
       expiry: doc.expiry || "",
-      keepExpiry: false,
-      keepReason: "",
+      /* 保留原日期的原因随冻结的补件版本一起进入核对卡和采纳记录（HR-DOC-20） */
+      keepExpiry: doc.keepExpiry === true,
+      keepReason: doc.keepReason || "",
       sensitive: true
     };
   });
@@ -2109,26 +2252,39 @@ function empSupplementReviewItems(e, sup) {
       to: doc.file || "",
       file: doc.file ? { name: doc.file, data: doc.dataUrl || null, ref: doc.ref, at: doc.at || "" } : null,
       expiry: doc.expiry || "",
-      keepExpiry: false,
-      keepReason: "",
+      keepExpiry: doc.keepExpiry === true,
+      keepReason: doc.keepReason || "",
       sensitive: true
     });
   });
   return out;
 }
 
+/* 同一张补件请求会同时投影到 e.request 和 employeePortal.supplementSubmission/updateRequest。
+   两条投影用同一个 requestId 标记；采纳、退回、撤销时一起关闭，避免核对卡再次复活（HR-ONB-43/44）。 */
+function empRequestId(prefix) {
+  return `${prefix || "req"}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function empSameRequestId(a, b) {
+  const left = a?.requestId || "";
+  const right = b?.requestId || "";
+  return !left || !right || left === right;
+}
+
 function empReviewSources(e) {
   const out = [];
   const update = e?.employeePortal?.updateRequest;
   if (update && update.state === "pending") {
-    out.push({ kind: "update", req: update, at: update.at || "", items: empUpdateReviewItems(e, update) });
+    out.push({ kind: "update", req: update, requestId: update.requestId || "", at: update.at || "", items: empUpdateReviewItems(e, update) });
   }
   if (e?.request && e.request.state === "submitted") {
-    out.push({ kind: "topup", req: e.request, at: e.request.submittedAt || e.request.sentAt || "", items: empTopupReviewItems(e, e.request) });
+    out.push({ kind: "topup", req: e.request, requestId: e.request.requestId || "", at: e.request.submittedAt || e.request.sentAt || "", items: empTopupReviewItems(e, e.request) });
   }
   const supplement = empOpenSupplementSnapshot(e);
+  /* 已经有一条补件请求时不再把同一件事的第二份投影当成第二张卡 */
   if (supplement && !out.some(x => x.kind === "topup")) {
-    out.push({ kind: "supplement", req: supplement, at: supplement.at || "", items: empSupplementReviewItems(e, supplement) });
+    out.push({ kind: "supplement", req: supplement, requestId: supplement.requestId || "", at: supplement.at || "", items: empSupplementReviewItems(e, supplement) });
   }
   return out;
 }
@@ -2249,6 +2405,8 @@ function empReviewSummary(sources) {
 
 function empAcceptReview(id) {
   const e = empById(id);
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   const sources = empReviewSources(e);
   if (!sources.length) return { ok: false, code: "missing" };
   const valid = empReviewValidate(e, sources);
@@ -2258,12 +2416,30 @@ function empAcceptReview(id) {
   const next = JSON.parse(JSON.stringify(e));
   sources.forEach(src => {
     src.items.forEach(item => empApplyReviewItem(next, item, e, actor));
+    const portal = next.employeePortal || {};
+    const reqId = src.req.requestId || (src.kind === "topup" ? portal.supplementSubmission?.requestId : "") || empRequestId(src.kind);
     if (src.kind === "update") {
-      next.employeePortal = { ...(next.employeePortal || {}), updateRequest: { ...src.req, state: "done", reviewedAt: now, reviewedBy: actor } };
+      next.employeePortal = { ...portal, updateRequest: { ...src.req, requestId: reqId, state: "done", reviewedAt: now, reviewedBy: actor } };
+      /* 同一请求在员工端还有一份补件投影时一起关闭，不能留一条可被再次采纳的记录 */
+      if (portal.supplementSubmission && empSameRequestId(portal.supplementSubmission, src.req)) {
+        next.employeePortal.supplementSubmission = { ...portal.supplementSubmission, requestId: reqId, status: "accepted", reviewedAt: now, reviewedBy: actor };
+        next.employeePortal.supplementRequest = null;
+      }
     } else if (src.kind === "topup") {
-      next.request = { ...next.request, state: "done", acceptedAt: now, acceptedBy: actor };
+      next.request = { ...next.request, requestId: reqId, state: "done", acceptedAt: now, acceptedBy: actor };
+      if (portal.supplementSubmission) {
+        next.employeePortal = { ...portal, supplementRequest: null,
+          supplementSubmission: { ...portal.supplementSubmission, requestId: reqId, status: "accepted", reviewedAt: now, reviewedBy: actor } };
+      }
     } else {
-      next.employeePortal = { ...(next.employeePortal || {}), supplementRequest: null, supplementSubmission: { ...src.req, status: "accepted", reviewedAt: now, reviewedBy: actor } };
+      next.employeePortal = { ...portal, supplementRequest: null,
+        supplementSubmission: { ...src.req, requestId: reqId, status: "accepted", reviewedAt: now, reviewedBy: actor } };
+      if (next.request && next.request.state !== "done" && empSameRequestId(next.request, src.req)) {
+        next.request = { ...next.request, requestId: next.request.requestId || reqId, state: "done", acceptedAt: now, acceptedBy: actor };
+      }
+      if (portal.updateRequest?.state === "pending" && empSameRequestId(portal.updateRequest, src.req)) {
+        next.employeePortal.updateRequest = { ...portal.updateRequest, requestId: reqId, state: "done", reviewedAt: now, reviewedBy: actor };
+      }
     }
   });
   const count = empReviewAllItems(sources).length;
@@ -2274,6 +2450,8 @@ function empAcceptReview(id) {
 
 function empReturnReview(id, reason) {
   const e = empById(id);
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   const sources = empReviewSources(e);
   if (!sources.length) return { ok: false, code: "missing" };
   const note = String(reason || "").trim();
@@ -2282,17 +2460,33 @@ function empReturnReview(id, reason) {
   const now = empNow();
   const next = JSON.parse(JSON.stringify(e));
   sources.forEach(src => {
+    const portal = next.employeePortal || {};
+    const reqId = src.req.requestId || (src.kind === "topup" ? portal.supplementSubmission?.requestId : "") || empRequestId(src.kind);
     if (src.kind === "update") {
-      next.employeePortal = { ...(next.employeePortal || {}), updateRequest: { ...src.req, state: "returned", reviewedAt: now, reviewedBy: actor, reason: note } };
+      next.employeePortal = { ...portal, updateRequest: { ...src.req, requestId: reqId, state: "returned", reviewedAt: now, reviewedBy: actor, reason: note } };
+      if (portal.supplementSubmission && empSameRequestId(portal.supplementSubmission, src.req)) {
+        next.employeePortal.supplementSubmission = { ...portal.supplementSubmission, requestId: reqId, status: "returned", reviewedAt: now, reviewedBy: actor, reason: note };
+        next.employeePortal.supplementRequest = null;
+      }
     } else if (src.kind === "topup") {
-      next.request = { ...next.request, state: "sent", note, returnedAt: now, returnedBy: actor, submitted: {}, sentAt: now };
+      next.request = { ...next.request, requestId: reqId, state: "sent", note, returnedAt: now, returnedBy: actor, submitted: {}, sentAt: now };
+      if (portal.supplementSubmission) {
+        next.employeePortal = { ...portal, supplementRequest: null,
+          supplementSubmission: { ...portal.supplementSubmission, requestId: reqId, status: "returned", reviewedAt: now, reviewedBy: actor, reason: note } };
+      }
     } else {
       next.employeePortal = {
-        ...(next.employeePortal || {}),
-        supplementRequest: { state: "open", at: now, note, items: src.req.items || [] },
-        supplementSubmission: { ...src.req, status: "returned", reviewedAt: now, reviewedBy: actor, reason: note },
+        ...portal,
+        supplementRequest: { requestId: reqId, state: "open", at: now, note, items: src.req.items || [] },
+        supplementSubmission: { ...src.req, requestId: reqId, status: "returned", reviewedAt: now, reviewedBy: actor, reason: note },
         supplementReturnedAt: null
       };
+      if (next.request && next.request.state !== "done" && empSameRequestId(next.request, src.req)) {
+        next.request = { ...next.request, requestId: next.request.requestId || reqId, state: "sent", note, returnedAt: now, returnedBy: actor, submitted: {}, sentAt: now };
+      }
+      if (portal.updateRequest?.state === "pending" && empSameRequestId(portal.updateRequest, src.req)) {
+        next.employeePortal.updateRequest = { ...portal.updateRequest, requestId: reqId, state: "returned", reviewedAt: now, reviewedBy: actor, reason: note };
+      }
     }
   });
   empLogEvent(next, "review.returned", `${empReviewSummary(sources)}：退回，原因：${note}`, actor);
@@ -2359,9 +2553,14 @@ function empAccountInvitedToday(e) {
 function empInviteAccount(id, mode) {
   const e = empById(id);
   if (!e) return { ok: false, reason: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return { ...scope, reason: scope.code };
   if (!empCan("invite")) return { ok: false, reason: "permission", message: empDenyReason("invite") };
   const mail = (e.contact?.email || "").trim();
   if (!mail) return { ok: false, reason: "email" };
+  /* 与其他邀请入口共用同一套邮箱唯一性校验，批量邀请也不能给两个档案发同一个邮箱（HR-ACCESS-23/30） */
+  const conflict = empInviteEmailConflict(mail, e.id);
+  if (conflict) return { ok: false, reason: "conflict", message: conflict.message };
   if (mode !== "invite" && empAccountInvitedToday(e)) return { ok: false, reason: "cooldown" };
   const state = empAccountState(e);
   if (mode === "resend" && !["invited", "expired", "send_failed"].includes(state)) return { ok: false, reason: "state" };
@@ -2378,15 +2577,50 @@ function empInviteAccount(id, mode) {
     sentCount: (Number(next.account?.sentCount) || 0) + 1
   };
   if (mode === "reinvite") next.account.reinvitedAt = empNow();
+  const now = empNow();
+  if (!next.invite) {
+    /* 在岗老员工开通：建立一条正式邀请记录（token、7 天有效期、veteran 模式），
+       员工进去只确认资料、补证件，不重走审核和合同（HR-ACCESS-30、HR-ONB-52）。 */
+    next.invite = {
+      state: "sent",
+      fillMode: "veteran",
+      token: empToken(),
+      createdAt: now,
+      sentAt: now,
+      firstSentAt: now,
+      expiresAt: empInviteExpiryFrom(now),
+      sendResult: "sent",
+      sendResultAt: now,
+      reminders: [],
+      resendLog: [],
+      draft: null,
+      submitted: {}
+    };
+  }
   /* 还在入职流程里的人：账号卡上的“发邀请/重新发送”同时推进入职邀请，
      避免账号状态说已发送、邀请详情还说草稿（邀请详情仍由第 5 批细化）。 */
   if (next.invite && next.invite.state !== "approved") {
-    if (mode === "invite" && next.invite.state === "draft") {
-      next.invite.state = "sent";
-      next.invite.sentAt = next.invite.sentAt || empNow();
+    const inv = next.invite;
+    if (inv.state === "revoked") {
+      inv.previousInvites = [{ token: inv.token, createdAt: inv.createdAt, sentAt: inv.sentAt, state: inv.state, revokedAt: inv.revokedAt || now },
+        ...(inv.previousInvites || [])];
+      inv.token = empToken();
+      inv.state = "sent";
+      inv.sentAt = now;
+      inv.firstSentAt = now;
+      inv.expiresAt = empInviteExpiryFrom(now);
+      inv.revokeReason = "";
+      inv.revokedAt = null;
+    } else if (mode === "invite" && inv.state === "draft") {
+      inv.state = "sent";
+      inv.sentAt = inv.sentAt || now;
+      inv.expiresAt = inv.expiresAt || empInviteExpiryFrom(inv.sentAt);
     } else if (mode !== "invite" && next.invite.state === "sent") {
-      next.invite.reminders = [...(next.invite.reminders || []), { at: empNow(), kind: "resend" }];
+      inv.reminders = [...(inv.reminders || []), { at: now, kind: "resend" }];
     }
+    /* 旧记录可能只有账号、没有 token/有效期；补上，否则员工端拿不到可进入的邀请（HR-ONB-52） */
+    if (!inv.token) inv.token = empToken();
+    if (!inv.expiresAt) inv.expiresAt = empInviteExpiryFrom(inv.sentAt || now);
   }
   empSaveStaff(next);
   return { ok: true };
@@ -2991,12 +3225,24 @@ function empContractConditionChanges(prev, next) {
 }
 
 /* 展示用：一版合同条件的起止时间。实际版本取 e.contractVersions；老档案没有记录时按当前值兜底。 */
+function empContractVersionSeq(v) {
+  const n = Number(v?.seq);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function empContractVersionId(v) {
+  if (!v) return "";
+  return v.id || `legacy:${v.validFrom || ""}:${v.at || ""}:${empContractVersionSeq(v)}`;
+}
+
 function empContractVersions(e) {
   const list = Array.isArray(e?.contractVersions) ? e.contractVersions.slice() : [];
   if (!list.length && e?.contract) {
-    list.push({ validFrom: e.entryDate || "", at: "", by: "", source: "initial", data: empContractSnapshot(e.contract) });
+    list.push({ id: "legacy", seq: 0, validFrom: e.entryDate || "", at: "", by: "", source: "initial", data: empContractSnapshot(e.contract) });
   }
+  /* 同生效日、同毫秒保存两版时，靠单调序号决定谁是最新，不能退回旧值（HR-CONTRACT-02/03） */
   return list.sort((a, b) => String(b.validFrom || "").localeCompare(String(a.validFrom || ""))
+    || empContractVersionSeq(b) - empContractVersionSeq(a)
     || String(b.at || "").localeCompare(String(a.at || "")));
 }
 
@@ -3005,16 +3251,30 @@ function empContractVersionAt(e, date) {
   return empContractVersions(e).filter(v => v.validFrom && v.validFrom <= day)[0] || null;
 }
 
+/* 最近“保存过”的版本，按保存顺序而不是生效日期排 —— 未来版本也算（HR-ACCESS-56）。 */
+function empLatestContractVersion(e) {
+  const list = empContractVersions(e);
+  return list.reduce((best, v) => {
+    if (!best) return v;
+    const seqDiff = empContractVersionSeq(v) - empContractVersionSeq(best);
+    if (seqDiff) return seqDiff > 0 ? v : best;
+    const atDiff = String(v.at || "").localeCompare(String(best.at || ""));
+    if (atDiff) return atDiff > 0 ? v : best;
+    return String(v.validFrom || "") > String(best.validFrom || "") ? v : best;
+  }, null);
+}
+
 function empPushContractVersion(e, validFrom, by, prevContract) {
   /* 第一次保存前把原值作为初始版本留下，否则“旧版保留”只剩一句口号 */
   if (!Array.isArray(e.contractVersions) || !e.contractVersions.length) {
     const baselineFrom = prevContract?.validFrom || e.entryDate || "";
     e.contractVersions = baselineFrom ? [{
-      validFrom: baselineFrom, at: "", by: "", source: "initial", data: empContractSnapshot(prevContract || {})
+      id: "legacy", seq: 0, validFrom: baselineFrom, at: "", by: "", source: "initial", data: empContractSnapshot(prevContract || {})
     }] : [];
   }
+  const seq = e.contractVersions.reduce((max, v) => Math.max(max, empContractVersionSeq(v)), 0) + 1;
   e.contractVersions = [...(e.contractVersions || []), {
-    validFrom, at: empNow(), by: by || empActorLabel(), source: "saved", data: empContractSnapshot(e.contract)
+    id: `cv${seq}`, seq, validFrom, at: empNow(), by: by || empActorLabel(), source: "saved", data: empContractSnapshot(e.contract)
   }];
   e.contract.validFrom = validFrom;
   return e.contractVersions;
@@ -3050,6 +3310,8 @@ function empSyncEffectiveContract(e, day) {
 function empRequestContractChange(id, patch, note, effectiveDate) {
   const e = empById(id);
   if (!e) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   const from = String(effectiveDate || "").trim();
   if (!empValidExpiry(from)) return { ok: false, code: "date", message: empT("请填有效的生效日期", "Gültiges Wirksamkeitsdatum angeben") };
   if (e.entryDate && from < e.entryDate) {
@@ -3101,6 +3363,8 @@ function empContractChangeDiff(changes) {
 /* 店长的合同条件/薪资改动先形成提案，老板确认后才写新版本（HR-ACCESS-07、旅程 J5）。 */
 function empSubmitContractProposal(prev, nextIn, changes, validFrom) {
   if (!prev) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(prev);
+  if (scope) return scope;
   if (prev.contractProposal?.state === "pending") {
     return { ok: false, code: "proposal_pending", message: empT("已有一份合同条件提案在等老板确认，先处理那一份。", "Es liegt bereits ein Vorschlag zur Bestätigung vor.") };
   }
@@ -3108,12 +3372,9 @@ function empSubmitContractProposal(prev, nextIn, changes, validFrom) {
   if (prev.entryDate && validFrom < prev.entryDate) {
     return { ok: false, code: "before_entry", message: empT(`生效日期不得早于入职日 ${empFormatDate(prev.entryDate)}`, `Wirksamkeit nicht vor Eintritt ${empFormatDate(prev.entryDate)}`) };
   }
-  const next = JSON.parse(JSON.stringify(nextIn));
-  /* 提案只接收合同条件；入职日期、试用期、状态、离职记录不属于店长可提案范围（HR-ACCESS-07、HR-LIFE-10） */
-  next.entryDate = prev.entryDate;
-  next.probationEnd = prev.probationEnd;
-  next.status = prev.status;
-  next.leave = prev.leave;
+  /* 结果从“当前正式档案”构造，只接收合同字段白名单；调用方带来的 ids、docs、
+     归档状态都不能整份复制进来（HR-ACCESS-07/55）。 */
+  const next = JSON.parse(JSON.stringify(prev));
   const allowedContract = { ...(prev.contract || {}) };
   EMP_CONTRACT_VERSION_FIELDS.forEach(key => {
     if (nextIn?.contract?.[key] !== undefined) allowedContract[key] = nextIn.contract[key];
@@ -3123,22 +3384,30 @@ function empSubmitContractProposal(prev, nextIn, changes, validFrom) {
   }
   next.contract = allowedContract;
   const proposed = empContractSnapshot(next.contract);
+  /* 改动清单也按白名单重算，避免调用方伪造一条不存在的改动 */
+  const safeChanges = empContractConditionChanges(prev.contract || {}, allowedContract);
+  if (!safeChanges.length) {
+    return { ok: false, code: "nochange", message: empT("没有可提案的合同条件改动", "Keine zulässige Vertragsänderung") };
+  }
+  const latest = empLatestContractVersion(prev);
   next.contractProposal = {
     id: `cp${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     state: "pending", at: empNow(), by: empActorLabel(), validFrom,
     data: proposed,
-    changes: empContractChangeDiff(changes),
-    /* 基线：提案提交时的合同快照与入职日。期间档案被别人改过就不能直接确认（HR-ACCESS-07/56） */
+    changes: empContractChangeDiff(safeChanges),
+    /* 基线：提交时今天有效的快照 + 最新版本 ID（含未来版本）。期间任何一版被加进来都不能直接确认（HR-ACCESS-07/56） */
     baseline: {
       at: empNow(),
       entryDate: prev.entryDate || "",
       validFrom: empContractVersions(prev)[0]?.validFrom || "",
+      versionId: empContractVersionId(latest),
+      versionCount: empContractVersions(prev).length,
       data: empContractSnapshot(prev.contract || {})
     }
   };
   /* 提案期间正式档案保持原值 */
   next.contract = JSON.parse(JSON.stringify(prev.contract || {}));
-  empLogEvent(next, "contract.proposal", `生效日期 ${validFrom} · ${changes.length} 项改动`);
+  empLogEvent(next, "contract.proposal", `生效日期 ${validFrom} · ${safeChanges.length} 项改动`);
   empSaveWithHistory(next);
   return { ok: true };
 }
@@ -3151,6 +3420,8 @@ function empConfirmProbation(id, date) {
 function empSetProbationConfirm(id, date) {
   const e = empById(id);
   if (!e) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("ownerOnly")) return { ok: false, code: "permission", message: empDenyReason("ownerOnly") };
   const day = date || empToday();
   if (!empValidExpiry(day)) return { ok: false, code: "date", message: "请填转正日期" };
@@ -3168,6 +3439,8 @@ function empSetProbationConfirm(id, date) {
 function empConfirmContractProposal(id) {
   const e = empById(id);
   if (!e?.contractProposal || e.contractProposal.state !== "pending") return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("confirmProposal")) return { ok: false, code: "permission", message: empDenyReason("confirmProposal") };
   const p = e.contractProposal;
   /* 基线冲突：店长提交提案后，档案又被改过（薪资、工时、入职日）→ 拒绝确认，提案保留待重新提交 */
@@ -3176,6 +3449,19 @@ function empConfirmContractProposal(id) {
     const currentData = JSON.stringify(empContractSnapshot(e.contract || {}));
     if (baselineData !== currentData || String(p.baseline.entryDate || "") !== String(e.entryDate || "")) {
       return { ok: false, code: "stale", message: empT("提交提案后档案已被修改，请让店长按当前条件重新提交。", "Die Akte wurde nach dem Vorschlag geändert — bitte neu einreichen.") };
+    }
+    /* 只比“今天有效的内容”会漏掉未来版本：老板后加一版 2027 生效的工时，
+       旧提案仍能把之后的有效值覆盖回去。这里比最新保存的版本 ID（含未来版本）与版本数。 */
+    const versions = empContractVersions(e);
+    const latest = empLatestContractVersion(e);
+    const latestId = empContractVersionId(latest);
+    if ((p.baseline.versionId !== undefined && latestId !== p.baseline.versionId)
+      || (p.baseline.versionCount !== undefined && versions.length !== Number(p.baseline.versionCount))) {
+      return { ok: false, code: "stale", message: empT("提交提案后又保存了合同版本（含未来生效版本），请让店长按最新版本重新提交。", "Nach dem Vorschlag wurde eine neue Vertragsversion gespeichert — bitte neu einreichen.") };
+    }
+    /* 旧提案没有版本 ID：只要有比基线更晚保存的版本就按冲突处理 */
+    if (p.baseline.versionId === undefined && p.baseline.at && latest?.at && String(latest.at) > String(p.baseline.at)) {
+      return { ok: false, code: "stale", message: empT("提交提案后又保存了合同版本，请让店长重新提交。", "Nach dem Vorschlag wurde eine neue Vertragsversion gespeichert.") };
     }
   }
   if (!empValidExpiry(p.validFrom)) return { ok: false, code: "date", message: empT("提案的生效日期无效", "Wirksamkeitsdatum ungültig") };
@@ -3198,6 +3484,8 @@ function empConfirmContractProposal(id) {
 function empRejectContractProposal(id, reason) {
   const e = empById(id);
   if (!e?.contractProposal || e.contractProposal.state !== "pending") return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("confirmProposal")) return { ok: false, code: "permission", message: empDenyReason("confirmProposal") };
   const next = JSON.parse(JSON.stringify(e));
   const p = next.contractProposal;
@@ -3228,6 +3516,7 @@ function empHandoverDone(e) {
 function empSetHandoverItem(id, itemId, done) {
   const e = empById(id);
   if (!e) return null;
+  if (empStoreScopeError(e)) return null;
   const next = JSON.parse(JSON.stringify(e));
   const h = empHandover(next);
   h.items[itemId] = !!done;
@@ -3243,6 +3532,8 @@ function empSetHandoverItem(id, itemId, done) {
 function empSetLeave(id, leave, options = {}) {
   const e = empById(id);
   if (!e) return { ok: false, code: "missing", message: "找不到员工档案" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!leave || typeof leave !== "object") return { ok: false, code: "input", message: empT("离职记录为空", "Austrittsdaten fehlen") };
   /* 谁提出、通知日都必须由人来填；默认值只放在表单预填，入口不再兜底（HR-LIFE-13） */
   const rawWho = leave.who || leave.type;
@@ -3281,6 +3572,8 @@ function empSetLeave(id, leave, options = {}) {
 function empApplyLeave(id, record, meta = {}) {
   const e = empById(id);
   if (!e) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   /* 实际写入入口同样要校验权限与记录本身：不能靠调用方先判断（HR-ACCESS-07） */
   if (!empCan("confirmProposal")) return { ok: false, code: "permission", message: empDenyReason("confirmProposal") };
   const who = EMP_LEAVE_TYPES.find(t => t.id === record?.who || (t.legacy || []).includes(record?.who));
@@ -3886,6 +4179,8 @@ function empInviteExpiryFrom(iso) {
 function empSendInvite(id, opts) {
   const e = empById(id);
   if (!e || !e.invite) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("invite")) return { ok: false, code: "permission", message: empDenyReason("invite") };
   const resend = !!(opts && opts.resend);
   /* 首次发送只允许“已建档、未发送”；其它状态一律走重发校验（HR-ACCESS-24/53） */
@@ -3940,6 +4235,8 @@ function empSendInvite(id, opts) {
 function empSetInviteEmail(id, email) {
   const e = empById(id);
   if (!e || !e.invite) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("invite")) return { ok: false, code: "permission", message: empDenyReason("invite") };
   const canEdit = e.invite.state === "draft" || (e.invite.state === "sent" && empInviteExpired(e));
   if (!canEdit) return { ok: false, code: "state", message: empT("已有未过期的邀请，邮箱不能直接改；撤销后可换邮箱重新邀请。", "E-Mail bei offener Einladung gesperrt.") };
@@ -3963,6 +4260,8 @@ function empResendInvite(id) {
 function empRevokeInvite(id, reason) {
   const e = empById(id);
   if (!e || !e.invite) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("invite")) return { ok: false, code: "permission", message: empDenyReason("invite") };
   if (e.invite.state === "draft") return { ok: false, code: "state", message: empT("还没发邀请，不需要撤销。", "Noch nicht gesendet — kein Zurückziehen nötig.") };
   if (["approved", "cancelled", "revoked"].includes(e.invite.state) || ["done", "archive", "sign", "contract"].includes(empInviteStep(e).id)) {
@@ -3992,6 +4291,8 @@ function empRevokeInvite(id, reason) {
 function empReinvite(id, email) {
   const e = empById(id);
   if (!e || !e.invite) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("invite")) return { ok: false, code: "permission", message: empDenyReason("invite") };
   if (e.invite.state !== "revoked") return { ok: false, code: "state", message: empT("只有已撤销的邀请可以重新邀请", "Nur zurückgezogene Einladungen") };
   const nextMail = String(email || e.contact?.email || "").trim();
@@ -4025,6 +4326,8 @@ function empReinvite(id, email) {
 function empCancelOnboarding(id, reason) {
   const e = empById(id);
   if (!e || !e.invite) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("invite")) return { ok: false, code: "permission", message: empDenyReason("invite") };
   const note = String(reason || "").trim();
   if (!note) return { ok: false, code: "reason", message: empT("取消入职必须写原因", "Begründung nötig") };
@@ -4081,6 +4384,8 @@ function empSaveInviteDraft(token, patch) {
 function empReturnInvite(id, note, items) {
   const e = empById(id);
   if (!e || !e.invite) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("sensitive")) return { ok: false, code: "permission", message: empDenyReason("sensitive") };
   if (e.invite.state !== "submitted") return { ok: false, code: "state", message: empT("只有待审核的提交可以退回", "Nur eingereichte Angaben") };
   const text = String(note || "").trim();
@@ -4118,6 +4423,8 @@ function empRejectedSpecialMissing(e) {
 function empApproveInvite(id, options) {
   const e = empById(id);
   if (!e || !e.invite) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("sensitive")) return { ok: false, code: "permission", message: empDenyReason("sensitive") };
   if (e.invite.state !== "submitted") return { ok: false, code: "state", message: empT("只有待审核的提交可以通过", "Nur eingereichte Angaben") };
   const pr = empInviteProgress(e);
@@ -4142,11 +4449,20 @@ function empApproveInvite(id, options) {
   }
   /* 个人信息以员工为准；合同条件（岗位、工资、工时、年假）以公司为准（HR-ONB-10）。
      姓名先同步 first/last，再统一生成 name，避免下一行被旧 first/last 覆盖（HR-ONB-10/22）。 */
-  if (sub.firstName !== undefined) next.firstName = sub.firstName;
-  if (sub.lastName !== undefined) next.lastName = sub.lastName;
-  const composedName = [next.firstName, next.lastName].filter(Boolean).join(" ").trim();
-  if (composedName) next.name = composedName;
-  else if (sub.name && String(sub.name).trim()) next.name = String(sub.name).trim();
+  if (sub.firstName !== undefined || sub.lastName !== undefined) {
+    if (sub.firstName !== undefined) next.firstName = sub.firstName;
+    if (sub.lastName !== undefined) next.lastName = sub.lastName;
+    const composedName = [next.firstName, next.lastName].filter(Boolean).join(" ").trim();
+    if (composedName) next.name = composedName;
+  } else if (sub.name && String(sub.name).trim()) {
+    /* 遗留提交只有整名：不能再用旧 first/last 拼回去。拆成第一段 + 最后一段，
+       并同步 first/last，保证下次保存不会把新名字覆盖回旧名（HR-ONB-10/22）。 */
+    const full = String(sub.name).trim().replace(/\s+/g, " ");
+    const parts = full.split(" ");
+    next.name = full;
+    next.firstName = parts.length > 1 ? parts.slice(0, -1).join(" ") : full;
+    next.lastName = parts.length > 1 ? parts[parts.length - 1] : (next.lastName || "");
+  }
   if (sub.birthday) next.birthday = sub.birthday;
   const nat = sub.contract?.nationalityClass ?? sub.profile?.nationalityClass;
   if (nat === "eu" || nat === "other" || nat === "") empSetNationality(next, nat);
@@ -4637,7 +4953,7 @@ function empStaffRow(e, today) {
   /* data-find 把这一行所有可搜的字段拼一起，搜索直接在 DOM 里筛，不重渲染、不丢焦点 */
   const find = [e.name, e.store, empRaw(empRole(e.role).name), empRaw(empContractType(c.type).name),
                 e.contact.phone, e.contact.email, e.note].filter(Boolean).join(" ").toLowerCase();
-  return `<tr data-find="${empEsc(find)}" class="${top && (top.level === "expired" || top.level === "missing") ? "emp-alert-tr is-expired" : top && top.level === "warn" ? "emp-alert-tr is-warn" : ""}">
+  return `<tr data-id="${empEsc(e.id)}" data-find="${empEsc(find)}" class="${top && (top.level === "expired" || top.level === "missing") ? "emp-alert-tr is-expired" : top && top.level === "warn" ? "emp-alert-tr is-warn" : ""}">
     <td><input class="employee-row-check" type="checkbox" aria-label="${empEsc(e.name)}"></td>
     <td class="emp-cell-who">
       <a class="emp-name-link" href="${empStaffHref(e.id)}">${empEsc(e.name)}</a>
@@ -5132,6 +5448,50 @@ function empContractSignedDoc(e, key) {
   return doc.state === "missing" ? {} : doc;
 }
 
+function empContractDispatchId() {
+  return `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/* 签回件是否属于“当前这次发送”（HR-ONB-37/53，员工端用同一函数做提交前校验）。
+   file 是 e.docs.contract / e.docs.personalquestionnaire（或员工端上传的文件对象），
+   kind 是 "contract" 或 "questionnaire"。返回 true 当且仅当：
+   1) 文件带 dispatchId 且等于 invite.dispatchId；或
+   2) 邀请没有 dispatchId 的旧记录：file.at 不早于 invite.sentAt；
+   3) 如果这一份被退回，还必须是退回之后的新版本（file.at 晚于退回时间，或 dispatchId 与被退回那版不同）。
+   缺 at 又缺 dispatchId 无法证明更新 → 一律 false；真正重传后带 at 的新版本必须能通过。 */
+function empContractFileIsCurrent(e, file, kind) {
+  if (!file) return false;
+  const name = file.file || file.name;
+  if (!name) return false;
+  const inv = e?.invite || {};
+  const currentId = inv.dispatchId || "";
+  const fileId = file.dispatchId || "";
+  if (currentId && fileId && String(fileId) !== String(currentId)) return false;
+  if (!fileId) {
+    /* 没有发送记录 ID 时只能靠上传时间证明；旧记录缺 at 的不能放行 */
+    if (!file.at) return false;
+    /* 新发送（有 dispatchId）以合同发出时间为锚；没有 dispatchId 的旧记录才用邀请发出时间 */
+    const anchor = currentId ? (inv.contractSentAt || "") : (inv.sentAt || "");
+    if (anchor && String(file.at) < String(anchor)) return false;
+  }
+  const returned = inv.contractReview?.[kind];
+  if (returned?.state === "returned") {
+    const sameDispatch = returned.dispatchId && fileId && String(returned.dispatchId) === String(fileId);
+    if (sameDispatch) {
+      if (returned.at) {
+        if (!file.at || String(file.at) <= String(returned.at)) return false;
+      } else if (!file.at) {
+        return false;
+      }
+      return true;
+    }
+    if (file.at && returned.at) return String(file.at) > String(returned.at);
+    /* 退回记录缺时间（旧数据）：只要求这一次上传带 at，不能永远卡在“请重传” */
+    return !!file.at;
+  }
+  return true;
+}
+
 function empContractSignedReady(e) {
   return !!empContractSignedDoc(e, "contract").file && !!empContractSignedDoc(e, "questionnaire").file;
 }
@@ -5195,15 +5555,16 @@ function empContractDispatchPanel(e) {
     const signedText = rv.state === "approved" ? empT("已通过核对", "Geprüft")
       : rv.state === "returned" ? empT("已退回，等员工重传", "Zurückgegeben")
       : signed.file ? empT("已上传，待核对", "Hochgeladen, Prüfung offen") : empT("员工还没上传", "Noch nicht hochgeladen");
-    /* 被退回后要等员工重传（签回件时间晚于退回时间）才能再次核对 */
-    const reuploaded = rv.state !== "returned" || !rv.at || (signed.at && signed.at > rv.at);
+    /* 只核对属于当前发送的签回件；被退回的那份必须是退回之后的新版本（HR-ONB-37/53） */
+    const current = empContractFileIsCurrent(e, signed, key);
     const canReview = inv.contractSentAt && !empContractArchived(e) && !inv.contractVoid && empContractSignedReady(e)
-      && signed.file && rv.state !== "approved" && reuploaded && sensitiveOK;
+      && signed.file && rv.state !== "approved" && current && sensitiveOK;
     return `<div class="emp-dispatch-row">
       <div class="emp-dispatch-info">
         <strong>${label}</strong>
-        <span>${empT("发出件", "Versandt")}：${empDispatchFileLink(outgoing, label)}</span>
+        <span>${empT("发出件", "Versandt")}：${empDispatchFileLink(outgoing, label, !sensitiveOK)}</span>
         <span>${empT("签回件", "Unterschrieben")}：${empDispatchFileLink(signed, label, !empCan("sensitive"))} ${empPill(signedTone, signedText)}</span>
+        ${signed.file && !current ? `<small class="emp-reason">${empT("这份不是本次发送的签回件，需员工重新上传后才能核对。", "Diese Datei gehört nicht zum aktuellen Versand — bitte neu hochladen lassen.")}</small>` : ""}
         ${rv.state === "returned" && rv.reason ? `<small class="emp-reason">${empT("退回原因", "Grund")}：${empEsc(rv.reason)}</small>` : ""}
       </div>
       ${canReview ? `<div class="emp-dispatch-review">
@@ -5255,8 +5616,15 @@ function empContractDispatchPanel(e) {
 function empSendContractDispatch(id) {
   const e = empById(id);
   if (!e?.invite) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (e.invite.state !== "approved") return { ok: false, code: "state", message: empT("资料审核通过后才能发合同", "Erst nach Freigabe") };
-  const defaultQuestionnaire = empQuestionnaireTemplate().file;
+  /* 同一档案同时至多一条未作废的发送记录；重发必须先作废（HR-ONB-53） */
+  if (e.invite.contractSentAt && !e.invite.contractVoid) {
+    return { ok: false, code: "active", message: empT("已有一条未作废的发送记录。要重发请先作废这次发送。", "Es gibt bereits einen laufenden Versand — bitte zuerst stornieren.") };
+  }
+  const template = empQuestionnaireTemplate();
+  const defaultQuestionnaire = template.file;
   if (!e.invite.contractTemplate || (!e.invite.questionnaireTemplate && !defaultQuestionnaire)) {
     return { ok: false, code: "files", message: empT("劳动合同要上传；问卷可以用组织默认问卷", "Arbeitsvertrag nötig; Fragebogen aus Standard möglich") };
   }
@@ -5264,8 +5632,19 @@ function empSendContractDispatch(id) {
   if (missing.length) return { ok: false, code: "company", message: empT(`公司资料缺：${missing.join("、")}`, `Firmendaten fehlen: ${missing.join(", ")}`) };
   const next = JSON.parse(JSON.stringify(e));
   if (!next.invite.questionnaireTemplate && defaultQuestionnaire) {
-    next.invite.questionnaireTemplate = { ...defaultQuestionnaire, at: empNow(), by: empActorLabel(), fromDefault: true };
+    next.invite.questionnaireTemplate = { ...defaultQuestionnaire, at: empNow(), by: empActorLabel(), fromDefault: true, versionId: template.versionId || "" };
+    /* 发送记录只保存组织级问卷版本引用；之后换默认问卷不影响这次发出的内容（HR-ONB-50） */
+    next.invite.questionnaireVersionId = template.versionId || "";
+    next.invite.questionnaireSource = "default";
+  } else if (next.invite.questionnaireTemplate?.fromDefault) {
+    next.invite.questionnaireVersionId = next.invite.questionnaireTemplate.versionId || template.versionId || "";
+    next.invite.questionnaireSource = "default";
+  } else {
+    next.invite.questionnaireVersionId = "";
+    next.invite.questionnaireSource = "uploaded";
   }
+  /* 每次发送（含作废后重发）生成新的唯一发送 ID；作废不复用旧值 */
+  next.invite.dispatchId = empContractDispatchId();
   next.invite.contractSentAt = empNow();
   next.invite.onboardingFilesVersion = 1;
   next.invite.contractReview = {};
@@ -5283,6 +5662,8 @@ function empSendContractDispatch(id) {
 function empReviewContractAsset(id, key, decision, reason) {
   const e = empById(id);
   if (!e?.invite) return { ok: false, code: "missing" };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (!empCan("sensitive")) return { ok: false, code: "permission", message: empDenyReason("sensitive") };
   const label = key === "contract" ? "劳动合同" : "个人调查问卷";
   const inv = e.invite;
@@ -5300,11 +5681,17 @@ function empReviewContractAsset(id, key, decision, reason) {
   const signed = empContractSignedDoc(e, key);
   if (!signed.file) return { ok: false, code: "file", message: empT("这一份员工还没上传", "Noch nicht hochgeladen") };
   const previous = inv.contractReview?.[key];
+  /* 只接受属于当前发送的版本；作废重发后旧草稿、旧件不能混进来（HR-ONB-37/53） */
+  if (!empContractFileIsCurrent(e, signed, key)) {
+    if (previous?.state === "returned" && signed.at && previous.at
+      && String(signed.at) <= String(previous.at)
+      && String(previous.dispatchId || "") === String(inv.dispatchId || "")) {
+      return { ok: false, code: "reupload", message: empT("员工还没重传这一份，不能再次核对。", "Noch keine neue Datei — bitte neu hochladen lassen.") };
+    }
+    return { ok: false, code: "stale_file", message: empT("这份不是本次发送的签回件，员工需要重新上传。", "Diese Datei gehört nicht zum aktuellen Versand — bitte neu hochladen lassen.") };
+  }
   if (previous?.state === "approved") {
     return { ok: false, code: "decided", message: empT("这一份已经核对通过，不能重复通过。", "Bereits geprüft.") };
-  }
-  if (previous?.state === "returned" && (!signed.at || !previous.at || String(signed.at) <= String(previous.at))) {
-    return { ok: false, code: "reupload", message: empT("员工还没重传这一份，不能再次核对。", "Noch keine neue Datei — bitte neu hochladen lassen.") };
   }
   if (!inv.contractSignedSubmittedAt) {
     return { ok: false, code: "state", message: empT("员工还没有提交签回件。", "Noch keine Abgabe der unterschriebenen Dateien.") };
@@ -5321,7 +5708,9 @@ function empReviewContractAsset(id, key, decision, reason) {
   next.invite.contractReview[key] = {
     state: decision === "approved" ? "approved" : "returned",
     reason: decision === "approved" ? "" : note,
-    at: empNow(), by: empActorLabel()
+    at: empNow(), by: empActorLabel(),
+    dispatchId: inv.dispatchId || "",
+    fileAt: signed.at || ""
   };
   const docKey = key === "contract" ? "contract" : "personalquestionnaire";
   next.docs = { ...(next.docs || {}) };
@@ -5335,8 +5724,7 @@ function empReviewContractAsset(id, key, decision, reason) {
     next.docs[docKey].state = "returned";
     next.docs[docKey].reason = note;
     next.docs[docKey].needsReview = false;
-    /* 退回一份就回到“已发出等签回”，员工只重传被退回的那份（HR-ONB-53） */
-    next.invite.contractSignedSubmittedAt = null;
+    /* 退回一份不结束这一批：另一份还能继续核对，两份都能一次退回（HR-ONB-53） */
   }
   const both = ["contract", "questionnaire"].every(k => next.invite.contractReview[k]?.state === "approved");
   if (both) {
@@ -5355,7 +5743,9 @@ function empReviewContractAsset(id, key, decision, reason) {
 function empVoidContractDispatch(id, reason) {
   const e = empById(id);
   if (!e?.invite) return { ok: false, code: "missing" };
-  if (!empCan("sensitive")) return { ok: false, code: "permission", message: empDenyReason("sensitive") };
+  /* 作废不读取文件内容，只需要操作与门店权限；关掉“查看敏感资料”的店长仍可作废（HR-ACCESS-55） */
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   const note = String(reason || "").trim();
   if (!note) return { ok: false, code: "reason", message: empT("作废要写原因", "Begründung nötig") };
   const inv = e.invite;
@@ -5365,9 +5755,14 @@ function empVoidContractDispatch(id, reason) {
   const questionnaireFile = next.invite.questionnaireTemplate;
   next.invite.contractTemplateHistory = contractFile ? [contractFile, ...(next.invite.contractTemplateHistory || [])] : (next.invite.contractTemplateHistory || []);
   next.invite.questionnaireTemplateHistory = questionnaireFile ? [questionnaireFile, ...(next.invite.questionnaireTemplateHistory || [])] : (next.invite.questionnaireTemplateHistory || []);
-  next.invite.contractVoid = { at: empNow(), by: empActorLabel(), reason: note, files: [contractFile, questionnaireFile].filter(Boolean).map(f => f.name) };
+  next.invite.contractVoid = {
+    at: empNow(), by: empActorLabel(), reason: note,
+    dispatchId: next.invite.dispatchId || "",
+    files: [contractFile, questionnaireFile].filter(Boolean).map(f => f.name)
+  };
   next.invite.contractTemplate = null;
   next.invite.questionnaireTemplate = null;
+  next.invite.dispatchId = "";
   next.invite.contractSentAt = null;
   next.invite.contractSignedSubmittedAt = null;
   next.invite.contractSignedReviewedAt = null;
@@ -5376,6 +5771,9 @@ function empVoidContractDispatch(id, reason) {
   /* 线下归档标记也要清，否则两端仍显示“已归档”，新人合同项还打勾（HR-ONB-37/53） */
   next.invite.dispatchMode = "";
   next.invite.offlineSignedAt = null;
+  /* 待用的线下扫描件属于被作废的这次准备，必须清掉，不能在下一次归档里复用（HR-ONB-37/53） */
+  next.invite.offlineContractFile = null;
+  next.invite.offlineQuestionnaireFile = null;
   next.invite.contractReview = {};
   /* 签回件转已取消，旧件保留在历史里 */
   next.docs = { ...(next.docs || {}) };
@@ -5395,10 +5793,19 @@ function empOfflineContractArchive(id, contractFile, questionnaireFile) {
   const e = empById(id);
   if (!e?.invite) return { ok: false, code: "missing" };
   if (!empCan("sensitive")) return { ok: false, code: "permission", message: empDenyReason("sensitive") };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
   if (e.invite.state !== "approved") return { ok: false, code: "state", message: empT("资料审核通过后才能归档", "Erst nach Freigabe") };
   if (e.invite.contractSentAt) return { ok: false, code: "state", message: empT("已有电子发送记录，要先作废才能走线下签署", "Erst laufenden Versand stornieren") };
   if (!contractFile || !questionnaireFile) return { ok: false, code: "files", message: empT("两份签署扫描件都要上传", "Beide Scans nötig") };
   const next = JSON.parse(JSON.stringify(e));
+  /* 新的线下归档是独立的一条发送记录：旧作废标记只进历史，不能继续显示旧原因、也不能
+     把新的作废按钮藏起来（HR-ONB-38/53）。 */
+  if (next.invite.contractVoid) {
+    next.invite.contractVoidHistory = [next.invite.contractVoid, ...(next.invite.contractVoidHistory || [])];
+    next.invite.contractVoid = null;
+  }
+  next.invite.dispatchId = empContractDispatchId();
   next.invite.contractTemplate = contractFile;
   next.invite.questionnaireTemplate = questionnaireFile;
   next.invite.contractSentAt = empNow();
@@ -5410,12 +5817,17 @@ function empOfflineContractArchive(id, contractFile, questionnaireFile) {
   next.invite.offlineSignedAt = empNow();
   next.invite.onboardingFilesVersion = 1;
   next.invite.contractReview = {
-    contract: { state: "approved", at: empNow(), by: empActorLabel(), offline: true },
-    questionnaire: { state: "approved", at: empNow(), by: empActorLabel(), offline: true }
+    contract: { state: "approved", at: empNow(), by: empActorLabel(), offline: true,
+      dispatchId: next.invite.dispatchId, fileAt: next.invite.offlineSignedAt },
+    questionnaire: { state: "approved", at: empNow(), by: empActorLabel(), offline: true,
+      dispatchId: next.invite.dispatchId, fileAt: next.invite.offlineSignedAt }
   };
   next.docs = { ...(next.docs || {}) };
-  next.docs.contract = { ...(next.docs.contract || {}), state: "ok", file: contractFile.name, dataUrl: contractFile.dataUrl, at: empNow(), by: empActorLabel(), needsReview: false, offline: true };
-  next.docs.personalquestionnaire = { ...(next.docs.personalquestionnaire || {}), state: "ok", file: questionnaireFile.name, dataUrl: questionnaireFile.dataUrl, at: empNow(), by: empActorLabel(), needsReview: false, offline: true };
+  next.docs.contract = { ...(next.docs.contract || {}), state: "ok", file: contractFile.name, dataUrl: contractFile.dataUrl, at: empNow(), by: empActorLabel(), needsReview: false, offline: true, dispatchId: next.invite.dispatchId };
+  next.docs.personalquestionnaire = { ...(next.docs.personalquestionnaire || {}), state: "ok", file: questionnaireFile.name, dataUrl: questionnaireFile.dataUrl, at: empNow(), by: empActorLabel(), needsReview: false, offline: true, dispatchId: next.invite.dispatchId };
+  /* 扫描件已经从待用槽位转成归档件，清空待用槽位以免被下一次复用 */
+  next.invite.offlineContractFile = null;
+  next.invite.offlineQuestionnaireFile = null;
   empLogEvent(next, "contract.offline", "线下签署两份扫描件直接归档", empActorLabel());
   empSaveWithHistory(next, empActorLabel());
   return { ok: true };
@@ -5424,6 +5836,7 @@ function empOfflineContractArchive(id, contractFile, questionnaireFile) {
 function empMarkRetentionHandled(id, category) {
   const e = empById(id);
   if (!e) return null;
+  if (empStoreScopeError(e)) return null;
   if (!empCan("ownerOnly")) return { ok: false, code: "permission", message: empDenyReason("ownerOnly") };
   const cat = EMP_RETENTION_CATEGORIES.find(c => c.id === category);
   if (!cat) return { ok: false, code: "category", message: empT("请选择要处理的资料类别", "Bitte Kategorie wählen") };
@@ -5797,14 +6210,18 @@ function empCanExportSensitive() {
 
 function empRosterCsv(list, opts) {
   const today = empToday();
-  const sensitive = opts?.sensitive !== undefined ? opts.sensitive : empCanExportSensitive();
+  /* 参数只能缩小输出，不能放大权限：店长传 {sensitive:true} 也不能导出生日/税号/社保号/IBAN（HR-ACCESS-04、HR-DATA-32） */
+  const canSensitive = empCanExportSensitive();
+  const sensitive = canSensitive && (opts?.sensitive === undefined ? true : opts.sensitive === true);
+  /* 店长只能导出当前门店范围内的档案，即使明确传了一个跨店列表（HR-ACCESS-01） */
+  const scoped = (list || empRoster(empScope())).filter(empStoreInScope);
   const head = [empT("姓名", "Name"), empT("出生日期", "Geburtsdatum"), empT("门店", "Filiale"), empT("岗位", "Position"),
                 empT("合同类型", "Vertragsart"), empT("薪资方式", "Vergütungsart"), empT("金额", "Betrag"),
                 empT("月工时下限", "Std. min"), empT("月工时上限", "Std. max"), empT("年假", "Urlaubstage"),
                 empT("入职日期", "Eintritt"), empT("状态", "Status"), empT("最后工作日", "Letzter Tag"),
                 "Steuer-ID", "Rentenversicherung", "IBAN", "Krankenkasse",
                 empT("待处理项", "Offene Punkte")];
-  const rows = (list || empRoster(empScope())).map(e => [
+  const rows = scoped.map(e => [
     e.name, sensitive ? (e.birthday || "") : "", e.store, empRaw(empRole(e.role).name),
     empRaw(empContractType(e.contract.type).name), e.contract.payType === "pauschal" ? "Pauschal" : empRaw({ zh: "时薪", de: "Stundenlohn" }),
     e.contract.rate, e.contract.hoursMin, e.contract.hoursMax, e.contract.urlaubDays,
@@ -6008,7 +6425,7 @@ function employeeDocPage() {
   const allDocAlerts = empDocAlerts(store, today);
   const alerts = allDocAlerts.filter(a => a.level !== "soon");
   const soonAlerts = allDocAlerts.filter(a => a.level === "soon");
-  const roster = empStaff(store);
+  const roster = empDocRoster(store);
   const canEditWarn = empCan("ownerOnly");
   const cols = [["姓名", "Name"], ["门店", "Filiale"], ["材料", "Unterlage"], ["到期日 / 下次复训日", "Ablauf / nächste Schulung"], ["剩余", "Verbleibend"], ["状态", "Status"], ["操作", "Aktion"]];
   return `
@@ -6035,8 +6452,8 @@ function employeeDocPage() {
       </table></div>
     </section>` : `<section class="card emp-allclear"><strong>${empT("没有需要处理的证件", "Keine offenen Dokumente")}</strong>
       <p>${soonAlerts.length
-        ? empT(`在岗 ${roster.length} 人的必需证件都齐全，没有进入预警期的；下面 ${soonAlerts.length} 份只是提前知道。`, `Alle Pflichtdokumente von ${roster.length} aktiven Mitarbeitern liegen vor; ${soonAlerts.length} nur zur Frühwarnung.`)
-        : empT(`在岗 ${roster.length} 人的必需证件都齐全，且 ${empRule("docSoonDays")} 天内没有到期的。`, `Alle Pflichtdokumente von ${roster.length} aktiven Mitarbeitern liegen vor, keine Frist in ${empRule("docSoonDays")} Tagen.`)}</p></section>`}
+        ? empT(`在岗及待入职 ${roster.length} 人的必需证件都齐全，没有进入预警期的；下面 ${soonAlerts.length} 份只是提前知道。`, `Alle Pflichtdokumente von ${roster.length} aktiven und künftigen Mitarbeitern liegen vor; ${soonAlerts.length} nur zur Frühwarnung.`)
+        : empT(`在岗及待入职 ${roster.length} 人的必需证件都齐全，且 ${empRule("docSoonDays")} 天内没有到期的。`, `Alle Pflichtdokumente von ${roster.length} aktiven und künftigen Mitarbeitern liegen vor, keine Frist in ${empRule("docSoonDays")} Tagen.`)}</p></section>`}
 
     ${soonAlerts.length ? `<section class="card emp-soon-docs" style="margin-top:16px">
       <div class="section-title"><div><h2>${empT("提前知道（关注期，31–90 天）", "Frühwarnung (31–90 Tage)")}</h2>
@@ -6710,7 +7127,10 @@ function empSpecialApprovalBlock(e) {
         : state === "expired" ? empT(`已逾期（原定 ${empMonthDayLabel(a.deadline)}前补交）`, `Überfällig (fällig ${empMonthDayLabel(a.deadline)})`)
         : state === "rejected" ? empT(`已驳回${a.reason ? `：${a.reason}` : ""}`, `Abgelehnt${a.reason ? `: ${a.reason}` : ""}`)
         : empT("等待审批", "Wartet auf Entscheidung");
-      const canExtend = (state === "approved" || state === "expired") && (Number(a.extensionCount) || 0) < 1;
+      /* 显示条件和延期函数共用配置值；设为 0 次时入口直接隐藏（HR-CONTRACT-47） */
+      const maxExtensions = empMaxExtensions();
+      const canExtend = maxExtensions > 0 && (state === "approved" || state === "expired")
+        && (Number(a.extensionCount) || 0) < maxExtensions;
       return `<div class="emp-approval-row is-${state}">
         <strong>${empEsc(a.label || empSpecialLabel(a.item))}</strong>
         <span>${empEsc(text)}</span>
@@ -7284,13 +7704,36 @@ function empBindAll() {
   document.querySelectorAll(".emp-batch-invite").forEach(button => {
     button.addEventListener("click", () => {
       if (!empCan("invite")) { empFlash(button, empDenyReason("invite")); return; }
-      const names = [...document.querySelectorAll(".emp-roster tbody .employee-row-check:checked")]
-        .map(input => input.closest("tr")?.querySelector(".emp-name-link")?.textContent.trim())
+      /* 按所选行的档案 ID 定位，不能再拿姓名反查 —— 同名员工会发给第一个（HR-ACCESS-54）。
+         兼容旧 DOM：没有 data-id 时退回姓名，但优先检查姓名是否唯一。 */
+      const rows = [...document.querySelectorAll(".emp-roster tbody .employee-row-check:checked")]
+        .map(input => input.closest("tr"))
         .filter(Boolean);
-      if (!names.length) { empFlash(button, empT("先勾选员工", "Erst Mitarbeiter auswählen")); return; }
-      if (names.length > 20) { empFlash(button, empT("一次最多 20 条，请分批勾选（HR-ACCESS-54）", "Maximal 20 pro Lauf (HR-ACCESS-54)")); return; }
-      const results = names.map(name => {
-        const e = empByName(name);
+      const picked = [];
+      const seen = new Set();
+      rows.forEach(row => {
+        const id = row.dataset?.id || "";
+        const name = row.querySelector(".emp-name-link")?.textContent.trim() || "";
+        if (id) {
+          if (seen.has(id)) return;
+          seen.add(id);
+          const e = empById(id);
+          if (e) picked.push({ id, name: e.name });
+          else picked.push({ id, name, missing: true });
+          return;
+        }
+        const same = empAllStaff().filter(e => e.name === name);
+        if (same.length === 1) { picked.push({ id: same[0].id, name }); return; }
+        picked.push({ id: "", name, missing: true, duplicateName: same.length > 1 });
+      });
+      if (!picked.length) { empFlash(button, empT("先勾选员工", "Erst Mitarbeiter auswählen")); return; }
+      if (picked.length > 20) { empFlash(button, empT("一次最多 20 条，请分批勾选（HR-ACCESS-54）", "Maximal 20 pro Lauf (HR-ACCESS-54)")); return; }
+      const results = picked.map(p => {
+        const name = p.name;
+        if (p.missing) return { name, ok: false, reason: p.duplicateName
+          ? empT("同名档案不止一个，请在表格里重新勾选", "Mehrere Akten mit diesem Namen — bitte neu auswählen")
+          : empT("找不到档案", "Akte nicht gefunden") };
+        const e = empById(p.id);
         if (!e) return { name, ok: false, reason: empT("找不到档案", "Akte nicht gefunden") };
         if (empNoEmail(e)) return { name, ok: false, reason: empT("需要先填邮箱", "E-Mail fehlt") };
         if (empStatus(e.status).leaving) return { name, ok: false, reason: empT("不在岗，不能发邀请", "Nicht aktiv") };
@@ -7298,7 +7741,7 @@ function empBindAll() {
         if (empAccountActive(e) || ["invited", "accepted", "pending_link"].includes(state)) {
           return { name, ok: false, reason: empT("已有账号或邀请，未重复发送", "Konto/Einladung vorhanden") };
         }
-        const result = empInviteAccount(e.id, "invite");
+        const result = empInviteAccount(p.id, "invite");
         return result.ok
           ? { name, ok: true, reason: empT("已发出邀请", "Einladung gesendet") }
           : { name, ok: false, reason: result.message || empT(result.reason === "email" ? "需要先填邮箱" : "发送失败", result.reason === "email" ? "E-Mail fehlt" : "Fehlgeschlagen") };
@@ -7820,6 +8263,7 @@ function empBindAll() {
   /* --- 新人个人调查问卷默认邮件与附件模板 --- */
   const questionnaireBody = document.querySelector(".emp-questionnaire-body");
   questionnaireBody?.addEventListener("input", () => {
+    if (!empCan("ownerOnly")) return;
     const template = empQuestionnaireTemplate();
     if (empDe()) template.bodyDe = questionnaireBody.value;
     else template.bodyZh = questionnaireBody.value;
@@ -7828,6 +8272,12 @@ function empBindAll() {
   document.querySelector(".emp-questionnaire-file")?.addEventListener("change", event => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (!empCan("ownerOnly")) {
+      const message = document.querySelector(".emp-questionnaire-error");
+      if (message) message.textContent = empDenyReason("ownerOnly");
+      event.target.value = "";
+      return;
+    }
     const error = empUploadError(file, false);
     if (error) {
       empFlash(event.target.closest(".emp-questionnaire-template"), error);
@@ -7840,7 +8290,9 @@ function empBindAll() {
       template.file = { name: file.name, size: file.size, dataUrl: String(reader.result || "") };
       if (!empSaveQuestionnaireTemplate(template)) {
         const message = document.querySelector(".emp-questionnaire-error");
-        if (message) message.textContent = empT("本机存储空间不足，请使用较小的问问卷文件。", "Nicht genügend lokaler Speicher. Bitte eine kleinere Fragebogendatei verwenden.");
+        if (message) message.textContent = empCan("ownerOnly")
+          ? empT("本机存储空间不足，请使用较小的问问卷文件。", "Nicht genügend lokaler Speicher. Bitte eine kleinere Fragebogendatei verwenden.")
+          : empDenyReason("ownerOnly");
         return;
       }
       app();
@@ -8449,10 +8901,13 @@ function empBindContractDispatch() {
   document.querySelectorAll(".emp-dispatch-use-default").forEach(button => {
     button.addEventListener("click", () => {
       const e = empById(button.dataset.id);
-      const file = empQuestionnaireTemplate().file;
+      const template = empQuestionnaireTemplate();
+      const file = template.file;
       if (!e?.invite || !file) return;
       const next = JSON.parse(JSON.stringify(e));
-      next.invite.questionnaireTemplate = { ...file, at: empNow(), by: empActorLabel(), fromDefault: true };
+      next.invite.questionnaireTemplate = { ...file, at: empNow(), by: empActorLabel(), fromDefault: true, versionId: template.versionId || "" };
+      next.invite.questionnaireVersionId = template.versionId || "";
+      next.invite.questionnaireSource = "default";
       empSaveStaff(next);
       app();
     });
@@ -8476,7 +8931,11 @@ function empBindContractDispatch() {
       const rec = { name: file.name, dataUrl, at: empNow(), by: empActorLabel() };
       const key = input.dataset.key;
       if (key === "contract") next.invite.contractTemplate = rec;
-      else if (key === "questionnaire") next.invite.questionnaireTemplate = rec;
+      else if (key === "questionnaire") {
+        next.invite.questionnaireTemplate = rec;
+        next.invite.questionnaireVersionId = "";
+        next.invite.questionnaireSource = "uploaded";
+      }
       else if (key === "offlineContract") next.invite.offlineContractFile = rec;
       else if (key === "offlineQuestionnaire") next.invite.offlineQuestionnaireFile = rec;
       empSaveStaff(next);

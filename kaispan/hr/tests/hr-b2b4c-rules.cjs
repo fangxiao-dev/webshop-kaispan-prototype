@@ -91,15 +91,18 @@ const asset = clone('e18', { id: 'c-asset', invite: { portalVersion: 2, state: '
 assert.equal(ctx.empReviewContractAsset(asset.id, 'contract', 'approved', '').code, 'state');
 assert.equal(ctx.empSendContractDispatch(asset.id).ok, true);
 let a = ctx.empById(asset.id);
-a.docs.contract = { state: 'ok', file: 'v_signed.pdf', at: '2026-11-06T10:00:00.000Z' };
-a.invite.contractSignedSubmittedAt = '2026-11-06T10:00:00.000Z';
+/* 签回件晚于 12:00 的发送时间（HR-ONB-37/53） */
+a.docs.contract = { state: 'ok', file: 'v_signed.pdf', at: '2026-11-06T12:05:00.000Z' };
+a.invite.contractSignedSubmittedAt = '2026-11-06T12:05:00.000Z';
 ctx.empSaveStaff(a);
 assert.equal(ctx.empReviewContractAsset(asset.id, 'contract', 'approved', '').code, 'files', '两份没齐不能通过');
 a = JSON.parse(JSON.stringify(ctx.empById(asset.id)));
-a.docs.personalquestionnaire = { state: 'ok', file: 'q_signed.pdf', at: '2026-11-06T10:00:00.000Z' };
+a.docs.personalquestionnaire = { state: 'ok', file: 'q_signed.pdf', at: '2026-11-06T12:05:00.000Z' };
 ctx.empSaveStaff(a);
 assert.equal(ctx.empReviewContractAsset(asset.id, 'contract', 'approved', '').ok, true);
 assert.equal(ctx.empReviewContractAsset(asset.id, 'contract', 'approved', '').code, 'decided');
+/* 退回时间晚于签回件上传时间，同一份文件才算“未重传”（HR-ONB-53） */
+now = '2026-11-06T12:10:00.000Z';
 assert.equal(ctx.empReviewContractAsset(asset.id, 'questionnaire', 'returned', '缺签字').ok, true);
 assert.equal(ctx.empReviewContractAsset(asset.id, 'questionnaire', 'approved', '').code, 'reupload', '未重传不能再通过');
 
@@ -146,6 +149,10 @@ const specialTodo = clone('e12', {
   missingApprovals: [{ item: 'steuerId', label: 'Steuer-ID', status: 'approved', deadline: '2026-10-01', extensionCount: 0 }],
   employeePortal: { specialSubmission: { state: 'pending', items: ['rentenversicherung'], labels: ['SV-Nr.'], reason: '在办', at: '2026-11-05T09:00:00.000Z' } }
 });
+/* 这一项必须真的还缺，逾期待办才算成立（补齐后待办自动消失，HR-ONB-32） */
+delete specialTodo.ids.steuerId;
+delete specialTodo.ids.steuernummer;
+ctx.empSaveStaff(specialTodo);
 const newHireToday = clone('e18', { id: 'c-newhire-today', entryDate: '2026-11-06' });
 const todos = ctx.empTodoItems();
 assert.ok(todos.some(t => t.type === '离职交接未办完'));
