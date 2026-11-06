@@ -873,3 +873,11 @@ a.emp-file.is-open { color: var(--purple); text-decoration: underline; }
   .emp-special-row { grid-template-columns: 1fr; }
   .emp-invite-status { grid-template-columns: 1fr; }
 }
+
+/* ===== B2-b 第 4a 批：老板端统一核对卡（资料修改 / 补件交回） ===== */
+.emp-review-card .emp-review-source { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.emp-review-card .emp-review-source h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 6px; font-size: 13px; }
+.emp-review-card .emp-review-source h3 small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.emp-review-card .emp-request-items { margin-top: 0; }
+.emp-review-card .emp-request-item strong a { color: var(--purple); }
+.emp-request-warning { margin: 10px 0 0; padding: 8px 10px; border: 1px solid #f0c98a; border-radius: 8px; background: #fff9ee; font-size: 11px; line-height: 1.7; color: #8a5a00; }

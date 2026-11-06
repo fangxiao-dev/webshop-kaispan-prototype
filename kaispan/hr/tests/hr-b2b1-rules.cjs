@@ -40,13 +40,13 @@ assert.equal(ctx.empDocNeeded(base, ctx.empDocType('residence')), false);
 
 /* 居留许可 60 天预警；其他证件 30 天预警、31–90 天只算关注 */
 const residence = { status: 'active', contract: { nationalityClass: 'other' },
-  docs: { residence: { state: 'ok', expiry: '2026-12-21' } } };
+  docs: { residence: { state: 'ok', file: 'visa.pdf', expiry: '2026-12-21' } } };
 assert.equal(ctx.empDocState(residence, 'residence', '2026-11-06').level, 'warn');
-const passport = { status: 'active', contract: {}, docs: { id: { state: 'ok', expiry: '2026-12-21' } } };
+const passport = { status: 'active', contract: { nationalityClass: 'eu' }, docs: { id: { state: 'ok', file: 'passport.pdf', expiry: '2026-12-21' } } };
 assert.equal(ctx.empDocState(passport, 'id', '2026-11-06').level, 'soon');
 
 /* 健康证：首次证明 + 最近复训日，下次复训日 = +2 年 */
-const hygiene = { status: 'active', migrated: true, docs: { belehrung: { state: 'ok' } },
+const hygiene = { status: 'active', migrated: true, contract: { nationalityClass: 'eu' }, docs: { belehrung: { state: 'ok' } },
   health: { firstProof: 'yes', lastRetrain: '2024-11-06' } };
 assert.equal(ctx.empNextRetrain(hygiene), '2026-11-06');
 assert.equal(ctx.empDocState(hygiene, 'belehrung', '2026-11-06').level, 'warn');
