@@ -74,3 +74,36 @@ const EU_ALIGN_COPY={en:{
  Object.entries(EU_ALIGN_COPY).forEach(([lang,map])=>Object.assign(EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={}),map));
  ['vi','ko','ja'].forEach(lang=>{const map=EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={});Object.keys(EU_ALIGN_COPY.en).forEach(key=>{if(!map[key])map[key]=EU_ALIGN_COPY.en[key];});});
 })();
+
+/* 2026-11-06 第 1 轮审核修复：补齐遗漏文案，并允许业务选项（国籍/学生）参与翻译。 */
+const EU_ROUND1_COPY={en:{
+"提交时必须交齐":"Required when submitting","第一个上班日前必须有":"Required before the first working day","文件超过 20 MB":"File exceeds 20 MB",
+"护照或身份证（二选一）":"Passport or ID card (one of them)","附加页（Zusatzblatt）":"Zusatzblatt (supplement)","Sozialversicherungsnummer（社保号）":"Social insurance number",
+"合同类型是 Werkstudent，按规则视为学生，必须交在读证明。":"Contract type Werkstudent: treated as a student, proof of enrollment is required.",
+"当前没有可申请暂缺的项目。":"No item can currently be requested as pending.","请勾选要申请暂缺的项目":"Select the items to request","请写明暂缺原因和预计补交时间":"State the reason and expected delivery date",
+"员工档案关联已确认":"Employee record link confirmed","资料已确认，员工端已开通":"Details confirmed; employee portal activated","资料已确认，等待公司发送合同":"Details confirmed; waiting for the company to send the contract",
+"勾选了“保留原日期”，必须写原因（HR-DOC-20）。":"“Keep original date” selected — a reason is required (HR-DOC-20).",
+"当前没有店长发起的补件请求。":"There is no open document request from the manager.","还要补：":"Still needed: ","。请先在资料修改里填写或上传新版本。":". Please fill in or upload a new version under profile changes first.",
+"补交材料已交回，等待店长核对":"Documents returned; awaiting manager review","关键资料缺失":"Key documents missing",
+"在岗老员工开通：资料确认完成，不需要审核和合同；缺的资料会进入“关键资料缺失”提醒。":"Existing employee activation: details confirmed; no review or contract required. Missing documents appear under “Key documents missing”.",
+"已批准暂缺：":"Approved as pending: ","暂缺已逾期：":"Pending item overdue: "," 已过，请尽快补交":" has passed; please submit as soon as possible",
+"已逾期未补交（补交日 ":"Overdue (due date ","暂缺已驳回":"Pending request rejected","已补齐":"Completed",
+"资料已提交，等待店长审核":"Details submitted; awaiting manager review","员工档案关联":"Employee record link","欧盟、欧洲经济区或瑞士公民":"EU, EEA or Swiss citizen","其他国籍":"Other nationality","地址":"Address","医保卡正反面照片":"Photos of both sides of the insurance card","医保公司":"Health insurer","医保卡号":"Insurance card number","医保公司（Krankenkasse）":"Health insurer (Krankenkasse)","医保卡号（Krankenversichertennummer）":"Insurance number (Krankenversichertennummer)","税号与医保":"Tax ID and health insurance","补充信息（可选）":"Additional information (optional)","可以之后补":"Can be added later","回答国籍类别后才会列出需要哪些材料。":"The document list appears after you answer nationality.","社保号":"Social insurance number","食品卫生指导证明（健康证首次证明）":"Food hygiene instruction certificate (initial proof)","合同":"Contract","薪资":"Pay","账号关联":"Account link","一期实际只发邮件和站内待办。":"Phase 1 only sends email and in-app tasks.","公司代填：确认后不再走审核，直接进入已通过，随后公司发合同。":"Pre-filled by the company: confirming skips review and moves straight to approved, then the company sends the contract.","点钞记账":"Cash count and bookkeeping"
+},de:{
+"提交时必须交齐":"Bei Abgabe zwingend","第一个上班日前必须有":"Vor dem ersten Arbeitstag erforderlich","文件超过 20 MB":"Datei über 20 MB",
+"护照或身份证（二选一）":"Reisepass oder Personalausweis (eines davon)","附加页（Zusatzblatt）":"Zusatzblatt","Sozialversicherungsnummer（社保号）":"Sozialversicherungsnummer",
+"合同类型是 Werkstudent，按规则视为学生，必须交在读证明。":"Vertragsart Werkstudent: gilt als Studierende/r, Immatrikulationsbescheinigung ist Pflicht.",
+"当前没有可申请暂缺的项目。":"Derzeit ist kein Punkt genehmigungsfähig.","请勾选要申请暂缺的项目":"Betroffene Punkte auswählen","请写明暂缺原因和预计补交时间":"Grund und voraussichtliches Nachreichdatum angeben",
+"员工档案关联已确认":"Verknüpfung bestätigt","资料已确认，员工端已开通":"Angaben bestätigt; Mitarbeiterportal freigeschaltet","资料已确认，等待公司发送合同":"Angaben bestätigt; warten auf den Vertrag",
+"勾选了“保留原日期”，必须写原因（HR-DOC-20）。":"„Altes Datum behalten“ gewählt – Begründung erforderlich (HR-DOC-20).",
+"当前没有店长发起的补件请求。":"Keine offene Nachforderung der Leitung.","还要补：":"Noch nötig: ","。请先在资料修改里填写或上传新版本。":". Bitte zuerst unter „Daten ändern“ ausfüllen oder eine neue Version hochladen.",
+"补交材料已交回，等待店长核对":"Unterlagen übergeben; Prüfung durch die Leitung","关键资料缺失":"Pflichtangaben fehlen",
+"在岗老员工开通：资料确认完成，不需要审核和合同；缺的资料会进入“关键资料缺失”提醒。":"Bestandskraft: Angaben bestätigt; keine Prüfung und kein Vertrag nötig. Fehlendes erscheint als „Pflichtangaben fehlen“.",
+"已批准暂缺：":"Genehmigt fehlend: ","暂缺已逾期：":"Fehlender Punkt überfällig: "," 已过，请尽快补交":" ist überschritten; bitte schnellstmöglich nachreichen",
+"已逾期未补交（补交日 ":"Überfällig (Frist ","暂缺已驳回":"Antrag abgelehnt","已补齐":"Nachgereicht",
+"资料已提交，等待店长审核":"Angaben abgegeben; Prüfung durch die Leitung","员工档案关联":"Verknüpfung des Mitarbeiterkontos","欧盟、欧洲经济区或瑞士公民":"EU-, EWR- oder Schweizer Staatsangehörigkeit","其他国籍":"Andere Staatsangehörigkeit","地址":"Adresse","医保卡正反面照片":"Fotos der Versichertenkarte beidseitig","医保公司":"Krankenkasse","医保卡号":"Versichertennummer","医保公司（Krankenkasse）":"Krankenkasse","医保卡号（Krankenversichertennummer）":"Versichertennummer (Krankenversichertennummer)","税号与医保":"Steuer-ID und Krankenversicherung","补充信息（可选）":"Zusätzliche Angaben (optional)","可以之后补":"Kann später nachgereicht werden","回答国籍类别后才会列出需要哪些材料。":"Die Unterlagen erscheinen nach Beantwortung der Staatsangehörigkeit.","社保号":"Sozialversicherungsnummer","食品卫生指导证明（健康证首次证明）":"Belehrung nach §43 IfSG (Erstnachweis)","合同":"Vertrag","薪资":"Vergütung","账号关联":"Kontoverknüpfung","一期实际只发邮件和站内待办。":"Phase 1 nutzt nur E-Mail und Aufgaben im Portal.","公司代填：确认后不再走审核，直接进入已通过，随后公司发合同。":"Vom Betrieb vorausgefüllt: Bestätigen überspringt die Prüfung, danach sendet der Betrieb den Vertrag.","点钞记账":"Kassenzählung und Buchführung"
+}};
+(function(){
+ Object.entries(EU_ROUND1_COPY).forEach(([lang,map])=>Object.assign(EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={}),map));
+ ['vi','ko','ja'].forEach(lang=>{const map=EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={});Object.keys(EU_ROUND1_COPY.en).forEach(key=>{if(!map[key])map[key]=EU_ROUND1_COPY.en[key];});});
+})();
