@@ -107,3 +107,32 @@ const EU_ROUND1_COPY={en:{
  Object.entries(EU_ROUND1_COPY).forEach(([lang,map])=>Object.assign(EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={}),map));
  ['vi','ko','ja'].forEach(lang=>{const map=EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={});Object.keys(EU_ROUND1_COPY.en).forEach(key=>{if(!map[key])map[key]=EU_ROUND1_COPY.en[key];});});
 })();
+
+/* 2026-11-06 第 2 轮审核修复：动态拼出来的整句（日期、缺项清单）也走模板翻译，避免只译半句。 */
+const EU_ROUND2_COPY={en:{
+"已批准暂缺（{date} 前）":"Approved as pending (until {date})","已逾期未补交（补交日 {date}）":"Overdue (due date {date})",
+"补交日 {date} 前交回，逾期会每天提醒":"Return by {date}; overdue reminders follow","补交日 {date} 已过，请尽快补交":"Due date {date} has passed; please submit as soon as possible",
+"入职已完成，可在这里更新个人资料与材料。":"Onboarding complete. Update your details and documents here.",
+"入职审核已通过，可在这里更新个人资料与材料。":"Onboarding approved. Update your details and documents here.",
+"资料和签署文件已核对归档，现可进入员工工作台。":"Details and signed documents are checked and archived. You can open the workspace now.",
+"还要补：{items}。请先在资料修改里填写或上传新版本。":"Still needed: {items}. Please fill in or upload a new version under profile changes first.",
+"请先上传：{items}":"Please upload first: {items}","第一层还缺：{items}":"Stage 1 still missing: {items}","还缺：{items}":"Still missing: {items}",
+"没有可采纳的修改请求。":"There is no change request to approve.","找不到员工档案，无法采纳。":"Employee record not found; cannot apply.",
+"已记录“不是我”，请联系店长核对档案。":"Recorded “not me”. Please contact your manager to check the record.",
+"员工账号":"Employee account","保留原日期须写原因":"keeping the original date requires a reason","有效期（年月日）":"expiry date (year, month, day)"
+},de:{
+"已批准暂缺（{date} 前）":"Genehmigt fehlend (bis {date})","已逾期未补交（补交日 {date}）":"Überfällig (Frist {date})",
+"补交日 {date} 前交回，逾期会每天提醒":"Bis {date} nachreichen; danach tägliche Erinnerung","补交日 {date} 已过，请尽快补交":"Frist {date} überschritten; bitte schnellstmöglich nachreichen",
+"入职已完成，可在这里更新个人资料与材料。":"Onboarding abgeschlossen. Hier können Sie Angaben und Unterlagen aktualisieren.",
+"入职审核已通过，可在这里更新个人资料与材料。":"Onboarding genehmigt. Hier können Sie Angaben und Unterlagen aktualisieren.",
+"资料和签署文件已核对归档，现可进入员工工作台。":"Angaben und unterschriebene Dateien sind geprüft und archiviert. Sie können den Arbeitsbereich öffnen.",
+"还要补：{items}。请先在资料修改里填写或上传新版本。":"Noch nötig: {items}. Bitte zuerst unter „Daten ändern“ ausfüllen oder eine neue Version hochladen.",
+"请先上传：{items}":"Bitte zuerst hochladen: {items}","第一层还缺：{items}":"Stufe 1 fehlt noch: {items}","还缺：{items}":"Es fehlt noch: {items}",
+"没有可采纳的修改请求。":"Keine Änderungsanfrage zur Freigabe.","找不到员工档案，无法采纳。":"Mitarbeiterakte nicht gefunden; Übernahme nicht möglich.",
+"已记录“不是我”，请联系店长核对档案。":"„Nicht ich“ vermerkt. Bitte die Leitung zur Prüfung kontaktieren.",
+"员工账号":"Mitarbeiterkonto","保留原日期须写原因":"altes Datum behalten erfordert Begründung","有效期（年月日）":"Gültigkeit (Jahr, Monat, Tag)"
+}};
+(function(){
+ Object.entries(EU_ROUND2_COPY).forEach(([lang,map])=>Object.assign(EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={}),map));
+ ['vi','ko','ja'].forEach(lang=>{const map=EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={});Object.keys(EU_ROUND2_COPY.en).forEach(key=>{if(!map[key])map[key]=EU_ROUND2_COPY.en[key];});});
+})();

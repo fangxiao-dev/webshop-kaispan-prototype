@@ -34,8 +34,10 @@ function euNationalityClass(d){const p=d.profile||{};if(p.nationalityClass==='eu
 function euStudentAnswer(d){const e=euEmployee(d);if(e?.contract?.type==='werkstudent')return 'yes';const p=d.profile||{};if(p.student==='yes'||p.student==='no')return p.student;if(e&&euIsStudentOf(e))return 'yes';return '';}
 /* 附加页由店长核对居留证件后勾选，员工只看到结论（HR-DOC-06） */
 function euZusatzStatus(d){const p=d.profile||{};if(p.zusatzCheck==='yes'||p.zusatzCheck==='no')return p.zusatzCheck;if(!euNationalityClass(d))return '';const e=euEmployee(d);if(e)return euZusatzOf(e);return p.hasZusatz==='yes'?'yes':p.hasZusatz==='no'?'no':'';}
-/* 填写方式只看明确字段：建档总是写 employerEnteredAt，不能据此判定公司代填（HR-ONB-09/52）。 */
-function euFillMode(d){const demo=euDemo(),inv=euInvite(d);if(demo==='company')return 'company';if(demo==='veteran')return 'veteran';if(inv.fillMode==='veteran'||inv.kind==='activation'||inv.activation===true||inv.veteran===true)return 'veteran';if(inv.fillMode==='company'||inv.employerCompleted===true)return 'company';return 'self';}
+/* 公司代填的唯一判据是 employerCompleted===true；fillMode=company 但还没填完仍按自填走（HR-ONB-09/52）。
+   演示模式单独由演示入口决定，不冒充真实数据。 */
+function euFillMode(d){const demo=euDemo(),inv=euInvite(d);if(demo==='company')return 'company';if(demo==='veteran')return 'veteran';if(inv.fillMode==='veteran'||inv.kind==='activation'||inv.activation===true||inv.veteran===true)return 'veteran';if(inv.employerCompleted===true)return 'company';return 'self';}
+/* 关联确认判定只留一处：accountLink.pending、旧 linkPending/pendingLink、账号 pending_link 都算待确认。 */
 function euLinkPending(d){if(euDemo()==='link')return true;const inv=euInvite(d),link=inv.accountLink||inv.link||{};return link.state==='pending'||inv.linkPending===true||inv.pendingLink===true||euEmployee(d)?.account?.state==='pending_link';}
 function euContractSent(d){const demo=euDemo();if(demo==='contract'||demo==='contract-returned'||demo==='offline')return true;return !!(euInvite(d).contractSentAt);}
 function euContractOffline(d){const inv=euInvite(d);return euDemo()==='offline'||inv.dispatchMode==='offline'||!!inv.offlineSignedAt;}
@@ -62,18 +64,17 @@ function euLinkPendingEmployee(){
  if(euDemo()==='link')return invite?.employeeId?empById(invite.employeeId):null;
  if(!invite?.employeeId)return null;
  const e=empById(invite.employeeId);if(!e)return null;
- const link=e.invite?.accountLink;
- return link?.state==='pending'||e.account?.state==='pending_link'?e:null;
+ return euLinkPending({employeeId:e.id})?e:null;
 }
 
 function euRender(){
  const d=euData();
  const linkEmployee=euLinkPendingEmployee();
- if(linkEmployee)return euShell({...d,name:linkEmployee.name,invitation:{...(d.invitation||{}),store:linkEmployee.store}},euLinkPage({name:linkEmployee.name}));
+ if(linkEmployee)return euShell({...d,name:linkEmployee.name,invitation:{key:d.invitation?.key,store:''}},euLinkPage({name:linkEmployee.name}),{linkOnly:true});
  if(euSession.step==='register'){euSession.tab='tasks';if(euSession.demo)euSession.step='materials';}
  if(euSession.step==='register')return euShell(d,euWelcomePage(d));
  if(euSession.step==='password')return euShell(d,euPasswordPage());
- if(euLinkPending(d))return euShell(d,euLinkPage({...d,name:d.name||euInvitation()?.name||''}));
+ if(euLinkPending(d))return euShell({...d,name:d.name||euInvitation()?.name||'',invitation:{key:d.invitation?.key,store:''}},euLinkPage({...d,name:d.name||euInvitation()?.name||''}),{linkOnly:true});
  const stage=euStage(d);
  if(stage==='fill'||stage==='returned')return euShell(d,euMaterialsPage(d,stage));
  if(stage==='submitted')return euShell(d,euLockedPage(d));
@@ -81,9 +82,11 @@ function euRender(){
 }
 
 function euDemoSwitch(){return `<details class="eu-demo-switch" data-no-translate><summary>演示状态</summary><div><p>演示用，正式版没有：切换老板端的数据状态，查看员工端对应画面。</p><label>当前状态<select class="eu-demo-state">${EU_DEMO_STATES.map(([value,label])=>`<option value="${value}" ${euSession.demo===value?'selected':''}>${label}</option>`).join('')}</select></label></div></details>`;}
-function euShell(d,body){
+function euShell(d,body,opts){
+ const linkOnly=!!opts?.linkOnly,store=d.invitation?.store||d.contractSummary?.store||'Martin Biergarten';
+ const who=linkOnly?(d.name?empEsc(d.name):'员工账号'):`${d.name?empEsc(d.name)+' · ':''}${empEsc(store)}`;
  return `<div class="page-head"><div><h1>员工端 UI</h1><p>邀请 → 设密码 → 提交材料 → 签回合同 → 员工工作台</p></div><div class="eu-head-actions">${euDemoSwitch()}<button class="ghost-btn eu-restart">重新体验注册</button></div></div>
- <div class="eu-device"><header class="eu-header"><div><strong>KaiSpan 员工端</strong><small>${d.name?empEsc(d.name)+' · ':''}${empEsc(d.invitation?.store||d.contractSummary?.store||'Martin Biergarten')}</small></div><span class="pill purple">本机演示</span></header>${body}</div>`;
+ <div class="eu-device"><header class="eu-header"><div><strong>KaiSpan 员工端</strong><small>${who}</small></div><span class="pill purple">本机演示</span></header>${body}</div>`;
 }
 
 /* 材料清单：按国籍类别、是否学生、附加页变化（HR-DOC-02/06/07、组合表） */
@@ -255,11 +258,16 @@ function euProfileForm(d,section='all'){
  return `<div class="eu-profile-form">${base}${address}${optional}${layer2}${layer3}</div>`;
 }
 
-/* 国籍类别三选一、是否学生员工自答；附加页只显示店长核对结论（HR-DOC-02/06/07） */
-function euDocumentIdentity(d){
- const nat=euNationalityClass(d),student=euStudentAnswer(d),zusatz=euZusatzStatus(d);
+/* 国籍类别三选一、是否学生员工自答；附加页只显示店长核对结论（HR-DOC-02/06/07）。
+   入职后资料页（mode='update'）这两个控件也必须写 updateDraft，不能直改入职草稿/正式值。 */
+function euDocumentIdentity(d,mode){
+ const update=mode==='update',nat=euNationalityClass(d),student=euStudentAnswer(d),zusatz=euZusatzStatus(d);
  const ztext=zusatz==='yes'?'需要':zusatz==='no'?'无需':'待店长核对';
- return `<div class="eu-profile-form eu-identity"><label><span>国籍类别${euRequiredStar()}</span><select class="eu-eligibility" data-profile="nationalityClass"><option value="">请选择（没回答前材料清单待确认国籍）</option><option value="eu" ${nat==='eu'?'selected':''}>欧盟、欧洲经济区（冰岛、列支敦士登、挪威）或瑞士公民</option><option value="other" ${nat==='other'?'selected':''}>其他国籍（含英国）</option></select></label><label><span>是否是学生${euRequiredStar()}</span><select class="eu-eligibility" data-profile="student"><option value="">请选择</option><option value="yes" ${student==='yes'?'selected':''}>是（需交在读证明）</option><option value="no" ${student==='no'?'selected':''}>否</option></select></label><p class="eu-zusatz">附加页（Zusatzblatt）：<strong>${ztext}</strong><small>由店长核对居留证件后勾选，员工本人不选</small></p>${euEmployee(d)?.contract?.type==='werkstudent'?'<p class="eu-note">合同类型是 Werkstudent，按规则视为学生，必须交在读证明。</p>':''}</div>`;
+ const natValue=update?euUpdateValue(d,'nationalityClass'):(nat||''),stuValue=update?euUpdateValue(d,'student'):(student||'');
+ const attrs=key=>update?`class="eu-update-field" data-update="${key}"`:`class="eu-eligibility" data-profile="${key}"`;
+ const flag=(key)=>update&&euUpdateChanged(d,key)?'<span class="eu-flag is-pending">待核对</span>':'';
+ const old=(key)=>update&&euUpdateChanged(d,key)?`<small class="eu-old-value">原值：${empEsc((d.profile||{})[key]||'（空）')}</small>`:'';
+ return `<div class="eu-profile-form eu-identity"><label><span>国籍类别${update?flag('nationalityClass'):euRequiredStar()}</span><select ${attrs('nationalityClass')}><option value="">请选择（没回答前材料清单待确认国籍）</option><option value="eu" ${natValue==='eu'?'selected':''}>欧盟、欧洲经济区（冰岛、列支敦士登、挪威）或瑞士公民</option><option value="other" ${natValue==='other'?'selected':''}>其他国籍（含英国）</option></select>${old('nationalityClass')}</label><label><span>是否是学生${update?flag('student'):euRequiredStar()}</span><select ${attrs('student')}><option value="">请选择</option><option value="yes" ${stuValue==='yes'?'selected':''}>是（需交在读证明）</option><option value="no" ${stuValue==='no'?'selected':''}>否</option></select>${old('student')}</label><p class="eu-zusatz">附加页（Zusatzblatt）：<strong>${ztext}</strong><small>由店长核对居留证件后勾选，员工本人不选</small></p>${euEmployee(d)?.contract?.type==='werkstudent'?'<p class="eu-note">合同类型是 Werkstudent，按规则视为学生，必须交在读证明。</p>':''}</div>`;
 }
 
 /* 单据与文件行：上传限制 PDF/PNG/JPEG ≤ 20 MB，银行卡、医保卡只收照片（HR-DOC-09/12） */
@@ -289,15 +297,18 @@ function euApprovalState(a){
 }
 function euApprovalText(a){
  const state=euApprovalState(a);
- if(state==='approved')return `已批准暂缺（${euMonthDay(a.deadline)} 前）`;
- if(state==='expired')return `已逾期未补交（补交日 ${euMonthDay(a.deadline)}）`;
+ if(state==='approved')return euTF('已批准暂缺（{date} 前）',{date:euMonthDay(a.deadline)});
+ if(state==='expired')return euTF('已逾期未补交（补交日 {date}）',{date:euMonthDay(a.deadline)});
  if(state==='rejected')return '暂缺已驳回';
  if(state==='filled')return '已补齐';
  return '等待审批';
 }
 function euApprovalFlag(a){const state=euApprovalState(a);const tone=state==='approved'?'is-approved':state==='pending'?'is-pending':'is-rejected';return `<span class="eu-flag ${tone}">${euApprovalText(a)}</span>`;}
+/* 暂缺申请只认店长档案里的结果；本机旧副本不能在店长已批准/驳回后继续显示“等待审批”。 */
+function euSpecialRequest(d){const e=euEmployee(d);return e?(e.employeePortal?.specialSubmission||null):(d.specialSubmission||null);}
+function euSpecialState(d){return euSpecialRequest(d)?.state||'';}
 function euSpecialPending(d,key){
- const req=d.specialSubmission;if(req?.state!=='pending')return false;const t=euDocumentList(d).find(x=>x.key===key);const item=t?euSpecialKeyFor(t):key;return (req.items||[]).includes(item)||(req.items||[]).includes(key)||(String(req.labels||req.items||'').includes(item));
+ const req=euSpecialRequest(d);if(req?.state!=='pending')return false;const t=euDocumentList(d).find(x=>x.key===key);const item=t?euSpecialKeyFor(t):key;return (req.items||[]).includes(item)||(req.items||[]).includes(key)||(String(req.labels||req.items||'').includes(item));
 }
 
 function euInvitationDownloads(d){
@@ -326,9 +337,9 @@ function euSpecialMissingItems(d){
  add('hygiene','食品卫生指导证明（健康证首次证明）',!d.docs?.hygiene);
  return out;
 }
-function euMissingRequestLabels(d){const req=d.specialSubmission;return req&&req.state!=='approved'?(req.labels||req.items||[]):[];}
+function euMissingRequestLabels(d){const req=euSpecialRequest(d);return req&&req.state!=='approved'?(req.labels||req.items||[]):[];}
 function euSpecialBlock(d){
- const missing=euSpecialMissingItems(d),approvals=euMissingApprovals(d),req=d.specialSubmission,pending=req?.state==='pending';
+ const missing=euSpecialMissingItems(d),approvals=euMissingApprovals(d),req=euSpecialRequest(d),pending=euSpecialState(d)==='pending';
  if(!missing.length&&!approvals.length&&!pending)return '';
  const row=approval=>`<p class="eu-approval">${empEsc(euApprovalLabel(approval))}：${euApprovalText(approval)}${euApprovalState(approval)==='rejected'?'，请补齐或联系店长':''}</p>`;
  return `<section class="eu-special"><strong>申请暂缺</strong><p>可申请暂缺的只有税号、社保号、医保公司、医保卡号、医保卡照片、健康证首次证明；其他第一层必交项必须交齐。</p>${approvals.map(row).join('')}
@@ -355,20 +366,41 @@ function euBoundData(saved){
  const e=saved.employeeId?empById(saved.employeeId):null;if(!e)return saved;
  const formal={};
  Object.entries(EU_EMPLOYEE_PROFILE_MAP).forEach(([key,path])=>{const value=empGetPath(e,path);if(value!==undefined&&value!==null)formal[key]=String(value);});
- const parts=(e.name||'').split(' ');formal.first=e.firstName??parts[0]??'';formal.last=e.lastName??parts.slice(1).join(' ');
+ const parts=(e.name||'').split(' '),submitted=e.invite?.submitted||{};
+ /* 审核通过时以员工提交的 first/last 为准（快照里带）；之后又改过姓名（name 与提交快照不同）则按新姓名拆。
+    旧记录没有提交快照时退回档案字段。 */
+ const renamed=!!(submitted.name&&e.name&&submitted.name!==e.name&&parts.length>1);
+ formal.first=renamed?parts[0]:(submitted.firstName||e.firstName||parts[0]||'');
+ formal.last=renamed?parts.slice(1).join(' '):(submitted.lastName||e.lastName||parts.slice(1).join(' '));
  if(e.contract?.isStudent!=null)formal.student=e.contract.isStudent?'yes':'no';
- /* 新三态字段存在就以它为准；旧 nonEU 只在确实没有新字段的迁移档案里派生（HR-DOC-02/36） */
+ /* 新三态字段存在就以它为准，明确空值也投影成空；旧 nonEU 只在确实没有新字段的迁移档案里派生（HR-DOC-02/36） */
  const natField=e.contract?.nationalityClass;
- const nat=natField==='eu'||natField==='other'?natField:'';
- if(nat)formal.nationalityClass=nat;
- else if(natField===undefined&&e.migrated&&typeof e.contract?.nonEU==='boolean')formal.euCitizen=e.contract.nonEU?'no':'yes';
+ if(natField==='eu'||natField==='other')formal.nationalityClass=natField;
+ else if(natField!==undefined)formal.nationalityClass='';
+ else if(e.migrated&&typeof e.contract?.nonEU==='boolean')formal.euCitizen=e.contract.nonEU?'no':'yes';
  if(e.contract?.hasZusatz!=null)formal.hasZusatz=e.contract.hasZusatz?'yes':'no';
  if(e.contract?.zusatzCheck)formal.zusatzCheck=e.contract.zusatzCheck;
+ /* 店长已采纳同一条修改请求：清掉本机请求和对应草稿，页面回到正式档案；
+    被退回的请求保留草稿，员工按退回原因继续改。 */
+ const portalUpdate=e.employeePortal?.updateRequest,savedUpdate=saved.updateRequest;
+ const updateDone=portalUpdate?.state==='done'&&savedUpdate?.state==='pending'&&portalUpdate.at&&String(portalUpdate.at)===String(savedUpdate.at);
+ const doneKeys=new Set(updateDone?(portalUpdate.items||[]).filter(x=>x.kind==='field').map(x=>x.key):[]);
  /* 员工真正改过的键（profileEdited）用草稿值；没改过的键仍以正式档案为准，避免草稿里存旧副本。 */
- const edited=new Set(saved.profileEdited||[]);
+ const edited=new Set((saved.profileEdited||[]).filter(key=>!doneKeys.has(key)));
  const profile={...formal};
  Object.entries(saved.profile||{}).forEach(([key,value])=>{if(edited.has(key)||!(key in formal))profile[key]=value;});
- const d={...saved,name:e.name,email:e.contact?.email||saved.email,profile,docs:{...(saved.docs||{})},contractSummary:{...e.contract,entryDate:e.entryDate,probationEnd:e.probationEnd,store:e.store,role:e.role}};
+ /* 姓名由草稿 first/last 生成：提交与页面都读同一个值，不能再被档案旧姓名盖回（HR-ONB-15/36）。 */
+ const draftName=[profile.first,profile.last].filter(Boolean).join(' ').trim();
+ const name=(edited.has('first')||edited.has('last'))&&draftName?draftName:(e.name||draftName);
+ const d={...saved,name,email:e.contact?.email||saved.email,profile,docs:{...(saved.docs||{})},contractSummary:{...e.contract,entryDate:e.entryDate,probationEnd:e.probationEnd,store:e.store,role:e.role}};
+ if(updateDone){
+  /* 只清掉被采纳那几项；提交后又改的其他草稿继续保留。 */
+  const doneItemKeys=new Set((portalUpdate.items||[]).map(x=>x.key));
+  const keepProfile={};Object.entries(saved.updateDraft?.profile||{}).forEach(([key,value])=>{if(!doneItemKeys.has(key)&&!doneItemKeys.has(key.replace(/Expiry$/,'')))keepProfile[key]=value;});
+  const keepDocs={};Object.entries(saved.updateDraft?.docs||{}).forEach(([key,value])=>{if(!doneItemKeys.has(key))keepDocs[key]=value;});
+  d.updateDraft=(Object.keys(keepProfile).length||Object.keys(keepDocs).length)?{...saved.updateDraft,profile:keepProfile,docs:keepDocs}:null;
+  d.updateRequest=null;d.profileEdited=[...(saved.profileEdited||[])].filter(key=>!doneKeys.has(key));
+ }
  d.contractSignedSubmittedAt=e.invite?.contractSignedSubmittedAt||null;
  if(e.invite?.state==='submitted'&&!d.materialSubmitted)d.materialSubmitted=e.invite.submittedAt||'（已提交）';
  /* 被退回=回到草稿：清掉残留的提交标记，避免改任一字段就自动再次提交（HR-ONB-16/23） */
@@ -377,11 +409,17 @@ function euBoundData(saved){
  const removed=new Set((saved.docHistory||[]).map(x=>x.key));
  Object.entries(EU_EMPLOYEE_DOC_MAP).forEach(([key,docId])=>{
   const doc=e.docs?.[docId],local=saved.docs?.[key];
-  if(doc&&draftProfile[key+'Expiry']===undefined){d.profile[key+'Expiry']=doc.expiry||'';d.profile[key+'HasExpiry']=doc.noExpiry===true?'no':doc.expiry?'yes':'';}
+  /* 档案里的版本比本机新（例如店长刚换过护照）就刷新本机缓存；只有本机上传得更晚、还没提交时才保留本机件。 */
+  const localNewer=!!(local&&local.at&&(!doc?.at||String(local.at)>String(doc.at)));
+  if(doc&&(!local||!localNewer)){
+   if(!edited.has(key+'Expiry')&&draftProfile[key+'Expiry']===undefined){d.profile[key+'Expiry']=doc.expiry||'';d.profile[key+'HasExpiry']=doc.noExpiry===true?'no':doc.expiry?'yes':'';}
+   if(doc.state==='missing'){delete d.docs[key];return;}
+   if(!doc.file){d.docs[key]={name:'档案已记录，原文件未提供',source:'archive',legacyNoFile:true};return;}
+   d.docs[key]={name:doc.file,data:doc.dataUrl||empFileUrl(doc.ref),ref:doc.ref,at:doc.at,source:'archive',expiry:doc.expiry||''};
+   return;
+  }
   if(!doc||removed.has(key))return;
-  if(doc.state==='missing'){if(!local)delete d.docs[key];return;}
-  if(!doc.file){if(!local&&doc.state!=='missing')d.docs[key]={name:'档案已记录，原文件未提供',source:'archive',legacyNoFile:true};return;}
-  if(!local)d.docs[key]={name:doc.file,data:doc.dataUrl||empFileUrl(doc.ref),ref:doc.ref,at:doc.at,source:'archive'};
+  if(!local&&doc.file)d.docs[key]={name:doc.file,data:doc.dataUrl||empFileUrl(doc.ref),ref:doc.ref,at:doc.at,source:'archive',expiry:doc.expiry||''};
  });
  return d;
 }
@@ -398,7 +436,8 @@ function euEnsureEmployee(d,invite){
    审核通过时才能一次合并进正式档案（HR-ONB-16/52）。 */
 function euSubmissionSnapshot(d){
  const p=d.profile||{};
- const snap={at:d.materialSubmitted,name:d.name||[p.first,p.last].filter(Boolean).join(' '),birthday:p.birthday||'',contact:{},ids:{},docs:{},contract:{},profile:{...p}};
+ const name=[p.first,p.last].filter(Boolean).join(' ').trim()||d.name||'';
+ const snap={at:d.materialSubmitted,name,firstName:p.first||'',lastName:p.last||'',birthday:p.birthday||'',contact:{},ids:{},docs:{},contract:{},profile:{...p}};
  Object.entries(EU_EMPLOYEE_PROFILE_MAP).forEach(([key,path])=>{if(path.startsWith('contact.')||path.startsWith('ids.'))empSetPath(snap,path,p[key]??'');});
  if(p.nationalityClass!==undefined)snap.contract.nationalityClass=p.nationalityClass;
  const student=euStudentAnswer(d);if(student)snap.contract.isStudent=student==='yes';
@@ -421,6 +460,8 @@ function euSyncStaff(d,opts){
   Object.entries(EU_EMPLOYEE_DOC_MAP).forEach(([key,docId])=>{
    if(cfg.docKeys&&!cfg.docKeys.includes(key))return;
    const doc=d.docs?.[key],old=next.docs[docId]||{};
+   /* 本机缓存比档案旧时不回写，避免工作台一保存就把店长刚更新的文件退回旧版（HR-ONB-15/43）。 */
+   if(doc&&!doc.legacyNoFile&&old.at&&doc.at&&String(doc.at)<String(old.at))return;
    if(next.docs[docId]&&d.profile?.[key+'Expiry']!==undefined)next.docs[docId].expiry=d.profile[key+'Expiry'];
    if(next.docs[docId]&&d.profile?.[key+'HasExpiry']!==undefined)next.docs[docId].noExpiry=d.profile[key+'HasExpiry']==='no';
    if(doc?.legacyNoFile)return;
@@ -435,23 +476,25 @@ function euSyncStaff(d,opts){
   next.invite.submitted={...(d.submitted||{}),profile:{...(d.submitted?.profile||d.profile||{})}};
  }
  if(!d.materialSubmitted&&d.withdrawnAt&&next.invite?.state==='submitted'){next.invite.state='sent';next.invite.withdrawnAt=d.withdrawnAt;next.invite.lastSubmitActionAt=null;}
- if(d.confirmedCompanyProfileAt&&next.invite){next.invite.state='approved';next.invite.fillMode='company';next.invite.confirmedCompanyProfileAt=d.confirmedCompanyProfileAt;next.invite.approvedAt=next.invite.approvedAt||d.confirmedCompanyProfileAt;}
+ /* 公司代填确认只认 employerCompleted===true 或明确的演示模式（HR-ONB-09/52）。 */
+ if(d.confirmedCompanyProfileAt&&next.invite&&(next.invite.employerCompleted===true||euDemo()==='company')){next.invite.state='approved';next.invite.fillMode='company';next.invite.confirmedCompanyProfileAt=d.confirmedCompanyProfileAt;next.invite.approvedAt=next.invite.approvedAt||d.confirmedCompanyProfileAt;}
  /* 在岗老员工确认后直接归档：不审核、不发合同（HR-ACCESS-30、HR-ONB-52） */
  if(d.veteranConfirmedAt&&next.invite){next.invite.state='approved';next.invite.fillMode='veteran';next.invite.veteranConfirmedAt=d.veteranConfirmedAt;next.invite.approvedAt=next.invite.approvedAt||d.veteranConfirmedAt;next.invite.archivedAt=next.invite.archivedAt||d.veteranConfirmedAt;next.invite.archivedBy=next.invite.archivedBy||'员工确认';}
  if(d.contractSignedSubmittedAt&&next.invite&&!next.invite.contractSignedSubmittedAt)next.invite.contractSignedSubmittedAt=d.contractSignedSubmittedAt;
  if(d.accountLinkConfirmedAt&&next.invite){if(next.invite.accountLink?.state==='pending')next.invite.accountLink={...next.invite.accountLink,state:'confirmed',confirmedAt:d.accountLinkConfirmedAt};if(next.account?.state==='pending_link')next.account={...next.account,state:'active',activatedAt:empNow()};}
- const portal=next.employeePortal||{};
- next.employeePortal={...portal,materialUpdateAt:d.materialUpdateAt||portal.materialUpdateAt||null,key:euSession.key,submittedAt:d.materialSubmitted||null,specialSubmission:d.specialSubmission||portal.specialSubmission||null,updateRequest:d.updateRequest!==undefined?d.updateRequest:(portal.updateRequest||null),supplementReturnedAt:d.supplementReturnedAt!==undefined?d.supplementReturnedAt:(portal.supplementReturnedAt||null),supplementSubmission:d.supplementSubmission||portal.supplementSubmission||null,missingApprovals:d.missingApprovals||portal.missingApprovals||null,notifications:d.notifications||[],updatedAt:empNow()};
+ /* 普通保存绝不写请求/审批结果：只有显式动作经 euPublishPortal 发布，否则会把店长已处理的结果复活（HR-ONB-43/44）。 */
+ if(next.employeePortal&&next.employeePortal.key!==euSession.key)next.employeePortal={...next.employeePortal,key:euSession.key};
  if(JSON.stringify(next)!==JSON.stringify(current))empSaveWithHistory(next,'员工端 UI');
 }
 function euSyncInvite(d){return euSyncStaff(d,{});}
 function euSyncEmployee(d){return euSyncStaff(d,{profile:true,docs:true});}
 function euSyncDocs(d,docKeys){return euSyncStaff(d,{docs:true,docKeys});}
 /* 只发布店长可见的请求结果，不动正式档案字段（HR-ONB-43/44） */
-function euPublishPortal(d,patch){
+function euPublishPortal(d,patch,extra){
  if(!d.employeeId)return;const current=empById(d.employeeId);if(!current)return;
  const next=JSON.parse(JSON.stringify(current));
  next.employeePortal={...(next.employeePortal||{}),...patch,updatedAt:empNow()};
+ if(extra)Object.assign(next,extra);
  if(JSON.stringify(next)!==JSON.stringify(current))empSaveWithHistory(next,'员工端 UI');
 }
 
@@ -490,7 +533,7 @@ function euHrTodoItems(d){
  if(update&&update.state==='pending')items.push({title:'资料修改待店长核对',meta:`共 ${(update.items||[]).length} 项，核对期间档案保持原值`,pill:'资料',tone:'blue',tab:'docs'});
  else if(update&&update.state==='returned')items.push({title:'资料修改被退回',meta:update.reason||'请按店长说明修改后重新提交',pill:'资料',tone:'orange',tab:'docs'});
  euExpiryNotices(d).forEach(x=>items.push({title:x.title,meta:x.message,pill:'证件',tone:'red',tab:'docs'}));
- euMissingApprovals(d).forEach(x=>{const state=euApprovalState(x);if(state==='approved')items.push({title:`已批准暂缺：${euApprovalLabel(x)}`,meta:`补交日 ${euMonthDay(x.deadline)} 前交回，逾期会每天提醒`,pill:'暂缺',tone:'blue',tab:'docs'});else if(state==='expired')items.push({title:`暂缺已逾期：${euApprovalLabel(x)}`,meta:`补交日 ${euMonthDay(x.deadline)} 已过，请尽快补交`,pill:'暂缺',tone:'red',tab:'docs'});});
+ euMissingApprovals(d).forEach(x=>{const state=euApprovalState(x);if(state==='approved')items.push({title:`已批准暂缺：${euApprovalLabel(x)}`,meta:euTF('补交日 {date} 前交回，逾期会每天提醒',{date:euMonthDay(x.deadline)}),pill:'暂缺',tone:'blue',tab:'docs'});else if(state==='expired')items.push({title:`暂缺已逾期：${euApprovalLabel(x)}`,meta:euTF('补交日 {date} 已过，请尽快补交',{date:euMonthDay(x.deadline)}),pill:'暂缺',tone:'red',tab:'docs'});});
  if(euContractSent(d)&&!euContractArchived(d))items.push({title:'签回劳动合同和个人问卷',meta:euContractTodoMeta(d),pill:'合同',tone:'orange',tab:'docs'});
  if(euLinkPending(d))items.push({title:'请确认员工档案关联',meta:'确认前只显示档案姓名',pill:'关联',tone:'orange',tab:'docs'});
  return items;
@@ -601,17 +644,24 @@ function euContractFile(d,key){
  return null;
 }
 /* 每份单独核对：待上传 / 已上传待核对 / 已通过 / 已退回（只重传被退回的那份，HR-ONB-36） */
+function euContractArchiveDoc(d,key){return (euEmployee(d)?.docs||{})[EU_EMPLOYEE_DOC_MAP[key]]||null;}
+/* 是否有本机新上传的版本：旧记录缺退回时间时，用档案里旧件的上传时间当锚点，旧件本身不算重传（HR-ONB-53）。 */
+function euContractFreshUpload(d,key,status){
+ const doc=d.docs?.[key],anchor=status?.at||euContractArchiveDoc(d,key)?.at||'';
+ return !!doc&&doc.source!=='archive'&&!doc.legacyNoFile&&!!doc.at&&(!anchor||String(doc.at)>String(anchor));
+}
 function euContractStatus(d,key){
  const inv=euInvite(d),demo=euDemo(),review=(inv.contractReview||{})[key];
  const doc=d.docs?.[key];
  /* 重传后新版本比退回记录新，就按新版本状态算，旧 returned 不再盖住新文件（HR-ONB-53） */
- const newer=!!(doc?.at&&review?.at&&String(doc.at)>String(review.at));
+ const anchor=review?.at||euContractArchiveDoc(d,key)?.at||'';
+ const newer=!!(doc?.at&&anchor&&String(doc.at)>String(anchor));
  if(review?.state==='approved')return {state:'approved'};
- if(review?.state==='returned'&&!newer)return {state:'returned',reason:review.reason||'',at:review.at||''};
+ if(review?.state==='returned'&&!newer)return {state:'returned',reason:review.reason||'',at:anchor};
  if(demo==='contract-returned'&&key==='questionnaire')return {state:'returned',reason:inv.contractReturnReason||'演示：问卷第 3 页缺本人签字'};
- if(Array.isArray(inv.returnedItems)&&inv.returnedItems.includes(key)&&!newer)return {state:'returned',reason:inv.contractReturnReason||inv.returnNote||'',at:inv.reviewedAt||''};
- if(inv.returnedContractItems&&inv.returnedContractItems[key]&&!newer)return {state:'returned',reason:inv.contractReturnReason||inv.returnNote||'',at:inv.reviewedAt||''};
- if(doc?.state==='returned'&&!newer)return {state:'returned',reason:doc.reason||'',at:doc.reviewedAt||review?.at||''};
+ if(Array.isArray(inv.returnedItems)&&inv.returnedItems.includes(key)&&!newer)return {state:'returned',reason:inv.contractReturnReason||inv.returnNote||'',at:anchor||inv.reviewedAt||''};
+ if(inv.returnedContractItems&&inv.returnedContractItems[key]&&!newer)return {state:'returned',reason:inv.contractReturnReason||inv.returnNote||'',at:anchor||inv.reviewedAt||''};
+ if(doc?.state==='returned'&&!newer)return {state:'returned',reason:doc.reason||'',at:doc.reviewedAt||anchor};
  if(inv.contractSignedSubmittedAt)return {state:'submitted'};
  if(doc)return {state:'uploaded'};
  return {state:'missing'};
@@ -621,7 +671,7 @@ function euContractPanel(d){
  if(offline&&archived)return `<section class="eu-task eu-contract"><h3>合同与问卷</h3><p class="eu-offline-tag">已归档（线下签署）</p><p>公司已上传双方签字的劳动合同和个人问卷扫描件，不需要你在线签字。</p><button type="button" class="primary-btn eu-finish-onboarding">进入员工工作台</button></section>`;
  if(archived){
   const veteran=!!inv.veteranConfirmedAt||inv.fillMode==='veteran';
-  return `<section class="eu-task eu-contract"><h3>入职已完成</h3><p>${veteran?'在岗老员工开通：资料确认完成，不需要审核和合同；缺的资料会进入“关键资料缺失”提醒。':'资料和签署文件已核对归档，现可进入员工工作台。'}</p><button type="button" class="primary-btn eu-finish-onboarding">进入员工工作台</button></section>`;
+   return `<section class="eu-task eu-contract"><h3>入职已完成</h3><p>${euT(veteran?'在岗老员工开通：资料确认完成，不需要审核和合同；缺的资料会进入“关键资料缺失”提醒。':'资料和签署文件已核对归档，现可进入员工工作台。')}</p><button type="button" class="primary-btn eu-finish-onboarding">进入员工工作台</button></section>`;
  }
  if(!sent)return `<section class="eu-task eu-contract"><h3>${stage==='approved'?'等待公司发送合同':'等待资料审核'}</h3><p>${stage==='approved'?'资料已审核通过，公司会发劳动合同和个人调查问卷（两份一起发）。':'资料提交后由店长审核；通过后公司发劳动合同和个人调查问卷。'}</p><small>提交资料 → 店长审核 → 公司发合同与问卷 → 你签字上传 → 店长核对归档</small></section>`;
  /* 一期固定两份一起发；旧记录缺 onboardingFilesVersion 也按两份，避免问卷不显示又要求两份（HR-ONB-36） */
@@ -637,7 +687,7 @@ function euContractPanel(d){
 function euExpiryNotices(d){const e=d.employeeId?empById(d.employeeId):null;if(!e||typeof empAlertsFor!=='function')return [];return empAlertsFor(e,empToday()).filter(a=>a.kind==='doc'&&['expired','warn','soon','date_missing'].includes(a.level)).map(a=>{const hygiene=a.type.id==='belehrung';return {title:hygiene?'健康证 / 食品卫生培训提醒':a.title+' · 有效期提醒',message:a.level==='date_missing'?'请补充材料截止日期（年月日）。':hygiene?`截止日期 ${a.date}，${a.level==='expired'?'已到期':a.days===0?'今天到期':'即将到期'}；请联系店长安排继续培训，完成后提交新证明与截止日期。`:`有效期至 ${a.date}，${a.level==='expired'?'已过期':a.days===0?'今天到期':'即将到期'}；请及时更新材料并填写新的有效期。`};});}
 
 function euIdentityError(kind,value){const raw=String(value||'').trim();if(!raw)return '';const compact=raw.replace(/[\s-]/g,'').toUpperCase();if(kind==='steuerId')return /^\d{11}$/.test(compact)?'':'请输入 11 位数字，空格可省略。';return /^\d{8}[A-Z]\d{3}$/.test(compact)?'':'请输入 12 位，第 9 位为字母，其余为数字。';}
-function euBindIdentityHints(scope){scope.querySelectorAll('[data-id-kind]').forEach(input=>{if(input.dataset.idHintBound)return;input.dataset.idHintBound='1';const refresh=()=>{const error=euIdentityError(input.dataset.idKind,input.value),box=input.parentElement.querySelector('.eu-id-error');if(box)box.textContent=error;input.setAttribute('aria-invalid',error?'true':'false');};input.addEventListener('input',refresh);refresh();});}
+function euBindIdentityHints(scope){scope.querySelectorAll('[data-id-kind]').forEach(input=>{if(input.dataset.idHintBound)return;input.dataset.idHintBound='1';const refresh=()=>{const error=euIdentityError(input.dataset.idKind,input.value),box=input.parentElement.querySelector('.eu-id-error');if(box)box.textContent=error?euT(error):'';input.setAttribute('aria-invalid',error?'true':'false');};input.addEventListener('input',refresh);refresh();});}
 
 function euContractEmailTip(){return `<details class="eu-contract-tip"><summary aria-label="劳动合同：工作邮箱与通知渠道说明">!</summary><div role="note"><strong>合同条款建议 · 工作邮箱与通知</strong><p>公司为员工分配 KaiSpan 工作邮箱【员工邮箱】，并告知官方登录入口【登录地址】。该邮箱作为工作相关通知的官方渠道；员工应在合理工作时间内定期登录查看，并及时向公司报告无法登录、收取异常或其他邮箱问题，以便通过其他适当方式联系。</p><p>公司应确保员工能够访问邮箱，保留发送和投递记录；通知是否有效送达，以适用法律和实际送达情况为准。法律要求特定形式的文件，仍按法定方式送达。</p><small>合同条款草案，正式使用前请由德国劳动法律师审核。</small></div></details>`;}
 
@@ -676,15 +726,27 @@ function euSupplementLabels(sup,d){return (sup?.items||[]).map(x=>euSupplementLa
 function euSupplementSubmission(d,sup){
  const entries=(sup?.items||[]).map(euSupplementEntry).filter(x=>x.key);
  const sub={docs:{},contact:{},ids:{}},missing=[];
+ /* 店长请求时间以 sentAt 为准（empSendRequest 写的是 sentAt）；旧演示字段才退回 at。 */
+ const askedAt=String(sup?.sentAt||sup?.at||'');
+ const validDate=value=>typeof empValidExpiry==='function'?empValidExpiry(value):/^\d{4}-\d{2}-\d{2}$/.test(value||'');
  for(const item of entries){
   const docKey=Object.keys(EU_EMPLOYEE_DOC_MAP).find(k=>k===item.key||EU_EMPLOYEE_DOC_MAP[k]===item.key);
   if(docKey){
+   const t=euDocumentList(d).find(x=>x.key===docKey)||{key:docKey,label:euSupplementLabel(d,item),expires:['passport','visa','zusatz','student','hygiene'].includes(docKey)};
    const pending=d.updateDraft?.docs?.[docKey],uploaded=d.docs?.[docKey];
-   const newer=uploaded&&(!sup.at||String(uploaded.at||'')>String(sup.at));
-   const file=newer?uploaded:pending;
+   /* 旧档案件和“档案已记录、无原件”都不能冒充本次补交；必须有本次上传时间且晚于店长请求。 */
+   const fresh=file=>!!file&&file.source!=='archive'&&!file.legacyNoFile&&!!file.at&&(!askedAt||String(file.at)>askedAt);
+   const file=fresh(pending)?pending:fresh(uploaded)?uploaded:null;
    if(!file){missing.push(euSupplementLabel(d,item));continue;}
+   let expiry='';
+   if(t.expires){
+    const keep=!!d.updateDraft?.keepExpiry?.[docKey],reason=String(d.updateDraft?.keepReason?.[docKey]||'').trim();
+    expiry=keep?((d.profile||{})[docKey+'Expiry']||file.oldExpiry||''):euUpdateValue(d,docKey+'Expiry');
+    if(keep&&!reason){missing.push(t.label+'：保留原日期须写原因');continue;}
+    if(!validDate(expiry)){missing.push(t.label+'有效期（年月日）');continue;}
+   }
    const docId=EU_EMPLOYEE_DOC_MAP[docKey];
-   sub.docs[docId]={state:'ok',file:file.name,dataUrl:file.data||file.ref||null,expiry:(d.profile||{})[docKey+'Expiry']||file.oldExpiry||'',at:file.at||empNow()};
+   sub.docs[docId]={state:'ok',file:file.name,dataUrl:file.data||file.ref||null,expiry,noExpiry:false,at:file.at||empNow()};
    continue;
   }
   const key=euSupplementProfileKey(item.key||item.path||''),path=EU_EMPLOYEE_PROFILE_MAP[key];
@@ -696,13 +758,21 @@ function euSupplementSubmission(d,sup){
 }
 /* 暂缺审批结果：店长写入档案的 missingApprovals（见报告“依赖字段”） */
 function euDaysFrom(date,days){const dt=new Date(date+'T12:00:00');dt.setDate(dt.getDate()+days);return dt.toISOString().slice(0,10);}
-function euMissingApprovals(d){const demo=euDemo();if(demo==='missing-approved')return EU_SPECIAL_ITEMS.map(([item,label])=>({item,label,status:'approved',deadline:euDaysFrom(empToday(),30)}));const e=euEmployee(d),raw=e?.missingApprovals||e?.employeePortal?.missingApprovals||e?.invite?.missingApprovals||d.missingApprovals||[];return Array.isArray(raw)?raw:[].concat(raw);}
+function euMissingApprovals(d){const demo=euDemo();if(demo==='missing-approved')return EU_SPECIAL_ITEMS.map(([item,label])=>({item,label,status:'approved',deadline:euDaysFrom(empToday(),30)}));const e=euEmployee(d);
+ /* 已关联档案时只认店长写入的结果；本机副本只在没有档案的演示数据里兜底。 */
+ const raw=e?(e.missingApprovals||e.employeePortal?.missingApprovals||e.invite?.missingApprovals||[]):(d.missingApprovals||[]);return Array.isArray(raw)?raw:[].concat(raw);}
 function euApprovalLabel(x){return x.label||(EU_SPECIAL_ITEMS.find(([key])=>key===x.item)?.[1])||x.item||'';}
-function euMonthDay(date){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(date||'');return m?`${Number(m[2])} 月 ${Number(m[3])} 日`:'';}
+/* 日期格式跟界面语言走，避免德语界面里混出“12 月 1 日”。 */
+function euMonthDay(date){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(date||'');if(!m)return '';const lang=typeof euLang==='function'?euLang():'zh';
+ if(lang==='de')return `${Number(m[3])}.${Number(m[2])}.${m[1]}`;
+ if(lang==='zh')return `${Number(m[2])} 月 ${Number(m[3])} 日`;
+ return `${Number(m[3])} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m[2])-1]} ${m[1]}`;}
 function euAccept(t){return t?.imageOnly?'image/png,image/jpeg':'.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg';}
 
 const EU_UPDATE_FIELDS=[['first','名','text'],['last','姓','text'],['birthday','出生日期','date'],['phone','电话','tel'],['street','街道','text'],['houseNo','门牌号','text'],['zip','邮编','text'],['city','城市','text'],['country','居住国家','text'],['emergencyName','紧急联系人姓名','text'],['emergencyPhone','紧急联系人电话','tel'],['steuerId','Steuer-ID（个人税务识别号）','text'],['rentenversicherung','Sozialversicherungsnummer（社会保险号）','text'],['iban','IBAN','text'],['krankenkasse','医保公司','text'],['healthCardNumber','医保卡号','text']];
 function euDraftProfile(d){return d.updateDraft?.profile||{};}
+/* 资料页展示用视图：国籍/学生以 updateDraft 为准，材料清单也跟着草稿变。 */
+function euUpdateView(d){const draft=euDraftProfile(d);if(!Object.keys(draft).length)return d;const profile={...(d.profile||{})};['nationalityClass','student'].forEach(key=>{if(draft[key]!==undefined)profile[key]=draft[key];});return {...d,profile};}
 function euUpdateValue(d,key){const draft=euDraftProfile(d);return draft[key]!==undefined?draft[key]:((d.profile||{})[key]||'');}
 function euUpdateChanged(d,key){const draft=euDraftProfile(d);return draft[key]!==undefined&&String(draft[key]||'')!==String((d.profile||{})[key]||'');}
 function euUpdateField(d,key,label,type){
@@ -725,15 +795,16 @@ function euUpdateDocRow(d,t){
 }
 function euDocsTab(d){
  const sup=euSupplementRequest(d),update=euUpdateRequest(d),stage=euStage(d);
+ const view=euUpdateView(d);
  const supSubmitted=sup?.state==='submitted';
  const supBlock=sup?`<section class="eu-supplement"><strong>店长要求补交材料</strong><p>要补的项目：</p><div class="eu-flags">${euSupplementLabels(sup,d).map(l=>`<span class="eu-flag">${empEsc(l)}</span>`).join('')}</div>${sup.note?`<p class="eu-note">店长说明：${empEsc(sup.note)}</p>`:''}${supSubmitted?'':`<button type="button" class="ghost-btn eu-supplement-return">已补交，交回店长核对</button>`}${d.supplementReturnedAt||supSubmitted?`<p class="eu-notice">已于 ${empEsc(d.supplementReturnedAt||sup.submittedAt||'')} 交回，等待店长核对。</p>`:''}</section>`:'';
  const updateBlock=update?`<section class="eu-update-request"><strong>${update.state==='returned'?'资料修改被退回':'资料修改待店长核对'}</strong>${update.state==='returned'&&update.reason?`<p>退回原因：${empEsc(update.reason)}</p>`:''}<p>提交时间：${empEsc(update.at||'')} · 共 ${(update.items||[]).length} 项</p>${(update.items||[]).length?`<ul class="eu-update-items">${update.items.map(x=>`<li><strong>${empEsc(x.label)}</strong>：${empEsc(x.from||'（空）')} → ${empEsc(x.to||'（空）')}</li>`).join('')}</ul>`:''}<p class="eu-note">核对期间正式档案保持原值；店长采纳后才写入正式档案。</p>${update.state==='pending'?`<button type="button" class="ghost-btn eu-update-withdraw">撤回这次修改</button><div class="eu-cols"><button type="button" class="ghost-btn eu-update-adopt">演示：店长已采纳</button><button type="button" class="ghost-btn eu-update-reject">演示：店长退回</button></div>`:''}</section>`:'';
  const changed=euUpdateChangedList(d);
- return `<span class="eu-step">我的资料</span><h2>个人资料与入职材料</h2><p>${stage==='archived'?'入职已完成，可在这里更新个人资料与材料。':'入职审核已通过，可在这里更新个人资料与材料。'}修改后先提交给店长核对，采纳后才写入正式档案。</p>
+ return `<span class="eu-step">我的资料</span><h2>个人资料与入职材料</h2><p>${euT(stage==='archived'?'入职已完成，可在这里更新个人资料与材料。':'入职审核已通过，可在这里更新个人资料与材料。')}修改后先提交给店长核对，采纳后才写入正式档案。</p>
  ${supBlock}${updateBlock}
  ${euContractPanel(d)}
  <h3>修改资料</h3><p class="eu-note">只改需要改的项，其他保持不填。改动的地方会标“待核对”，并显示原值。</p>${euUpdateForm(d)}
- <h3>证件与文件</h3>${euDocumentIdentity(d)}${euDocumentList(d).map(t=>euUpdateDocRow(d,t)).join('')}
+ <h3>证件与文件</h3>${euDocumentIdentity(view,'update')}${euDocumentList(view).map(t=>euUpdateDocRow(d,t)).join('')}
  <p class="eu-validation" role="status"></p>
  <div class="eu-submit-actions"><button type="button" class="primary-btn eu-update-submit">提交给店长核对${changed?`（${changed} 项）`:''}</button></div>
  <button type="button" class="ghost-btn eu-demo-link eu-demo-supplement">演示：店长发起补件</button>
@@ -748,13 +819,37 @@ function euUpdateSubmitItems(d){
  EU_UPDATE_FIELDS.forEach(([key,label])=>{if(euUpdateChanged(d,key))items.push({key,label,kind:'field',from:(d.profile||{})[key]||'',to:euUpdateValue(d,key)});});
  ['nationalityClass','student','language'].forEach(key=>{if(euUpdateChanged(d,key))items.push({key,label:EU_UPDATE_LABELS[key]||key,kind:'field',from:(d.profile||{})[key]||'',to:euUpdateValue(d,key)});});
  for(const [key,file] of Object.entries(d.updateDraft?.docs||{})){
-  const t=euDocumentList(d).find(x=>x.key===key);if(!t)continue;
+  const t=euDocumentList(euUpdateView(d)).find(x=>x.key===key);if(!t)continue;
   const expiry=euUpdateValue(d,key+'Expiry'),keep=!!d.updateDraft?.keepExpiry?.[key],reason=String(d.updateDraft?.keepReason?.[key]||'').trim();
+  const keptExpiry=(d.profile||{})[key+'Expiry']||'';
+  const validDate=value=>typeof empValidExpiry==='function'?empValidExpiry(value):/^\d{4}-\d{2}-\d{2}$/.test(value||'');
   if(t.expires&&!keep&&!expiry)return {items,error:'替换带有效期的材料时，请重填新有效期，或勾选“保留原日期”并写原因。'};
   if(keep&&!reason)return {items,error:'勾选了“保留原日期”，必须写原因（HR-DOC-20）。'};
-  items.push({key,label:t.label,kind:'doc',from:(d.docs[key]?.name||'无'),to:file.name,file:{name:file.name,data:file.data||null,at:file.at||empNow()},expiry:keep?((d.profile||{})[key+'Expiry']||''):expiry,keepExpiry:keep,keepReason:keep?reason:''});
+  if(keep&&!validDate(keptExpiry))return {items,error:'现行版本没有可保留的有效期，请改填新有效期。'};
+  items.push({key,label:t.label,kind:'doc',from:(d.docs[key]?.name||'无'),to:file.name,file:{name:file.name,data:file.data||null,at:file.at||empNow()},expiry:keep?keptExpiry:expiry,keepExpiry:keep,keepReason:keep?reason:''});
  }
  return {items,error:''};
+}
+
+/* 采纳严格按冻结的请求项执行：字段取 to、文件取请求里保存的那一版；
+   不读提交后又被改动的草稿，也不拿本机缓存整体覆盖档案（HR-ONB-43）。 */
+function euApplyUpdateItems(e,items,at){
+ const next=JSON.parse(JSON.stringify(e));next.contact||={};next.ids||={};next.docs||{};next.contract||={};
+ (items||[]).forEach(item=>{
+  if(item.kind==='doc'){
+   const docId=EU_EMPLOYEE_DOC_MAP[item.key];if(!docId)return;
+   const old=next.docs[docId]||{},file=item.file||{};
+   if(old.file&&old.dataUrl&&file.data&&old.dataUrl!==file.data)next.documentArchive=[{docId,...old,archivedAt:at},...(next.documentArchive||[])];
+   next.docs[docId]={...old,state:'ok',file:file.name||item.to||old.file,dataUrl:file.data||old.dataUrl,ref:file.ref||old.ref,expiry:item.expiry||'',noExpiry:false,at:file.at||at,by:(typeof empActorLabel==='function'?empActorLabel():old.by),needsReview:false};
+   return;
+  }
+  if(item.key==='nationalityClass'){if(typeof hrSetNationalityClass==='function')hrSetNationalityClass(next,item.to);else{next.contract.nationalityClass=item.to==='eu'||item.to==='other'?item.to:'';next.contract.nonEU=next.contract.nationalityClass==='other';}return;}
+  if(item.key==='student'){next.contract.isStudent=item.to==='yes';return;}
+  if(item.key==='first'||item.key==='last'){next[item.key==='first'?'firstName':'lastName']=item.to;const name=[next.firstName||'',next.lastName||''].filter(Boolean).join(' ');if(name)next.name=name;return;}
+  if(item.key==='birthday'){next.birthday=item.to;return;}
+  const path=EU_EMPLOYEE_PROFILE_MAP[item.key];if(path)empSetPath(next,path,item.to);
+ });
+ return next;
 }
 
 
@@ -767,9 +862,9 @@ function euBind(){
  document.querySelector('.eu-demo-state')?.addEventListener('change',ev=>{const d=euData();if(d.demoWorkspaceAt){d.demoWorkspaceAt=null;euSave(d);}euSession.demo=ev.target.value;euSession.task=null;euSession.step=ev.target.value?'materials':'register';rerender();});
  document.querySelector('.eu-workspace-direct')?.addEventListener('click',()=>{const invite=euInvitation();if(!invite)return;euSession.key=invite.key;const d=euData();d.name=invite.name;d.email=invite.email;d.invitation={key:invite.key,store:invite.store,demo:invite.demo};d.demoWorkspaceAt=empNow();euEnsureEmployee(d,invite);euSave(d);euSession.step='materials';euSession.tab='tasks';euSession.task=null;rerender();});
  document.querySelector('.eu-invite-continue')?.addEventListener('click',()=>{const invite=euInvitation();if(!invite)return;euSession.key=invite.key;const d=euData();d.name=invite.name;d.email=invite.email;d.invitation={key:invite.key,store:invite.store,demo:invite.demo};euEnsureEmployee(d,invite);euSave(d);euSession.step='password';rerender();});
- document.querySelector('.eu-activate-form')?.addEventListener('submit',ev=>{ev.preventDefault();const form=ev.currentTarget,password=form.elements.password.value||'',confirm=form.elements.confirm.value||'',feedback=form.querySelector('.eu-activation-feedback');if(password&&password.length<6){feedback.textContent='密码至少 6 位。';return;}if(password&&password!==confirm){feedback.textContent='两次输入的密码不一样。';return;}const d=euData();d.activationDemoAt=empNow();euSave(d);form.reset();euSession.step='materials';rerender();});
+ document.querySelector('.eu-activate-form')?.addEventListener('submit',ev=>{ev.preventDefault();const form=ev.currentTarget,password=form.elements.password.value||'',confirm=form.elements.confirm.value||'',feedback=form.querySelector('.eu-activation-feedback');if(password&&password.length<6){feedback.textContent=euT('密码至少 6 位。');return;}if(password&&password!==confirm){feedback.textContent=euT('两次输入的密码不一样。');return;}const d=euData();d.activationDemoAt=empNow();euSave(d);form.reset();euSession.step='materials';rerender();});
  document.querySelector('.eu-link-confirm')?.addEventListener('click',()=>{const invite=euInvitation();if(invite&&!euSession.key)euSession.key=invite.key;const d=euData();if(invite?.employeeId)d.employeeId=d.employeeId||invite.employeeId;d.accountLinkConfirmedAt=empNow();d.messages.unshift('员工档案关联已确认');euSave(d);rerender();});
- document.querySelector('.eu-link-reject')?.addEventListener('click',()=>{const box=document.querySelector('.eu-validation');if(box)box.textContent='已记录“不是我”，请联系店长核对档案。';});
+ document.querySelector('.eu-link-reject')?.addEventListener('click',()=>{const box=document.querySelector('.eu-validation');if(box)box.textContent=euT('已记录“不是我”，请联系店长核对档案。');});
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{euSession.tab=b.dataset.tab;euSession.task=null;rerender();});
  document.querySelector('.eu-skip')?.addEventListener('click',()=>{const d=euData();d.demoWorkspaceAt=empNow();euSave(d);euSession.step='materials';euSession.tab='tasks';rerender();});
  document.querySelector('.eu-finish-onboarding')?.addEventListener('click',()=>{euSession.step='materials';euSession.tab='tasks';rerender();});
@@ -794,15 +889,15 @@ function euBind(){
  document.querySelectorAll('.eu-delete').forEach(b=>b.onclick=()=>{if(!b.dataset.doc)return;const d=euData();d.docHistory=[{key:b.dataset.doc,file:d.docs[b.dataset.doc],at:empNow()},...(d.docHistory||[])];delete d.docs[b.dataset.doc];d.materialSubmitted=null;euSave(d);rerender();});
  document.querySelector('.eu-special-submit')?.addEventListener('click',()=>{const d=euData(),missing=euSpecialMissingItems(d),box=document.querySelector('.eu-validation');if(!missing.length){if(box)box.textContent=euT('当前没有可申请暂缺的项目。');return;}const form=document.querySelector('.eu-special-form');if(!form)return;form.hidden=false;form.querySelector('textarea')?.focus();});
  document.querySelector('.eu-special-cancel')?.addEventListener('click',()=>{const form=document.querySelector('.eu-special-form');if(form)form.hidden=true;});
- document.querySelector('.eu-special-form')?.addEventListener('submit',ev=>{ev.preventDefault();const d=euData(),form=ev.currentTarget;const picked=[...form.querySelectorAll('[data-special-item]:checked')].map(x=>x.dataset.specialItem);const reason=String(new FormData(form).get('reason')||'').trim();if(!picked.length){empFlash(form,'请勾选要申请暂缺的项目');return;}if(!reason){empFlash(form,'请写明暂缺原因和预计补交时间');return;}d.specialSubmission={state:'pending',items:picked,labels:picked.map(key=>EU_SPECIAL_ITEMS.find(([k])=>k===key)?.[1]||key),reason,at:empNow()};d.messages.unshift('暂缺申请已提交，等待店长审批');euSave(d);rerender();});
- document.querySelector('.eu-special-approve')?.addEventListener('click',()=>{const d=euData(),deadline=euDaysFrom(empToday(),30),labels=(d.specialSubmission?.labels||[]);d.missingApprovals=labels.map((label,i)=>({item:d.specialSubmission.items?.[i],label,status:'approved',deadline}));d.specialSubmission={...(d.specialSubmission||{}),state:'approved'};euSave(d);rerender();});
- document.querySelector('.eu-special-reject')?.addEventListener('click',()=>{const d=euData();d.specialSubmission={...(d.specialSubmission||{}),state:'rejected'};euSave(d);rerender();});
+ document.querySelector('.eu-special-form')?.addEventListener('submit',ev=>{ev.preventDefault();const d=euData(),form=ev.currentTarget;const picked=[...form.querySelectorAll('[data-special-item]:checked')].map(x=>x.dataset.specialItem);const reason=String(new FormData(form).get('reason')||'').trim();if(!picked.length){empFlash(form,euT('请勾选要申请暂缺的项目'));return;}if(!reason){empFlash(form,euT('请写明暂缺原因和预计补交时间'));return;}d.specialSubmission={state:'pending',items:picked,labels:picked.map(key=>EU_SPECIAL_ITEMS.find(([k])=>k===key)?.[1]||key),reason,at:empNow()};d.messages.unshift('暂缺申请已提交，等待店长审批');euSave(d);euPublishPortal(d,{specialSubmission:d.specialSubmission});rerender();});
+ document.querySelector('.eu-special-approve')?.addEventListener('click',()=>{const d=euData(),req=euSpecialRequest(d)||d.specialSubmission||{},deadline=euDaysFrom(empToday(),30),labels=(req.labels||[]);d.missingApprovals=labels.map((label,i)=>({item:req.items?.[i],label,status:'approved',deadline}));d.specialSubmission={...req,state:'approved'};euSave(d);euPublishPortal(d,{specialSubmission:d.specialSubmission},{missingApprovals:d.missingApprovals});rerender();});
+ document.querySelector('.eu-special-reject')?.addEventListener('click',()=>{const d=euData();d.specialSubmission={...(euSpecialRequest(d)||d.specialSubmission||{}),state:'rejected'};euSave(d);euPublishPortal(d,{specialSubmission:d.specialSubmission});rerender();});
  /* 提交只校验第一层（HR-ONB-17/26） */
- document.querySelector('.eu-material-submit')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),missing=euLayer1Missing(d);if(!euNationalityClass(d)){if(box){box.textContent=euT('请先回答国籍类别和是否学生。');box.scrollIntoView({block:'center'});}return;}if(missing.length){if(box){box.textContent=euT('第一层还缺：')+missing.join('、');box.scrollIntoView({block:'center'});}return;}const at=empNow();d.materialSubmitted=at;d.submitActionAt=at;d.submitted=euSubmissionSnapshot(d);d.returnedAt=null;d.messages.unshift('资料已提交，等待审核');euSave(d);euSession.step='materials';rerender();});
- document.querySelector('.eu-company-confirm')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),mode=euFillMode(d),missing=mode==='veteran'?[]:euLayer1Missing(d);if(missing.length){if(box){box.textContent=euT('还缺：')+missing.join('、');box.scrollIntoView({block:'center'});}return;}if(mode==='veteran')d.veteranConfirmedAt=empNow();else d.confirmedCompanyProfileAt=empNow();d.messages.unshift(mode==='veteran'?'资料已确认，员工端已开通':'资料已确认，等待公司发送合同');euSave(d,{archive:true});euSession.step='materials';euSession.tab='tasks';rerender();});
+ document.querySelector('.eu-material-submit')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),missing=euLayer1Missing(d);if(!euNationalityClass(d)){if(box){box.textContent=euT('请先回答国籍类别和是否学生。');box.scrollIntoView({block:'center'});}return;}if(missing.length){if(box){box.textContent=euTF('第一层还缺：{items}',{items:missing.map(x=>euT(x)).join('、')});box.scrollIntoView({block:'center'});}return;}const at=empNow();d.materialSubmitted=at;d.submitActionAt=at;d.submitted=euSubmissionSnapshot(d);d.returnedAt=null;d.messages.unshift('资料已提交，等待审核');euSave(d);euSession.step='materials';rerender();});
+ document.querySelector('.eu-company-confirm')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),mode=euFillMode(d),missing=mode==='veteran'?[]:euLayer1Missing(d);if(missing.length){if(box){box.textContent=euTF('还缺：{items}',{items:missing.map(x=>euT(x)).join('、')});box.scrollIntoView({block:'center'});}return;}if(mode==='veteran')d.veteranConfirmedAt=empNow();else d.confirmedCompanyProfileAt=empNow();d.messages.unshift(mode==='veteran'?'资料已确认，员工端已开通':'资料已确认，等待公司发送合同');euSave(d,{archive:true});euSession.step='materials';euSession.tab='tasks';rerender();});
  document.querySelector('.eu-withdraw')?.addEventListener('click',()=>{const d=euData();d.materialSubmitted=null;d.submitActionAt=null;d.withdrawnAt=empNow();d.messages.unshift('已撤回提交，可以继续修改');euSave(d);euSession.step='materials';rerender();});
  /* 合同与问卷：两份一起下载、签字、上传；被退回只重传那一份（HR-ONB-36/38） */
- document.querySelector('.eu-contract-signed-submit')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),need=[];['contract','questionnaire'].forEach(key=>{const status=euContractStatus(d,key);if(status.state==='approved')return;const doc=d.docs[key];/* 被退回的那份必须有比退回记录更新的新文件，旧文件不算重传（HR-ONB-53） */const fresh=!!doc&&(!status.at||String(doc.at||'')>String(status.at));if(status.state==='returned'?!fresh:!doc)need.push(key);});if(need.length){if(box){box.textContent=euT('请先上传：')+need.map(k=>k==='contract'?'已签署劳动合同':'已填写并签署的个人调查问卷').join('、');box.scrollIntoView({block:'center'});}return;}d.contractSignedSubmittedAt=empNow();d.messages.unshift('签署文件已提交，等待店长核对');euSave(d);euSyncDocs(d,['contract','questionnaire']);rerender();});
+ document.querySelector('.eu-contract-signed-submit')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),need=[];['contract','questionnaire'].forEach(key=>{const status=euContractStatus(d,key);if(status.state==='approved')return;const doc=d.docs[key],fresh=euContractFreshUpload(d,key,status);/* 被退回的那份必须有比退回记录/旧档案件更新的本机上传，旧文件不算重传（HR-ONB-53） */if(status.state==='returned'?!fresh:!doc)need.push(key);});if(need.length){if(box){box.textContent=euTF('请先上传：{items}',{items:need.map(k=>euT(k==='contract'?'已签署劳动合同':'已填写并签署的个人调查问卷')).join('、')});box.scrollIntoView({block:'center'});}return;}d.contractSignedSubmittedAt=empNow();d.messages.unshift('签署文件已提交，等待店长核对');euSave(d);euSyncDocs(d,['contract','questionnaire']);rerender();});
  /* 入职后修改资料：先存草稿，提交店长核对（HR-ONB-43） */
  document.querySelectorAll('.eu-update-field').forEach(input=>{
   input.addEventListener('input',()=>{const d=euData();d.updateDraft=d.updateDraft||{profile:{},docs:{}};d.updateDraft.profile=d.updateDraft.profile||{};d.updateDraft.profile[input.dataset.update]=input.value;euSaveDraft(d);});
@@ -813,7 +908,7 @@ function euBind(){
  document.querySelectorAll('.eu-keep-reason').forEach(input=>input.addEventListener('input',()=>{const d=euData();d.updateDraft=d.updateDraft||{profile:{},docs:{}};d.updateDraft.keepReason={...(d.updateDraft.keepReason||{}),[input.dataset.keepReason]:input.value};euSaveDraft(d);}));
  document.querySelectorAll('.eu-upload input[data-doc-update]').forEach(input=>input.onchange=async()=>{
   const file=input.files[0];if(!file)return;
-  const key=input.dataset.docUpdate,d=euData(),t=euDocumentList(d).find(x=>x.key===key);
+  const key=input.dataset.docUpdate,d=euData(),t=euDocumentList(euUpdateView(d)).find(x=>x.key===key);
   const error=euUploadError(file,!!t?.imageOnly);
   if(error){empFlash(input.parentElement,euT(error));input.value='';return;}
   const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file);});
@@ -831,15 +926,21 @@ function euBind(){
   d.updateRequest={state:'pending',at:empNow(),items:prior?.state==='returned'?items.concat((prior.items||[]).filter(x=>!items.some(y=>y.key===x.key))):items};
   d.messages.unshift('资料修改已提交，等待店长核对');euSaveDraft(d);euPublishPortal(d,{updateRequest:d.updateRequest,materialUpdateAt:d.updateRequest.at});rerender();});
  document.querySelector('.eu-update-withdraw')?.addEventListener('click',()=>{const d=euData();d.updateRequest=null;d.updateDraft=null;euSaveDraft(d);euPublishPortal(d,{updateRequest:null});rerender();});
- document.querySelector('.eu-update-adopt')?.addEventListener('click',()=>{const d=euData(),draft=euDraftProfile(d),docKeys=Object.keys(d.updateDraft?.docs||{});Object.entries(draft).forEach(([key,value])=>{d.profile={...(d.profile||{}),[key]:value};});Object.entries(d.updateDraft?.docs||{}).forEach(([key,file])=>{d.docHistory=[{key,file:d.docs[key],at:empNow()},...(d.docHistory||[])];d.docs[key]=file;});d.profileEdited=(d.profileEdited||[]).filter(key=>draft[key]===undefined&&!docKeys.includes(key));d.updateRequest={...(d.updateRequest||{}),state:'done',reviewedAt:empNow()};d.updateDraft=null;euSave(d,{archive:true});euPublishPortal(d,{updateRequest:d.updateRequest});rerender();});
- document.querySelector('.eu-update-reject')?.addEventListener('click',()=>{const d=euData();d.updateRequest={...(d.updateRequest||{}),state:'returned',reviewedAt:empNow(),reason:'演示：材料照片不清晰，请重拍后再交。'};euSaveDraft(d);euPublishPortal(d,{updateRequest:d.updateRequest});rerender();});
+ document.querySelector('.eu-update-adopt')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),req=euUpdateRequest(d),e=euEmployee(d);if(!req||!Array.isArray(req.items)||!req.items.length){if(box)box.textContent=euT('没有可采纳的修改请求。');return;}if(!e){if(box)box.textContent=euT('找不到员工档案，无法采纳。');return;}
+  const at=empNow(),next=euApplyUpdateItems(e,req.items,at);
+  next.employeePortal={...(next.employeePortal||{}),updateRequest:{...req,state:'done',reviewedAt:at,reviewedBy:'员工端演示'}};
+  if(typeof empSaveWithHistory==='function')empSaveWithHistory(next,'员工端 UI（采纳资料修改）');else if(typeof empSaveStaff==='function')empSaveStaff(next);
+  d.updateRequest=null;d.updateDraft=null;d.profileEdited=(d.profileEdited||[]).filter(key=>!req.items.some(x=>x.kind==='field'&&x.key===key));euSaveDraft(d);rerender();});
+ document.querySelector('.eu-update-reject')?.addEventListener('click',()=>{const d=euData(),req=euUpdateRequest(d)||{};d.updateRequest={...req,state:'returned',reviewedAt:empNow(),reason:'演示：材料照片不清晰，请重拍后再交。'};euSaveDraft(d);euPublishPortal(d,{updateRequest:d.updateRequest});rerender();});
  document.querySelector('.eu-supplement-return')?.addEventListener('click',()=>{
   const d=euData(),box=document.querySelector('.eu-validation'),sup=euSupplementRequest(d);
-  if(!sup){if(box)box.textContent='当前没有店长发起的补件请求。';return;}
+  if(!sup){if(box)box.textContent=euT('当前没有店长发起的补件请求。');return;}
   const result=euSupplementSubmission(d,sup);
-  if(result.missing.length){if(box){box.textContent='还要补：'+result.missing.join('、')+'。请先在资料修改里填写或上传新版本。';box.scrollIntoView({block:'center'});}return;}
+  if(result.missing.length){if(box){box.textContent=euTF('还要补：{items}。请先在资料修改里填写或上传新版本。',{items:result.missing.map(x=>euT(x)).join('、')});box.scrollIntoView({block:'center'});}return;}
   const e=euEmployee(d);
   if(e?.request&&e.request.state!=='done'&&typeof empSaveRequestDraft==='function'){empSaveRequestDraft(e.request.token,result.sub);if(typeof empSubmitRequest==='function')empSubmitRequest(e.request.token);}
+  /* 已交回的文件从本机草稿移除，避免下次保存或采纳时又被当成待核对。 */
+  if(e?.request&&d.updateDraft?.docs)result.entries.forEach(item=>{Object.keys(EU_EMPLOYEE_DOC_MAP).forEach(key=>{if(key===item.key||EU_EMPLOYEE_DOC_MAP[key]===item.key)delete d.updateDraft.docs[key];});});
   d.supplementReturnedAt=empNow();d.supplementSubmission={at:d.supplementReturnedAt,items:result.entries.map(x=>euSupplementLabel(d,x)),submitted:result.sub};
   d.messages.unshift('补交材料已交回，等待店长核对');euSave(d);euPublishPortal(d,{supplementReturnedAt:d.supplementReturnedAt,supplementSubmission:d.supplementSubmission});rerender();
  });

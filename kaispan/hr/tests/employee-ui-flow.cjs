@@ -113,6 +113,7 @@ let submit5 = ctx.euUpdateSubmitItems(d5);
 assert.equal(submit5.error, '');
 assert.equal(submit5.items.length, 1);
 assert.deepEqual([submit5.items[0].key, submit5.items[0].kind, submit5.items[0].to, submit5.items[0].expiry], ['passport', 'doc', 'new.png', '2030-01-01']);
+d5.profile.passportExpiry = '2029-12-31';
 d5.updateDraft.keepExpiry = { passport: true };
 assert.match(ctx.euUpdateSubmitItems(d5).error, /必须写原因/);
 d5.updateDraft.keepReason = { passport: '证件未换新' };
@@ -120,6 +121,7 @@ submit5 = ctx.euUpdateSubmitItems(d5);
 assert.equal(submit5.error, '');
 assert.equal(submit5.items[0].keepExpiry, true);
 assert.equal(submit5.items[0].keepReason, '证件未换新');
+assert.equal(submit5.items[0].expiry, '2029-12-31');
 
 /* 6. 员工端请求与店长核对结果合并；提交只发布请求状态，不动正式档案（HR-ONB-43） */
 let d6 = ctx.euBoundData({ employeeId: 'e5', profile: {}, docs: {}, updateRequest: { state: 'pending', at: '2026-11-06T09:00:00.000Z', items: [] } });
@@ -137,11 +139,12 @@ let d7 = ctx.euBoundData({ employeeId: 'e7', profile: {}, docs: {} });
 const sup7 = ctx.euSupplementRequest(d7);
 assert.equal(sup7.items.length, 2);
 assert.deepEqual(ctx.euSupplementSubmission(d7, sup7).missing, ['护照 / 身份证', '电话']);
-d7.updateDraft = { profile: { phone: '222' }, docs: { passport: { name: 'pp.png', data: 'data:pp', at: '2026-11-06T09:00:00.000Z' } } };
+d7.updateDraft = { profile: { phone: '222', passportExpiry: '2030-01-01' }, docs: { passport: { name: 'pp.png', data: 'data:pp', at: '2026-11-06T09:00:00.000Z' } } };
 const result7 = ctx.euSupplementSubmission(d7, sup7);
 assert.deepEqual(result7.missing, []);
 assert.equal(result7.sub.contact.phone, '222');
 assert.equal(result7.sub.docs.id.file, 'pp.png');
+assert.equal(result7.sub.docs.id.expiry, '2030-01-01');
 
 /* 8. 合同退回：旧文件不能算重传，新版本要盖过退回记录（HR-ONB-36/53） */
 const e8 = seed('e8', { invite: { portalVersion: 2, state: 'approved', contractSentAt: '2026-11-01T00:00:00.000Z', onboardingFilesVersion: 1, contractReview: { questionnaire: { state: 'returned', reason: '缺签字', at: '2026-11-06T10:00:00.000Z' } } } });
@@ -197,4 +200,112 @@ for (const demo of ['', 'returned', 'company', 'veteran', 'link', 'contract', 'c
   }
 }
 
-console.log('PASS: fill mode flags, three-state nationality, onboarding draft isolation + frozen submission, returned no auto-resubmit, update request items/merge, supplement item checks, contract re-upload versioning, link-pending first, veteran archived end-state, two-file contract, approval states, demo skip, render smoke');
+/* 13. F1 档案新版本刷新本机缓存；采纳只写请托项，不整体回滚正式文件 */
+const e13 = seed('e13', { status: 'active', contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' }, docs: { id: { state: 'ok', file: 'passport-new.png', dataUrl: 'data:new-pp', at: '2026-11-06T10:00:00.000Z', expiry: '2031-01-01' } } });
+const d13 = ctx.euBoundData({ employeeId: 'e13', profile: {}, docs: { passport: { name: 'passport-old.png', data: 'data:old-pp', at: '2026-01-01T00:00:00.000Z' } } });
+assert.equal(d13.docs.passport.name, 'passport-new.png', '档案新版本要盖过本机旧缓存');
+assert.equal(d13.docs.passport.source, 'archive');
+assert.equal(d13.profile.passportExpiry, '2031-01-01');
+const adopted13 = ctx.euApplyUpdateItems(emp('e13'), [{ key: 'phone', kind: 'field', to: '222' }], '2026-11-06T12:00:00.000Z');
+assert.equal(adopted13.contact.phone, '222');
+assert.equal(adopted13.docs.id.file, 'passport-new.png', '只采纳电话不能回滚护照');
+assert.equal(adopted13.docs.id.at, '2026-11-06T10:00:00.000Z');
+
+/* 14. F2 采纳严格按冻结请求，不读提交后又改动的草稿 */
+const req14 = { state: 'pending', at: '2026-11-06T09:00:00.000Z', items: [{ key: 'phone', label: '电话', kind: 'field', from: '111', to: '222' }] };
+const d14 = ctx.euBoundData({ employeeId: 'e13', profile: {}, docs: {}, updateRequest: req14, updateDraft: { profile: { phone: '333' } } });
+assert.equal(ctx.euUpdateValue(d14, 'phone'), '333');
+assert.equal(ctx.euUpdateRequest(d14).items[0].to, '222');
+assert.equal(ctx.euApplyUpdateItems(emp('e13'), ctx.euUpdateRequest(d14).items, '2026-11-06T12:00:00.000Z').contact.phone, '222');
+const e14 = seed('e14', { status: 'active', contact: { email: 'alex@example.com', phone: '222' }, contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' }, employeePortal: { updateRequest: { state: 'done', at: '2026-11-06T09:00:00.000Z', items: [{ key: 'phone', kind: 'field', from: '111', to: '222' }] } } });
+const d14done = ctx.euBoundData({ employeeId: 'e14', profile: { phone: '333' }, profileEdited: ['phone'], updateDraft: { profile: { phone: '333' } }, updateRequest: { state: 'pending', at: '2026-11-06T09:00:00.000Z', items: [{ key: 'phone', kind: 'field', from: '111', to: '222' }] }, docs: {} });
+assert.equal(d14done.updateDraft, null, '采纳后清掉本机草稿');
+assert.equal(ctx.euUpdateValue(d14done, 'phone'), '222', '页面回到正式档案的新值');
+ctx.euSyncInvite(d14done);
+assert.equal(emp('e14').employeePortal.updateRequest.state, 'done');
+
+/* 15. F3 姓名修改进入冻结提交：提交快照与老板端读取都用草稿 first/last */
+seed('e15', { name: 'Old Name', firstName: 'Old', lastName: 'Name' });
+const d15 = ctx.euBoundData({ employeeId: 'e15', name: 'Old Name', profile: { first: 'New', last: 'Name' }, profileEdited: ['first', 'last'], docs: {} });
+d15.materialSubmitted = '2026-11-06T10:00:00.000Z';
+assert.equal(d15.name, 'New Name');
+assert.equal(ctx.euSubmissionSnapshot(d15).name, 'New Name');
+
+/* 16. F4 普通保存不写请求状态：店长已处理的结果不会被本机 pending 复活 */
+const e16 = seed('e16', { status: 'active', contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' }, employeePortal: { updateRequest: { state: 'done', at: '2026-11-06T10:00:00.000Z', items: [] }, specialSubmission: { state: 'approved', items: ['steuerId'], labels: ['Steuer-ID（个人税务识别号）'], at: '2026-11-05T10:00:00.000Z' } } });
+const d16 = ctx.euBoundData({ employeeId: 'e16', profile: {}, docs: {}, updateRequest: { state: 'pending', at: '2026-11-06T09:00:00.000Z', items: [] }, specialSubmission: { state: 'pending', items: ['steuerId'], labels: ['Steuer-ID（个人税务识别号）'] } });
+ctx.euSyncInvite(d16);
+assert.equal(emp('e16').employeePortal.updateRequest.state, 'done', '普通保存不能把已采纳请求改回 pending');
+assert.equal(emp('e16').employeePortal.specialSubmission.state, 'approved', '普通保存不能把已批准暂缺改回 pending');
+assert.equal(ctx.euSpecialPending(d16, 'steuerId'), false);
+assert.ok(!/等待审批/.test(ctx.euSpecialBlock(d16)), '店长批准后不再显示等待审批');
+
+/* 17. F5 资料页身份控件写 updateDraft，材料清单按草稿算 */
+const e17 = seed('e17', { status: 'active', contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' } });
+const d17 = ctx.euBoundData({ employeeId: 'e17', profile: {}, docs: {}, updateDraft: { profile: { nationalityClass: 'other' } } });
+assert.equal(ctx.euNationalityClass(d17), 'eu', '没提交的改动不能写正式值');
+assert.equal(ctx.euNationalityClass(ctx.euUpdateView(d17)), 'other');
+assert.ok(ctx.euDocumentList(ctx.euUpdateView(d17)).some(t => t.key === 'visa'), '材料清单按草稿国籍计算');
+const items17 = ctx.euUpdateSubmitItems(d17).items;
+assert.equal(items17.length, 1);
+assert.deepEqual([items17[0].key, items17[0].to], ['nationalityClass', 'other']);
+const docsHtml17 = ctx.euDocsTab(d17);
+assert.match(docsHtml17, /data-update="nationalityClass"/);
+assert.ok(!docsHtml17.includes('data-profile="nationalityClass"'), '资料页身份控件不能再写入职草稿');
+const d17adopt = { ...d17, updateRequest: { state: 'pending', at: '2026-11-06T09:00:00.000Z', items: [{ key: 'phone', kind: 'field', to: '222' }] }, updateDraft: { profile: { nationalityClass: 'other', phone: '222' } } };
+const adopted17 = ctx.euApplyUpdateItems(emp('e17'), ctx.euUpdateRequest(d17adopt).items, '2026-11-06T12:00:00.000Z');
+assert.equal(adopted17.contract.nationalityClass, 'eu', '采纳其他修改不能顺带写入未提交的国籍');
+assert.equal(adopted17.contact.phone, '222');
+
+/* 18. F6 补件要新版本 + 本次草稿有效期；旧档案件不能算补交 */
+const e18 = seed('e18', { status: 'active', contact: { email: 'alex@example.com', phone: '111' }, contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' }, docs: { id: { state: 'ok', file: 'old-passport.png', at: '2026-01-01T00:00:00.000Z' } }, request: { token: 't18', state: 'sent', sentAt: '2026-11-05T00:00:00.000Z', items: [{ kind: 'doc', id: 'id' }] } });
+const d18 = ctx.euBoundData({ employeeId: 'e18', profile: {}, docs: {} });
+assert.equal(ctx.euSupplementRequest(d18).sentAt, '2026-11-05T00:00:00.000Z');
+assert.deepEqual(ctx.euSupplementSubmission(d18, ctx.euSupplementRequest(d18)).missing, ['护照 / 身份证']);
+d18.updateDraft = { profile: {}, docs: { passport: { name: 'new-passport.png', data: 'data:pp', at: '2026-11-06T09:00:00.000Z' } } };
+assert.deepEqual(ctx.euSupplementSubmission(d18, ctx.euSupplementRequest(d18)).missing, ['护照 / 身份证有效期（年月日）']);
+d18.updateDraft.profile.passportExpiry = '2030-01-01';
+const result18 = ctx.euSupplementSubmission(d18, ctx.euSupplementRequest(d18));
+assert.deepEqual(result18.missing, []);
+assert.equal(result18.sub.docs.id.expiry, '2030-01-01');
+
+/* 19. F7 正式国籍明确空值阻止旧 euCitizen 兜底 */
+const e19 = seed('e19', { migrated: true, contract: { type: 'teilzeit', isStudent: false, nationalityClass: '', nonEU: false } });
+const d19 = ctx.euBoundData({ employeeId: 'e19', profile: { euCitizen: 'yes' }, docs: {} });
+assert.equal(ctx.euNationalityClass(d19), '', '正式空国籍不能被旧 euCitizen=yes 变成欧盟');
+assert.equal(ctx.euDocumentList(d19).length, 0);
+
+/* 20. F8 旧退回记录缺时间：用档案文件版本当锚点，旧件不算重传 */
+const e20 = seed('e20', { status: 'active', contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' }, docs: { personalquestionnaire: { state: 'returned', file: 'old-q.pdf', at: '2026-11-05T00:00:00.000Z' } }, invite: { portalVersion: 2, state: 'approved', contractSentAt: '2026-11-01T00:00:00.000Z', contractReview: { questionnaire: { state: 'returned', reason: '缺签字' } } } });
+const d20 = ctx.euBoundData({ employeeId: 'e20', profile: {}, docs: {} });
+const status20 = ctx.euContractStatus(d20, 'questionnaire');
+assert.equal(status20.state, 'returned');
+assert.equal(ctx.euContractFreshUpload(d20, 'questionnaire', status20), false, '旧档案件不能证明重传');
+d20.docs.questionnaire = { name: 'new-q.pdf', at: '2026-11-06T09:00:00.000Z' };
+assert.equal(ctx.euContractFreshUpload(d20, 'questionnaire', status20), true);
+
+/* 21. F9 关联页先于欢迎页，且外壳只含档案姓名 */
+seed('e21', { name: 'Only Name', contact: { email: 'secret@example.com' }, invite: { portalVersion: 2, state: 'sent', linkPending: true, submitted: {} } });
+ctx.euInvitation = () => ({ employeeId: 'e21', key: 'k21', name: 'Only Name', email: 'secret@example.com', store: 'Martin Biergarten' });
+run('euSession.key="k21";euSession.demo="";euSession.step="register";euSession.tab="tasks"');
+const linkHtml = ctx.euRender();
+assert.ok(linkHtml.includes('Only Name'));
+assert.ok(!linkHtml.includes('Martin Biergarten'), '关联页外壳不能显示门店');
+assert.ok(!linkHtml.includes('secret@example.com'), '关联页不能显示邮箱');
+
+/* 22. F10 公司代填只认 employerCompleted===true；演示模式单独走演示入口 */
+const e22 = seed('e22', { invite: { portalVersion: 2, state: 'sent', fillMode: 'company', employerCompleted: false, submitted: {} } });
+const d22 = ctx.euBoundData({ employeeId: 'e22', profile: {}, docs: {} });
+assert.equal(ctx.euFillMode(d22), 'self', '没填完的公司代填不能直接通过');
+run('euSession.demo="company"');
+assert.equal(ctx.euFillMode(d22), 'company');
+run('euSession.demo=""');
+
+/* 23. F11 动态整句与日期跟界面语言走（德语） */
+run('empWrite("kaispanEmployeeUIDemoV1",{kde:{profile:{language:"Deutsch"}}});euSession.key="kde";euSession.demo=""');
+assert.equal(ctx.euMonthDay('2026-12-01'), '1.12.2026');
+assert.ok(ctx.euApprovalText({ status: 'approved', deadline: '2026-12-01' }).includes('Genehmigt'));
+assert.notEqual(ctx.euT('入职已完成，可在这里更新个人资料与材料。'), '入职已完成，可在这里更新个人资料与材料。');
+assert.ok(ctx.euTF('还要补：{items}。请先在资料修改里填写或上传新版本。', { items: 'Reisepass' }).includes('Noch nötig'));
+
+console.log('PASS: fill mode flags, three-state nationality, onboarding draft isolation + frozen submission, returned no auto-resubmit, update request items/merge, supplement item checks, contract re-upload versioning, link-pending first, veteran archived end-state, two-file contract, approval states, demo skip, render smoke, round2 archive refresh/adopt freeze/name freeze/no request resurrection/docs draft/supplement version/link shell/company fill/i18n');
