@@ -363,7 +363,9 @@ assert.equal(status27.state, 'missing');
 assert.equal(status27.stale, true);
 assert.equal(ctx.euContractFreshUpload({ employeeId: 'e27', docs: { contract: oldFile27 } }, 'contract', status27), false);
 assert.equal(ctx.euContractFreshUpload({ employeeId: 'e27', docs: { contract: currentFile27 } }, 'contract', { state: 'missing' }), true, '带新 dispatchId/at 的重传要能通过');
-assert.equal(ctx.euContractFileCurrent({ employeeId: 'e27', docs: {} }, 'contract', { name: 'no-id.pdf', at: '2026-11-06T10:30:00.000Z' }), false, '新发送已编号时，无编号旧件不能冒充当前件');
+assert.equal(ctx.euContractFileCurrent({ employeeId: 'e27', docs: {} }, 'contract', { name: 'no-id.pdf', at: '2026-11-06T10:30:00.000Z' }), true, '老板端约定：缺 dispatchId 时，晚于发送时间的 at 可以证明是本次文件');
+assert.equal(ctx.euContractFileCurrent({ employeeId: 'e27', docs: {} }, 'contract', { name: 'no-id.pdf', at: '2026-11-06T09:30:00.000Z' }), false, '早于发送时间又无 dispatchId 的仍是旧件');
+assert.equal(ctx.euContractFileCurrent({ employeeId: 'e27', docs: {} }, 'contract', { name: 'no-id.pdf' }), false, 'ID 和 at 都缺不能证明更新');
 ctx.euSyncDocs({ employeeId: 'e27', docs: { contract: oldFile27 } }, ['contract']);
 assert.equal(emp('e27').docs.contract, undefined, '旧件不能被同步写进正式档案');
 const keepFileCurrent = ctx.empContractFileIsCurrent;
@@ -405,7 +407,8 @@ assert.equal(result29.sub.docs.id.keepExpiry, true);
 assert.equal(result29.sub.docs.id.keepReason, '证件未换新');
 const prior29 = { state: 'returned', requestId: 'req-29', items: [{ key: 'phone', kind: 'field', from: '111', to: '222' }] };
 const next29 = ctx.euBuildUpdateRequest(d29b, [{ key: 'phone', kind: 'field', from: '111', to: '333' }], prior29);
-assert.equal(next29.requestId, 'req-29', '退回后重新提交沿用同一 requestId');
+assert.notEqual(next29.requestId, 'req-29', '退回后重新提交必须换新 requestId，旧 ID 已进 closedRequestIds');
+assert.ok(/^update/.test(next29.requestId), '员工端 requestId 格式随老板端 empRequestId(prefix)');
 
 /* 30. 兼容只有 name 的提交格式：员工端同时写 name 与 firstName/lastName（HR-ONB-10/15） */
 const e30 = seed('e30', { name: 'Old Name', firstName: 'Old', lastName: 'Name', invite: { portalVersion: 2, state: 'submitted', submitted: { name: 'New Name' } } });
@@ -466,4 +469,95 @@ assert.equal(progress35.done, progress35.layers[1].done);
 const progressText = JSON.stringify(progress35);
 assert.ok(!/Alex|Chen|1990-01-01|222/.test(progressText), '草稿进度不能带草稿值');
 
-console.log('PASS: fill mode flags, three-state nationality, onboarding draft isolation + frozen submission, returned no auto-resubmit, update request items/merge, supplement item checks, contract re-upload versioning, link-pending first, veteran archived end-state, two-file contract, approval states, demo skip, render smoke, round2 archive refresh/adopt freeze/name freeze/no request resurrection/docs draft/supplement version/link shell/company fill/i18n, round3 expiry refresh/student-null/link cleanup/dispatch currency/demo isolation/supplement requestId/name-only/return labels/round3 i18n/expired-submit/approved contract lock/draft progress only');
+/* 36. 第4轮：只退回问卷后重传问卷，未被退回的合同保持有效并能归档（HR-ONB-37/53） */
+const e36 = seed('e36', { status: 'approved', contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' },
+  invite: { portalVersion: 2, onboardingFilesVersion: 1, state: 'approved', token: 't36', submitted: {}, reminders: [],
+    contractSentAt: '2026-11-06T08:00:00.000Z', dispatchId: 'd36', contractReview: {}, contractSignedSubmittedAt: '2026-11-06T09:00:00.000Z' } });
+run('euSession={step:"materials",tab:"docs",key:"k36",demo:"",task:null}');
+const d36 = ctx.euBoundData({ employeeId: 'e36', profile: {}, docs: {} });
+d36.docs.contract = { name: 'contract.pdf', data: 'data:c36', at: '2026-11-06T09:10:00.000Z', dispatchId: 'd36' };
+d36.docs.questionnaire = { name: 'q.pdf', data: 'data:q36', at: '2026-11-06T09:11:00.000Z', dispatchId: 'd36' };
+ctx.euSyncDocs(d36, ['contract', 'questionnaire']);
+assert.equal(emp('e36').docs.contract.dispatchId, 'd36', '同步正式档案时不能丢 dispatchId');
+assert.equal(emp('e36').docs.personalquestionnaire.dispatchId, 'd36');
+assert.deepEqual(ctx.empReviewContractAsset('e36', 'questionnaire', 'returned', '缺签字'), { ok: true, archived: false });
+const d36b = ctx.euBoundData({ employeeId: 'e36', profile: {}, docs: {} });
+assert.equal(d36b.docs.contract.dispatchId, 'd36', '重载时合同投影要保留 dispatchId');
+assert.equal(d36b.docs.contract.at, '2026-11-06T09:10:00.000Z');
+assert.equal(ctx.euContractFileCurrent(d36b, 'contract', d36b.docs.contract), true, '员工端与老板端判断一致');
+assert.equal(ctx.empContractFileIsCurrent(emp('e36'), d36b.docs.contract, 'contract'), true);
+assert.ok(!ctx.euContractStatus(d36b, 'contract').stale, '合同不是旧版本');
+d36b.docs.questionnaire = { name: 'q2.pdf', data: 'data:q36b', at: '2026-11-06T12:30:00.000Z', dispatchId: 'd36' };
+const need36 = [];
+['contract', 'questionnaire'].forEach(key => {
+  const status = ctx.euContractStatus(d36b, key);
+  if (status.state === 'approved') return;
+  const doc = d36b.docs?.[key];
+  if (status.stale || !doc || !ctx.euContractFileCurrent(d36b, key, doc)) { need36.push(key); return; }
+  if (status.state === 'returned' && !ctx.euContractFreshUpload(d36b, key, status)) need36.push(key);
+});
+assert.deepEqual(need36, [], '只重传被退回的问卷，合同不应再要求重传');
+ctx.euSyncDocs(d36b, ['contract', 'questionnaire']);
+assert.equal(emp('e36').docs.contract.file, 'contract.pdf');
+assert.equal(emp('e36').docs.personalquestionnaire.file, 'q2.pdf');
+assert.equal(ctx.empReviewContractAsset('e36', 'contract', 'approved', '').ok, true);
+const approve36b = ctx.empReviewContractAsset('e36', 'questionnaire', 'approved', '');
+assert.equal(approve36b.ok, true);
+assert.equal(approve36b.archived, true, '两份都通过后归档');
+assert.ok(emp('e36').invite.archivedAt);
+
+/* 37. 第4轮：采纳/撤销后的旧投影重放被 requestId 终态拒绝（HR-ONB-43/44） */
+const e37 = seed('e37', { status: 'active', contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' },
+  employeePortal: { updateRequest: { requestId: 'u37', state: 'pending', at: '2026-11-06T10:00:00.000Z',
+    items: [{ key: 'phone', label: '电话', kind: 'field', path: 'contact.phone', from: '111', to: '222' }] } } });
+const d37 = ctx.euBoundData({ employeeId: 'e37', profile: {}, docs: {} });
+const stale37 = ctx.euUpdateRequest(d37);
+assert.equal(stale37.state, 'pending');
+assert.equal(ctx.empAcceptReview('e37').ok, true);
+assert.ok(emp('e37').closedRequestIds.includes('u37'));
+assert.equal(emp('e37').contact.phone, '222');
+ctx.euPublishPortal({ employeeId: 'e37' }, { updateRequest: stale37 });
+assert.equal(emp('e37').employeePortal.updateRequest.state, 'done', '已采纳的旧请求不能被重放成 pending');
+assert.equal(emp('e37').employeePortal.updateRequest.requestId, 'u37');
+const e37b = seed('e37b', { status: 'active',
+  request: { requestId: 'r37b', token: 't37b', state: 'submitted', sentAt: '2026-11-05T00:00:00.000Z', submitted: {} },
+  employeePortal: { supplementSubmission: { requestId: 'r37b', status: 'submitted', at: '2026-11-06T09:00:00.000Z', submitted: {} } } });
+assert.equal(ctx.empCancelRequest('e37b').request, null);
+assert.ok(emp('e37b').closedRequestIds.includes('r37b'));
+ctx.euPublishPortal({ employeeId: 'e37b' }, { supplementSubmission: { requestId: 'r37b', status: 'submitted', at: '2026-11-06T09:00:00.000Z', submitted: {} } });
+assert.equal(emp('e37b').employeePortal.supplementSubmission.status, 'cancelled', '已撤销的补件投影不能再写回 submitted');
+ctx.euSyncInvite({ employeeId: 'e37b' });
+assert.equal(emp('e37b').employeePortal.supplementSubmission, undefined, '同步时删除已关闭的补件投影');
+const e37c = seed('e37c', { status: 'active', closedRequestIds: ['r37c'],
+  docs: { id: { state: 'ok', file: 'old.png', at: '2026-01-01T00:00:00.000Z' } },
+  request: { requestId: 'r37c', token: 't37c', state: 'sent', sentAt: '2026-11-06T10:00:00.000Z', returnedAt: '2026-11-06T10:00:00.000Z', items: [{ kind: 'doc', id: 'id' }] } });
+const d37c = ctx.euBoundData({ employeeId: 'e37c', profile: {}, docs: {},
+  updateDraft: { profile: { passportExpiry: '2030-01-01' }, docs: { passport: { name: 'pp-new.png', data: 'data:pp', at: '2026-11-06T12:30:00.000Z' } } } });
+const res37c = ctx.euSupplementSubmissionFor(d37c, ctx.euSupplementRequest(d37c));
+assert.deepEqual(res37c.missing, []);
+assert.notEqual(res37c.sub.requestId, 'r37c', '退回后重新交回要换新 requestId');
+ctx.euPushSupplementReturn(d37c, res37c.sub);
+assert.equal(emp('e37c').request.requestId, res37c.sub.requestId);
+assert.equal(emp('e37c').request.state, 'submitted');
+ctx.euPublishPortal({ employeeId: 'e37c' }, { supplementSubmission: { requestId: res37c.sub.requestId, status: 'submitted', at: '2026-11-06T12:30:00.000Z', submitted: res37c.sub } });
+assert.equal(emp('e37c').employeePortal.supplementSubmission.requestId, res37c.sub.requestId, '新 requestId 的补件投影要能发布');
+const d37cOld = ctx.euBoundData({ employeeId: 'e37c', docs: {}, supplementSubmission: { requestId: 'r37c', status: 'submitted' }, supplementReturnedAt: '2026-11-06T10:00:00.000Z' });
+assert.equal(d37cOld.supplementSubmission, undefined, '已关闭 requestId 的本机旧投影不能复活');
+assert.ok(ctx.empReviewSources(emp('e37c')).some(s => s.kind === 'topup' && s.requestId === res37c.sub.requestId), '老板端能重新看到这一轮补件');
+
+/* 38. 第4轮：员工端演示采纳同时关闭补件投影，不留可再次采纳的记录（HR-ONB-43/44） */
+const e38 = seed('e38', { status: 'active', contact: { email: 'alex@example.com', phone: '111' }, contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' },
+  employeePortal: { updateRequest: { requestId: 'p38', state: 'pending', at: '2026-11-06T10:00:00.000Z',
+      items: [{ key: 'phone', label: '电话', kind: 'field', path: 'contact.phone', from: '111', to: '222' }] },
+    supplementSubmission: { requestId: 'p38', status: 'submitted', at: '2026-11-06T10:00:00.000Z', submitted: { contact: { phone: '222' } } } } });
+const d38 = ctx.euBoundData({ employeeId: 'e38', profile: {}, docs: {} });
+const next38 = ctx.euAdoptUpdateRequest(d38, ctx.euUpdateRequest(d38));
+assert.equal(next38.contact.phone, '222');
+assert.equal(next38.employeePortal.updateRequest.state, 'done');
+assert.equal(next38.employeePortal.supplementSubmission.status, 'accepted', '补件投影要一起关闭');
+assert.ok(next38.closedRequestIds.includes('p38'));
+ctx.empSaveWithHistory(next38);
+assert.deepEqual(ctx.empReviewSources(emp('e38')), [], '采纳后不能再出第二张核对卡');
+assert.equal(ctx.empAcceptReview('e38').ok, false, '第二次采纳被拒');
+
+console.log('PASS: fill mode flags, three-state nationality, onboarding draft isolation + frozen submission, returned no auto-resubmit, update request items/merge, supplement item checks, contract re-upload versioning, link-pending first, veteran archived end-state, two-file contract, approval states, demo skip, render smoke, round2 archive refresh/adopt freeze/name freeze/no request resurrection/docs draft/supplement version/link shell/company fill/i18n, round3 expiry refresh/student-null/link cleanup/dispatch currency/demo isolation/supplement requestId/name-only/return labels/round3 i18n/expired-submit/approved contract lock/draft progress only, round4 dispatch projection/partial contract re-upload/closed request replay/demo adopt projection');

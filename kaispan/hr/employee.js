@@ -2087,6 +2087,7 @@ function empCancelRequest(id) {
       supplementSubmission: { ...other, requestId: e.request.requestId || other.requestId || "", status: "cancelled", reviewedAt: empNow(), reviewedBy: empActorLabel() }
     };
   }
+  empCloseRequestId(e, e.request.requestId || other?.requestId);
   e.request = null;
   return empSaveStaff(e);
 }
@@ -2147,7 +2148,8 @@ function empOpenSupplementSnapshot(e) {
   const sup = e?.employeePortal?.supplementSubmission;
   if (!sup) return null;
   const status = sup.status || sup.state || "submitted";
-  return ["accepted", "returned", "done"].includes(status) ? null : sup;
+  if (empRequestClosed(e, sup.requestId)) return null;
+  return ["accepted", "returned", "done", "cancelled"].includes(status) ? null : sup;
 }
 
 function empPortalDocId(key) {
@@ -2266,6 +2268,18 @@ function empRequestId(prefix) {
   return `${prefix || "req"}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
+/* 已采纳 / 退回 / 撤销的请求把 requestId 记进 closedRequestIds；旧投影再被发布时按 requestId 拒绝重新打开。
+   退回后员工重新提交会换新的 requestId，不受影响。 */
+function empRequestClosed(e, requestId) {
+  return !!requestId && Array.isArray(e?.closedRequestIds) && e.closedRequestIds.includes(requestId);
+}
+
+function empCloseRequestId(e, requestId) {
+  if (!e || !requestId) return;
+  const list = Array.isArray(e.closedRequestIds) ? e.closedRequestIds : [];
+  if (!list.includes(requestId)) e.closedRequestIds = [...list, requestId].slice(-50);
+}
+
 function empSameRequestId(a, b) {
   const left = a?.requestId || "";
   const right = b?.requestId || "";
@@ -2275,10 +2289,10 @@ function empSameRequestId(a, b) {
 function empReviewSources(e) {
   const out = [];
   const update = e?.employeePortal?.updateRequest;
-  if (update && update.state === "pending") {
+  if (update && update.state === "pending" && !empRequestClosed(e, update.requestId)) {
     out.push({ kind: "update", req: update, requestId: update.requestId || "", at: update.at || "", items: empUpdateReviewItems(e, update) });
   }
-  if (e?.request && e.request.state === "submitted") {
+  if (e?.request && e.request.state === "submitted" && !empRequestClosed(e, e.request.requestId)) {
     out.push({ kind: "topup", req: e.request, requestId: e.request.requestId || "", at: e.request.submittedAt || e.request.sentAt || "", items: empTopupReviewItems(e, e.request) });
   }
   const supplement = empOpenSupplementSnapshot(e);
@@ -2418,6 +2432,7 @@ function empAcceptReview(id) {
     src.items.forEach(item => empApplyReviewItem(next, item, e, actor));
     const portal = next.employeePortal || {};
     const reqId = src.req.requestId || (src.kind === "topup" ? portal.supplementSubmission?.requestId : "") || empRequestId(src.kind);
+    empCloseRequestId(next, reqId);
     if (src.kind === "update") {
       next.employeePortal = { ...portal, updateRequest: { ...src.req, requestId: reqId, state: "done", reviewedAt: now, reviewedBy: actor } };
       /* 同一请求在员工端还有一份补件投影时一起关闭，不能留一条可被再次采纳的记录 */
@@ -2462,6 +2477,7 @@ function empReturnReview(id, reason) {
   sources.forEach(src => {
     const portal = next.employeePortal || {};
     const reqId = src.req.requestId || (src.kind === "topup" ? portal.supplementSubmission?.requestId : "") || empRequestId(src.kind);
+    empCloseRequestId(next, reqId);
     if (src.kind === "update") {
       next.employeePortal = { ...portal, updateRequest: { ...src.req, requestId: reqId, state: "returned", reviewedAt: now, reviewedBy: actor, reason: note } };
       if (portal.supplementSubmission && empSameRequestId(portal.supplementSubmission, src.req)) {

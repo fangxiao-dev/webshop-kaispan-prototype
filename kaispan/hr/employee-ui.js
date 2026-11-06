@@ -25,10 +25,13 @@ function euSaveDraft(d){d.messages=Array.isArray(d.messages)?d.messages:[];if(eu
 function euEmployee(d){return d?.employeeId?empById(d.employeeId):null;}
 function euInvite(d){return euEmployee(d)?.invite||{};}
 function euDemo(){return euSession.demo||'';}
-/* 补件与资料修改共用同一个请求标识，老板端才能一次关闭两份投影（HR-ONB-43/44）。 */
-function euRequestId(prefix){return `${prefix}-${String(empNow()).replace(/\D/g,'').slice(0,14)}-${Math.random().toString(36).slice(2,6)}`;}
+/* 补件与资料修改共用同一个请求标识，老板端才能一次关闭两份投影（HR-ONB-43/44）。
+   格式与老板端 empRequestId 一致；退回后重新提交由员工端换新 ID，旧 ID 留在 closedRequestIds。 */
+function euRequestId(prefix){return typeof empRequestId==='function'?empRequestId(prefix):`${prefix||'req'}${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}`;}
+function euRequestClosed(e,requestId){return typeof empRequestClosed==='function'?empRequestClosed(e,requestId):false;}
+function euCloseRequestId(e,requestId){if(typeof empCloseRequestId==='function')empCloseRequestId(e,requestId);}
+function euRequestSame(a,b){if(typeof empSameRequestId==='function')return empSameRequestId(a,b);const left=a?.requestId||'',right=b?.requestId||'';return !left||!right||left===right;}
 function euSupplementRequestId(req){return String(req?.requestId||req?.token||req?.id||req?.at||req?.sentAt||'');}
-function euUpdateRequestId(req){return String(req?.requestId||req?.token||req?.id||req?.at||'');}
 /* 邀请有效期在写入入口再判一次，不能只靠页面入口（HR-ACCESS-25）。 */
 function euInviteExpiredForSubmit(d){
  const e=euEmployee(d);
@@ -36,20 +39,32 @@ function euInviteExpiredForSubmit(d){
  const at=euInvite(d).expiresAt||'';
  return !!at&&String(at)<String(empNow());
 }
-/* 合同文件版本：优先用老板端的统一判断；没有时按发送记录 ID 或发送时间兜底。
-   两个都缺且无法证明更新 → 视为旧件，要求重传（HR-ONB-37/53）。 */
+/* 合同文件版本：一律以老板端 empContractFileIsCurrent 为准，不能先按“缺 dispatchId”自行拒绝。
+   旧记录只有上传时间时，老板端允许用 at 证明属于本次发送；两端判断必须一致（HR-ONB-37/53）。
+   没有全局函数时按同一约定兜底：ID 不一致或两者都缺才判旧件。 */
 function euContractFileCurrent(d,key,file){
  if(!file)return false;
  const e=euEmployee(d),inv=euInvite(d),dispatchId=inv.dispatchId||'';
- /* 已有发送记录编号时，新上传必须带同一个编号；没编号却声称是“当前件”无法证明，要求重传。 */
- if(dispatchId&&!file.dispatchId)return false;
  if(typeof empContractFileIsCurrent==='function'){
   try{return !!empContractFileIsCurrent(e,file,key);}catch(_){return false;}
  }
- if(file.dispatchId)return !!dispatchId&&String(file.dispatchId)===String(dispatchId);
+ const fileId=file.dispatchId||'';
+ if(dispatchId&&fileId&&String(fileId)!==String(dispatchId))return false;
+ if(!fileId&&!file.at)return false;
  const sentAt=inv.contractSentAt||inv.sentAt||'';
- if(file.at&&sentAt)return String(file.at)>=String(sentAt);
- return !!(euDemo()&&!dispatchId&&!sentAt);
+ if(!fileId&&sentAt&&String(file.at)<String(sentAt))return false;
+ const returned=inv.contractReview?.[key];
+ if(returned?.state==='returned'){
+  const same=returned.dispatchId&&fileId&&String(returned.dispatchId)===String(fileId);
+  if(same){
+   if(returned.at&&(!file.at||String(file.at)<=String(returned.at)))return false;
+   if(!returned.at&&!file.at)return false;
+   return true;
+  }
+  if(file.at&&returned.at)return String(file.at)>String(returned.at);
+  return !!file.at;
+ }
+ return true;
 }
 /* 演示状态：老板端那些数据状态的演示开关（正式版没有），用于本机走查 */
 const EU_DEMO_STATES=[['','按档案状态'],['returned','资料被退回'],['company','公司代填，待员工确认'],['veteran','在岗老员工开通'],['link','请确认员工档案关联'],['contract','合同与问卷待签回'],['contract-returned','只退回个人问卷'],['missing-approved','已批准暂缺'],['offline','合同线下签署已归档']];
@@ -482,14 +497,15 @@ function euBoundData(saved){
    if(formalNewer||!edited.has(key+'HasExpiry'))d.profile[key+'HasExpiry']=doc.noExpiry===true?'no':doc.expiry?'yes':'';
    if(doc.state==='missing'){delete d.docs[key];return;}
    if(!doc.file){d.docs[key]={name:'档案已记录，原文件未提供',source:'archive',legacyNoFile:true};return;}
-   d.docs[key]={name:doc.file,data:doc.dataUrl||empFileUrl(doc.ref),ref:doc.ref,at:doc.at,source:'archive',expiry:doc.expiry||''};
+   /* 发送记录 ID 和上传时间必须一起投影：只留 at 会让员工端把本次签回件判成旧件（HR-ONB-37/53）。 */
+   d.docs[key]={name:doc.file,data:doc.dataUrl||empFileUrl(doc.ref),ref:doc.ref,at:doc.at,dispatchId:doc.dispatchId||'',source:'archive',expiry:doc.expiry||''};
    return;
   }
   if(!doc||removed.has(key))return;
-  if(!local&&doc.file)d.docs[key]={name:doc.file,data:doc.dataUrl||empFileUrl(doc.ref),ref:doc.ref,at:doc.at,source:'archive',expiry:doc.expiry||''};
+  if(!local&&doc.file)d.docs[key]={name:doc.file,data:doc.dataUrl||empFileUrl(doc.ref),ref:doc.ref,at:doc.at,dispatchId:doc.dispatchId||'',source:'archive',expiry:doc.expiry||''};
  });
- /* 店长已处理补件后，本机旧交回记录不再保留或展示（HR-ONB-43/44）。 */
- if(euSupplementSubmissionStale(e)){delete d.supplementSubmission;delete d.supplementReturnedAt;}
+ /* 店长已处理补件、或 requestId 已进终态后，本机旧交回记录不再保留或展示（HR-ONB-43/44）。 */
+ if(euSupplementSubmissionStale(e)||euRequestClosed(e,d.supplementSubmission?.requestId)){delete d.supplementSubmission;delete d.supplementReturnedAt;}
  return d;
 }
 function euEnsureEmployee(d,invite){
@@ -513,7 +529,7 @@ function euSubmissionSnapshot(d){
  Object.entries(EU_EMPLOYEE_PROFILE_MAP).forEach(([key,path])=>{if(path.startsWith('contact.')||path.startsWith('ids.'))empSetPath(snap,path,p[key]??'');});
  if(p.nationalityClass!==undefined)snap.contract.nationalityClass=p.nationalityClass;
  const student=euStudentAnswer(d);if(student)snap.contract.isStudent=student==='yes';
- Object.entries(EU_EMPLOYEE_DOC_MAP).forEach(([key,docId])=>{const doc=d.docs?.[key];if(!doc||doc.legacyNoFile)return;snap.docs[docId]={state:'ok',file:doc.name,dataUrl:doc.data||null,ref:doc.ref,expiry:p[key+'Expiry']||'',noExpiry:p[key+'HasExpiry']==='no',at:doc.at};});
+ Object.entries(EU_EMPLOYEE_DOC_MAP).forEach(([key,docId])=>{const doc=d.docs?.[key];if(!doc||doc.legacyNoFile)return;snap.docs[docId]={state:'ok',file:doc.name,dataUrl:doc.data||null,ref:doc.ref,dispatchId:doc.dispatchId||'',expiry:p[key+'Expiry']||'',noExpiry:p[key+'HasExpiry']==='no',at:doc.at};});
  return snap;
 }
 
@@ -546,7 +562,7 @@ function euSyncStaff(d,opts){
    if(next.docs[docId]&&(!trackEdits||edited.has(key+'Expiry')))next.docs[docId].expiry=d.profile?.[key+'Expiry']??'';
    if(next.docs[docId]&&(!trackEdits||edited.has(key+'HasExpiry')))next.docs[docId].noExpiry=d.profile?.[key+'HasExpiry']==='no';
    if(doc?.legacyNoFile)return;
-   if(doc){if(old.file&&doc.data&&old.dataUrl!==doc.data&&doc.source!=='archive')next.documentArchive=[{docId,...old,archivedAt:empNow()},...(next.documentArchive||[])];next.docs[docId]={...old,state:'ok',file:doc.name,dataUrl:doc.data||old.dataUrl,ref:doc.ref||old.ref,expiry:(!trackEdits||edited.has(key+'Expiry'))?(d.profile?.[key+'Expiry']??''):old.expiry,noExpiry:(!trackEdits||edited.has(key+'HasExpiry'))?d.profile[key+'HasExpiry']==='no':old.noExpiry,at:doc.at||old.at,by:doc.source==='archive'?old.by:'self',needsReview:doc.source==='archive'?old.needsReview:true};}
+   if(doc){if(old.file&&doc.data&&old.dataUrl!==doc.data&&doc.source!=='archive')next.documentArchive=[{docId,...old,archivedAt:empNow()},...(next.documentArchive||[])];next.docs[docId]={...old,state:'ok',file:doc.name,dataUrl:doc.data||old.dataUrl,ref:doc.ref||old.ref,dispatchId:doc.dispatchId||old.dispatchId||'',expiry:(!trackEdits||edited.has(key+'Expiry'))?(d.profile?.[key+'Expiry']??''):old.expiry,noExpiry:(!trackEdits||edited.has(key+'HasExpiry'))?d.profile[key+'HasExpiry']==='no':old.noExpiry,at:doc.at||old.at,by:doc.source==='archive'?old.by:'self',needsReview:doc.source==='archive'?old.needsReview:true};}
    else if(removed.has(key)&&old.file){next.documentArchive=[{docId,...old,archivedAt:empNow()},...(next.documentArchive||[])];next.docs[docId]={...old,state:'missing'};}
   });
  }
@@ -572,8 +588,8 @@ function euSyncStaff(d,opts){
   delete next.invite.linkPending;delete next.invite.pendingLink;
   if(next.account?.state==='pending_link')next.account={...next.account,state:'active',activatedAt:empNow()};
  }
- /* 店长已采纳/退回补件后，员工端不再保留旧的补件投影（HR-ONB-43/44）。 */
- if(next.employeePortal?.supplementSubmission&&euSupplementSubmissionStale(next))delete next.employeePortal.supplementSubmission;
+ /* 店长已采纳/退回/撤销补件后，员工端不再保留旧的补件投影；已关闭的 requestId 也不能再写回（HR-ONB-43/44）。 */
+ if(next.employeePortal?.supplementSubmission&&(euSupplementSubmissionStale(next)||euRequestClosed(next,next.employeePortal.supplementSubmission.requestId)))delete next.employeePortal.supplementSubmission;
  /* 普通保存绝不写请求/审批结果：只有显式动作经 euPublishPortal 发布，否则会把店长已处理的结果复活（HR-ONB-43/44）。 */
  if(next.employeePortal&&next.employeePortal.key!==euSession.key)next.employeePortal={...next.employeePortal,key:euSession.key};
  if(JSON.stringify(next)!==JSON.stringify(current))empSaveWithHistory(next,'员工端 UI');
@@ -587,8 +603,11 @@ function euPublishPortal(d,patch,extra){
  if(!d.employeeId)return;const current=empById(d.employeeId);if(!current)return;
  const next=JSON.parse(JSON.stringify(current));
  const portalPatch={...(patch||{})};
- /* 补件请求已被店长处理时，不再发布旧的交回投影（HR-ONB-43/44）。 */
- if(portalPatch.supplementSubmission&&euSupplementSubmissionStale(next))delete portalPatch.supplementSubmission;
+ /* 补件请求已被店长处理、或 requestId 已进终态时，不再发布旧的交回投影（HR-ONB-43/44）。 */
+ if(portalPatch.supplementSubmission&&(euSupplementSubmissionStale(next)||euRequestClosed(next,portalPatch.supplementSubmission.requestId)))delete portalPatch.supplementSubmission;
+ /* 已采纳/退回/撤销的修改请求不能再被本机旧对象重放成 pending。 */
+ if(portalPatch.updateRequest&&euRequestClosed(next,portalPatch.updateRequest.requestId))delete portalPatch.updateRequest;
+ if(!Object.keys(portalPatch).length&&!extra)return;
  next.employeePortal={...(next.employeePortal||{}),...portalPatch,updatedAt:empNow()};
  if(extra)Object.assign(next,extra);
  if(JSON.stringify(next)!==JSON.stringify(current))empSaveWithHistory(next,'员工端 UI');
@@ -892,6 +911,24 @@ function euSupplementSubmission(d,sup){
  }
  return {entries,sub,missing};
 }
+/* 补件交回这一轮的提交 ID：老板退回后旧 ID 已进 closedRequestIds，必须换新，
+   否则发布会被当成终态重放丢弃；首次交回仍沿用店长这次请求的 ID（HR-ONB-43/44）。 */
+function euSupplementSubmissionFor(d,sup){
+ const result=euSupplementSubmission(d,sup),e=euEmployee(d);
+ if(!euDemo()&&e?.request&&euRequestClosed(e,result.sub.requestId))result.sub.requestId=euRequestId('topup');
+ return result;
+}
+/* 把交回写进老板端 e.request：先冻结提交，再同步这一轮的 requestId。 */
+function euPushSupplementReturn(d,sub){
+ const e=euEmployee(d);if(euDemo()||!e?.request||e.request.state==='done')return null;
+ if(typeof empSaveRequestDraft==='function')empSaveRequestDraft(e.request.token,sub);
+ if(typeof empSubmitRequest==='function')empSubmitRequest(e.request.token);
+ if(typeof empById==='function'&&typeof empSaveStaff==='function'){
+  const latest=empById(e.id);
+  if(latest?.request&&String(latest.request.requestId||'')!==String(sub.requestId))empSaveStaff({...latest,request:{...latest.request,requestId:sub.requestId}});
+ }
+ return e.id;
+}
 /* 暂缺审批结果：店长写入档案的 missingApprovals（见报告“依赖字段”） */
 function euDaysFrom(date,days){const dt=new Date(date+'T12:00:00');dt.setDate(dt.getDate()+days);return dt.toISOString().slice(0,10);}
 function euMissingApprovals(d){const demo=euDemo();if(demo==='missing-approved')return EU_SPECIAL_ITEMS.map(([item,label])=>({item,label,status:'approved',deadline:euDaysFrom(empToday(),30)}));const e=euEmployee(d);
@@ -966,9 +1003,10 @@ function euUpdateSubmitItems(d){
  }
  return {items,error:''};
 }
-/* 退回后再次提交沿用同一 requestId；老板端采纳/退回时用它与补件一起关闭（HR-ONB-43/44）。 */
+/* 每次提交都生成新的 requestId：老板端采纳/退回会把旧 ID 记进 closedRequestIds，
+   退回后重新提交若沿用旧 ID 会被当成终态重放丢弃（HR-ONB-43/44）。 */
 function euBuildUpdateRequest(d,items,prior){
- return {requestId:prior?.requestId||euUpdateRequestId(prior)||euRequestId('update'),state:'pending',at:empNow(),items:prior?.state==='returned'?items.concat((prior.items||[]).filter(x=>!items.some(y=>y.key===x.key))):items};
+ return {requestId:euRequestId('update'),state:'pending',at:empNow(),items:prior?.state==='returned'?items.concat((prior.items||[]).filter(x=>!items.some(y=>y.key===x.key))):items};
 }
 
 /* 采纳严格按冻结的请求项执行：字段取 to、文件取请求里保存的那一版；
@@ -989,6 +1027,19 @@ function euApplyUpdateItems(e,items,at){
   if(item.key==='birthday'){next.birthday=item.to;return;}
   const path=EU_EMPLOYEE_PROFILE_MAP[item.key];if(path)empSetPath(next,path,item.to);
  });
+ return next;
+}
+
+/* 员工端“店长已采纳”演示入口：采纳冻结请求，并把同一 requestId 的补件投影一起关掉。
+   只关 updateRequest 会留下仍为 submitted 的 supplementSubmission，老板能再采纳一次并覆盖新值。 */
+function euAdoptUpdateRequest(d,req){
+ const e=euEmployee(d);if(!e)return null;
+ const at=empNow(),next=euApplyUpdateItems(e,req.items,at),portal={...(next.employeePortal||{})},sup=portal.supplementSubmission;
+ const reqId=req.requestId||sup?.requestId||euRequestId('update');
+ portal.updateRequest={...req,requestId:reqId,state:'done',reviewedAt:at,reviewedBy:'员工端演示'};
+ if(sup&&euRequestSame(sup,req)){portal.supplementSubmission={...sup,requestId:reqId,status:'accepted',reviewedAt:at,reviewedBy:'员工端演示'};portal.supplementRequest=null;}
+ next.employeePortal=portal;
+ euCloseRequestId(next,reqId);
  return next;
 }
 
@@ -1070,23 +1121,23 @@ function euBind(){
   d.messages.unshift('资料修改已提交，等待店长核对');euSaveDraft(d);euPublishPortal(d,{updateRequest:d.updateRequest,materialUpdateAt:d.updateRequest.at});rerender();});
  document.querySelector('.eu-update-withdraw')?.addEventListener('click',()=>{const d=euData();d.updateRequest=null;d.updateDraft=null;euSaveDraft(d);euPublishPortal(d,{updateRequest:null});rerender();});
  document.querySelector('.eu-update-adopt')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),req=euUpdateRequest(d),e=euEmployee(d);if(!req||!Array.isArray(req.items)||!req.items.length){if(box)box.textContent=euT('没有可采纳的修改请求。');return;}if(!e){if(box)box.textContent=euT('找不到员工档案，无法采纳。');return;}
-  if(euDemo()){d.updateRequest={...req,state:'done',reviewedAt:empNow(),reviewedBy:'员工端演示'};d.updateDraft=null;euSaveDemo(d);rerender();return;}
-  const at=empNow(),next=euApplyUpdateItems(e,req.items,at);
-  next.employeePortal={...(next.employeePortal||{}),updateRequest:{...req,state:'done',reviewedAt:at,reviewedBy:'员工端演示'}};
+  if(euDemo()){const at=empNow(),sup=d.supplementSubmission;d.updateRequest={...req,state:'done',reviewedAt:at,reviewedBy:'员工端演示'};if(sup&&euRequestSame(sup,req))d.supplementSubmission={...sup,status:'accepted',reviewedAt:at,reviewedBy:'员工端演示'};d.updateDraft=null;euSaveDemo(d);rerender();return;}
+  const next=euAdoptUpdateRequest(d,req);
+  if(!next){if(box)box.textContent=euT('找不到员工档案，无法采纳。');return;}
   if(typeof empSaveWithHistory==='function')empSaveWithHistory(next,'员工端 UI（采纳资料修改）');else if(typeof empSaveStaff==='function')empSaveStaff(next);
   d.updateRequest=null;d.updateDraft=null;d.profileEdited=(d.profileEdited||[]).filter(key=>!req.items.some(x=>x.kind==='field'&&x.key===key));euSaveDraft(d);rerender();});
  document.querySelector('.eu-update-reject')?.addEventListener('click',()=>{const d=euData(),req=euUpdateRequest(d)||{};d.updateRequest={...req,state:'returned',reviewedAt:empNow(),reason:'演示：材料照片不清晰，请重拍后再交。'};euSaveDraft(d);euPublishPortal(d,{updateRequest:d.updateRequest});rerender();});
  document.querySelector('.eu-supplement-return')?.addEventListener('click',()=>{
   const d=euData(),box=document.querySelector('.eu-validation'),sup=euSupplementRequest(d);
   if(!sup){if(box)box.textContent=euT('当前没有店长发起的补件请求。');return;}
-  const result=euSupplementSubmission(d,sup);
+  const result=euSupplementSubmissionFor(d,sup);
   if(result.missing.length){if(box){box.textContent=euTF('还要补：{items}。请先在资料修改里填写或上传新版本。',{items:result.missing.map(x=>euT(x)).join('、')});box.scrollIntoView({block:'center'});}return;}
   const e=euEmployee(d);
-  if(!euDemo()&&e?.request&&e.request.state!=='done'&&typeof empSaveRequestDraft==='function'){empSaveRequestDraft(e.request.token,result.sub);if(typeof empSubmitRequest==='function')empSubmitRequest(e.request.token);}
+  euPushSupplementReturn(d,result.sub);
   /* 已交回的文件从本机草稿移除，避免下次保存或采纳时又被当成待核对。 */
   if(e?.request&&d.updateDraft?.docs)result.entries.forEach(item=>{Object.keys(EU_EMPLOYEE_DOC_MAP).forEach(key=>{if(key===item.key||EU_EMPLOYEE_DOC_MAP[key]===item.key)delete d.updateDraft.docs[key];});});
   d.supplementReturnedAt=empNow();
-  d.supplementSubmission={requestId:euSupplementRequestId(sup),status:'submitted',state:'submitted',at:d.supplementReturnedAt,items:result.entries.map(x=>euSupplementLabel(d,x)),submitted:result.sub};
+  d.supplementSubmission={requestId:result.sub.requestId||euSupplementRequestId(sup),status:'submitted',state:'submitted',at:d.supplementReturnedAt,items:result.entries.map(x=>euSupplementLabel(d,x)),submitted:result.sub};
   d.messages.unshift('补交材料已交回，等待店长核对');euSave(d);euPublishPortal(d,{supplementReturnedAt:d.supplementReturnedAt,supplementSubmission:d.supplementSubmission});rerender();
  });
  document.querySelector('.eu-demo-supplement')?.addEventListener('click',()=>{const d=euData();d.supplementRequest={state:'open',at:empNow(),note:'演示：请补交护照照片和健康证首次证明',items:[{key:'passport',label:'护照 / 身份证'},{key:'hygiene',label:'食品卫生指导证明（健康证）'}]};d.supplementReturnedAt=null;d.supplementSubmission=null;euSave(d);rerender();});
