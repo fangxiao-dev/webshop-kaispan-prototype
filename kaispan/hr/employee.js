@@ -2286,6 +2286,24 @@ function empSameRequestId(a, b) {
   return !left || !right || left === right;
 }
 
+/* 退回后重新开放的补件项必须带稳定键（phone、passport…）。旧记录只留了展示文字，
+   此时从冻结的 submitted.contact / ids / birthday / docs 反推键。 */
+function empSupplementRestoreItems(req) {
+  const items = Array.isArray(req?.items) ? req.items : [];
+  if (items.every(x => x && typeof x === "object" && (x.key || x.id || x.path))) return items;
+  const sub = req?.submitted || {};
+  const keyOf = path => Object.keys(EMP_PORTAL_FIELD_MAP).find(k => EMP_PORTAL_FIELD_MAP[k] === path);
+  const out = [];
+  Object.keys(sub.contact || {}).forEach(k => { const key = keyOf(`contact.${k}`); if (key) out.push({ key }); });
+  Object.keys(sub.ids || {}).forEach(k => { const key = keyOf(`ids.${k}`); if (key) out.push({ key }); });
+  if (sub.birthday !== undefined) out.push({ key: "birthday" });
+  Object.keys(sub.docs || {}).forEach(docId => {
+    const key = Object.keys(EMP_PORTAL_DOC_MAP).find(k => EMP_PORTAL_DOC_MAP[k] === docId);
+    if (key) out.push({ key });
+  });
+  return out.length ? out : items;
+}
+
 function empReviewSources(e) {
   const out = [];
   const update = e?.employeePortal?.updateRequest;
@@ -2493,7 +2511,7 @@ function empReturnReview(id, reason) {
     } else {
       next.employeePortal = {
         ...portal,
-        supplementRequest: { requestId: reqId, state: "open", at: now, note, items: src.req.items || [] },
+        supplementRequest: { requestId: reqId, state: "open", at: now, note, items: empSupplementRestoreItems(src.req) },
         supplementSubmission: { ...src.req, requestId: reqId, status: "returned", reviewedAt: now, reviewedBy: actor, reason: note },
         supplementReturnedAt: null
       };

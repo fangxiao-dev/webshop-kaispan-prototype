@@ -1137,7 +1137,7 @@ function euBind(){
   /* 已交回的文件从本机草稿移除，避免下次保存或采纳时又被当成待核对。 */
   if(e?.request&&d.updateDraft?.docs)result.entries.forEach(item=>{Object.keys(EU_EMPLOYEE_DOC_MAP).forEach(key=>{if(key===item.key||EU_EMPLOYEE_DOC_MAP[key]===item.key)delete d.updateDraft.docs[key];});});
   d.supplementReturnedAt=empNow();
-  d.supplementSubmission={requestId:result.sub.requestId||euSupplementRequestId(sup),status:'submitted',state:'submitted',at:d.supplementReturnedAt,items:result.entries.map(x=>euSupplementLabel(d,x)),submitted:result.sub};
+  d.supplementSubmission={requestId:result.sub.requestId||euSupplementRequestId(sup),status:'submitted',state:'submitted',at:d.supplementReturnedAt,items:result.entries.map(x=>({...x,label:euSupplementLabel(d,x)})),submitted:result.sub};
   d.messages.unshift('补交材料已交回，等待店长核对');euSave(d);euPublishPortal(d,{supplementReturnedAt:d.supplementReturnedAt,supplementSubmission:d.supplementSubmission});rerender();
  });
  document.querySelector('.eu-demo-supplement')?.addEventListener('click',()=>{const d=euData();d.supplementRequest={state:'open',at:empNow(),note:'演示：请补交护照照片和健康证首次证明',items:[{key:'passport',label:'护照 / 身份证'},{key:'hygiene',label:'食品卫生指导证明（健康证）'}]};d.supplementReturnedAt=null;d.supplementSubmission=null;euSave(d);rerender();});
