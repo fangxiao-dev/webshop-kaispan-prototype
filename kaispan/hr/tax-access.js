@@ -18,7 +18,7 @@ function hrTaxSeed() {
             id: "gmbh",
             company: "Martin Biergarten GmbH",
             store: "Dortmund",
-            grant: { enabled: true, by: "老板", at: "2026-11-04 10:22" }
+            grant: null
           },
           {
             id: "catering",
@@ -227,7 +227,7 @@ function employeeTaxAccessPage() {
     </section>
     <section class="card">
       <div class="section-title"><h2>${empT("可下载的文件", "Herunterladbare Dateien")}</h2><span class="pill blue">HR-TAX-12</span></div>
-      <p>${empT("只有三类，且只给现行或已归档的版本：", "Nur drei Arten, jeweils aktuelle oder archivierte Fassung:")}</p>
+      <p>${empT("只有三类：个人问卷和劳动合同只给“已归档的现行版本”，在读证明只给现行版本：", "Nur drei Arten: Personalfragebogen und Arbeitsvertrag nur in der archivierten aktuellen Fassung, die Studienbescheinigung in der aktuellen Fassung:")}</p>
       <ul class="tax-scope-list">
         <li>${empT("个人问卷", "Personalfragebogen")}</li>
         <li>${empT("劳动合同", "Arbeitsvertrag")}</li>

@@ -4,20 +4,20 @@
 
 /* 一期 20 类（HR-TODO-20～39）。标题只写「员工姓名：事项类别」，不含证件号、日期、金额（HR-TODO-05）。 */
 const HR_TODO_TYPE_LIST = [
- {code:'HR-TODO-20',key:'hr.document_attention',name:'证件需要处理',category:'材料',risk:'高',audience:'双方',target:'docs',open:'证件缺失、有效期待补充、已过期，或距到期进入提醒窗口（默认 30 天；居留许可 60 天）。31–90 天的「需关注」不进待办',close:'证件替换并填好有效期后，规则层重新判定并自动关闭',to:'管理端一条；员工本人一条',mode:'业务事实自动关闭'},
+ {code:'HR-TODO-20',key:'hr.document_attention',name:'证件需要处理',category:'材料',risk:'高',audience:'双方',target:'docs',open:'证件缺失、有效期待补充、已过期，或距到期进入提醒窗口（默认 30 天；居留许可 60 天，临时替代证明按居留许可算；健康证只提醒下次复训日，用词「复训到期」）。31–90 天的「需关注」不进待办',close:'证件替换并填好有效期后，规则层重新判定并自动关闭；该证件对这个人不适用时可关闭',to:'管理端一条；员工本人一条',mode:'业务事实自动关闭'},
  {code:'HR-TODO-21',key:'hr.profile_missing',name:'关键资料缺失',category:'材料',risk:'中',audience:'双方',target:'docs',open:'三层清单里审核通过后仍缺、且没有已批准暂缺的资料；在岗老员工确认后缺的同样算',close:'全部补齐',to:'管理端一条；员工本人一条',mode:'业务事实自动关闭'},
  {code:'HR-TODO-22',key:'hr.onboarding_review',name:'入职资料待审核',category:'入职',risk:'中',audience:'老板',target:'review',open:'员工提交入职资料',close:'审核通过或退回',to:'本店店长审核，老板可见',mode:'业务事实关闭'},
  {code:'HR-TODO-23',key:'hr.onboarding_returned',name:'入职资料已退回',category:'入职',risk:'中',audience:'员工',target:'review',open:'店长退回入职资料',close:'员工重新提交，或入职被取消',to:'员工本人',mode:'业务事实关闭'},
  {code:'HR-TODO-24',key:'hr.contract_prepare',name:'待发合同',category:'合同',risk:'中',audience:'老板',target:'contract',open:'资料审核通过（或公司代填确认）后合同未发；合同作废后重新打开。在岗老员工开通的档案不开',close:'合同发送，或线下签署归档',to:'管理端',mode:'业务事实关闭'},
  {code:'HR-TODO-25',key:'hr.contract_sign',name:'待员工签回合同',category:'合同',risk:'中',audience:'员工',target:'contract',open:'合同已发出；作废重发或退回后重新打开。线下签署归档不开此条',close:'员工两份签回件上传齐全',to:'员工本人',mode:'业务事实关闭'},
  {code:'HR-TODO-26',key:'hr.contract_archive',name:'待核对归档合同',category:'合同',risk:'中',audience:'老板',target:'contract',open:'员工两份签回件上传齐全',close:'核对归档完成，或合同被作废',to:'有查看敏感资料权限的店长或老板',mode:'业务事实关闭'},
- {code:'HR-TODO-27',key:'hr.newhire_pending',name:'新人上工前清单',category:'入职',risk:'中',audience:'老板',target:'docs',open:'入职状态已通过及之后，上工前清单未办完；截止日是入职日期，当天仍未办完标逾期',close:'清单全部完成、录入离职或入职被取消',to:'管理端',mode:'业务事实自动关闭'},
+ {code:'HR-TODO-27',key:'hr.newhire_pending',name:'新人上工前清单',category:'入职',risk:'中',audience:'老板',target:'docs',open:'入职状态已通过及之后，上工前清单未办完（在岗老员工开通的不开）；截止日是入职日期，当天仍未办完标逾期',close:'清单全部完成、录入离职或入职被取消',to:'管理端',mode:'业务事实自动关闭'},
  {code:'HR-TODO-28',key:'hr.update_request_pending',name:'补件待员工处理',category:'材料',risk:'中',audience:'员工',target:'docs',open:'店长推送补件，且员工有可用账号',close:'员工交回，或推送被撤销',to:'员工本人',mode:'业务事实关闭'},
  {code:'HR-TODO-29',key:'hr.update_request_review',name:'补件 / 资料更新待核对',category:'材料',risk:'中',audience:'老板',target:'docs',open:'员工交回补件，或入职后提交资料更新',close:'店长采纳（写入档案）或退回（必填原因）',to:'本店店长；改银行卡时老板同时知情',mode:'业务事实关闭'},
- {code:'HR-TODO-30',key:'hr.special_approval_pending',name:'特殊审批待批（暂缺某项材料）',category:'审批',risk:'中',audience:'老板',target:'review',open:'员工申请某项材料暂时交不了',close:'店长批准或驳回',to:'店长一条；老板一条知情条',mode:'店长条业务事实关闭；知情条可「已阅」'},
+ {code:'HR-TODO-30',key:'hr.special_approval_pending',name:'特殊审批待批（暂缺某项材料）',category:'审批',risk:'中',audience:'老板',target:'review',open:'员工申请某项材料暂时交不了',close:'店长批准或驳回',to:'店长一条；老板一条知情条（审批结束后知情条自动关闭）',mode:'店长条业务事实关闭；知情条可「已阅」'},
  {code:'HR-TODO-31',key:'hr.special_approval_due',name:'特殊审批已到最晚补交日',category:'审批',risk:'高',audience:'双方',target:'review',open:'最晚补交日次日起该项仍缺（补交日当天仍有效）',close:'该项补齐',to:'店长、老板、员工本人',mode:'业务事实自动关闭，持续显示并标红'},
  {code:'HR-TODO-32',key:'hr.onboarding_stalled',name:'入职流程停滞',category:'入职',risk:'中',audience:'老板',target:'review',open:'邀请未提交、退回未重提、合同未签回、提交未审核，各自超过对应天数（默认各 3 天）',close:'流程状态前进，或邀请撤销 / 入职取消',to:'本店店长',mode:'业务事实自动关闭'},
- {code:'HR-TODO-33',key:'hr.probation_ending',name:'试用期即将结束',category:'合同',risk:'中',audience:'老板',target:'contract',open:'在试用期且距结束日 ≤ 30 天；待入职的人不触发',close:'结束日一过自动关闭，或结束日被改晚、清空、录入离职',to:'管理端；要解约则办离职',mode:'日期推进自动关闭'},
+ {code:'HR-TODO-33',key:'hr.probation_ending',name:'试用期即将结束',category:'合同',risk:'中',audience:'老板',target:'contract',open:'在试用期且距结束日 ≤ 30 天；待入职的人不触发',close:'结束日一过自动关闭，或结束日被改晚到提醒窗口之外、清空、录入离职',to:'管理端；要解约则办离职',mode:'日期推进自动关闭'},
  {code:'HR-TODO-34',key:'hr.fixed_term_ending',name:'定期合同即将到期 / 已到期',category:'合同',risk:'高',audience:'老板',target:'contract',open:'合同条件有定期合同到期日，且进入提醒窗口',close:'续签（改晚到期日）、转不定期（清空）或办离职',to:'管理端可见，处理由老板确认',mode:'业务事实关闭，到期不自动消失'},
  {code:'HR-TODO-35',key:'hr.offboarding_handover',name:'离职交接',category:'离职',risk:'中',audience:'老板',target:'contract',open:'录入离职时（含补录过去的最后工作日）',close:'四项清单全勾完：归还钥匙设备、核对最后工时、确认最后工资、开具离职证明',to:'管理端；老板确认离职，本店店长办理清单',mode:'逐项勾选，全部完成才算办完'},
  {code:'HR-TODO-36',key:'hr.manual_account_handling',name:'请手工处理该账号',category:'账号',risk:'高',audience:'老板',target:'docs',open:'到期关账号时该成员是老板或管理员，或平台返回受保护成员、最后一个管理员',close:'平台状态变为停用，下一轮同步后改记「已手工停用」',to:'老板',mode:'来源同步关闭'},
@@ -59,7 +59,7 @@ function hrTodoLiveItems(scope){
    const meta=HR_TODO_ALERT_TYPES[a.kind]||['人事事项','材料','docs'];
    const detail=a.kind==='doc'
     ? `${empRaw(a.type.name)} · ${a.level==='expired'?'证件已过期':a.days===0?'今天到期':a.level==='missing'?'材料尚未上传':a.level==='date_missing'?'已记录材料，有效期待补充':'证件进入到期提醒窗口'}`
-    : a.kind==='profile'?`缺：${empRaw(a.title)}`
+    : a.kind==='profile'?'关键资料还没补齐，具体缺项在员工资料里看'
     : a.kind==='newhire'?'上工前清单还没办完'
     : '合同日期进入提醒窗口';
    const hygiene=a.type?.id==='belehrung';
@@ -116,7 +116,7 @@ function hrTodosPage(){
 
  <details class="card hr-todo-live" style="margin-top:16px"><summary>二、三期或后续阶段的事项 <span class="pill gray">不进一期</span>${typeof hrBossMark==='function'?hrBossMark('7.x'):''}<small>${HR_TODO_LATER_LIST.length} 个模块</small></summary>
  <p class="small">一期员工助手的待办和员工端任务只有人事类事项和点钞记账委派；HACCP、清洁检查、开收店清单放到后续阶段（HR-TODO-61 ★7.x）。</p>
- <div class="hr-todo-scroll"><table class="table hr-todo-table hr-todo-later-table"><thead><tr><th>模块</th><th>示例事项</th><th>为什么不在本期</th></tr></thead><tbody>${HR_TODO_LATER_LIST.map(x=>`<tr><td><strong>${x.module}</strong><small><span class="pill gray">二、三期或后续</span></small></td><td>${x.items}</td><td>${x.why}</td></tr>`).join('')}</tbody></table></div></details>
+ <div class="hr-todo-scroll"><table class="table hr-todo-table hr-todo-later-table"><thead><tr><th>模块</th><th>示例事项</th><th>为什么不在本期</th></tr></thead><tbody>${HR_TODO_LATER_LIST.map(x=>`<tr class="is-muted"><td><strong>${x.module}</strong><small><span class="pill gray">二、三期或后续</span></small></td><td>${x.items}</td><td>${x.why}</td></tr>`).join('')}</tbody></table></div></details>
  <p class="small" style="margin-top:12px">“员工 + 老板”表示同一事项分别通知双方，各自看到相应的处理内容。当前仅展示本地提醒与示例，不实际发送通知或执行审批。</p>`;
 }
 
