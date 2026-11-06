@@ -804,3 +804,72 @@ a.emp-file.is-open { color: var(--purple); text-decoration: underline; }
 .emp-sofort-alt { margin-top: 8px; }
 .emp-rehire-link a { color: var(--purple); }
 @media (max-width: 760px) { .emp-dispatch-row { grid-template-columns: 1fr; } }
+
+/* ============================ B2-b3：新增员工与邀请 ============================ */
+.emp-company-filled { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0 4px; padding: 10px 12px; border: 1px solid #e4dcc8; border-radius: 9px; background: #fffaf0; font-size: 12px; line-height: 1.7; }
+.emp-company-filled input { margin-top: 3px; accent-color: var(--purple); }
+.emp-layer-counts { display: inline-block; font-size: 11px; line-height: 1.6; color: var(--muted); white-space: normal; }
+.emp-step-label { display: block; font-size: 12px; font-weight: 600; color: var(--ink); }
+.emp-stall-flag { display: block; margin-top: 3px; font-size: 11px; color: #b42318; }
+.emp-invite-substates { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.emp-stall-banner { border-left: 3px solid #e38a00; background: #fffaf0; }
+.emp-stall-list { margin: 8px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.9; }
+.emp-stall-list li { display: flex; gap: 10px; flex-wrap: wrap; }
+.emp-stall-list a { color: var(--purple); font-weight: 600; }
+.emp-stall-list span { color: var(--muted); }
+.emp-stall-inline { margin: 0 0 10px; padding: 8px 11px; border: 1px solid #f0c98a; border-radius: 8px; background: #fff9ee; font-size: 12px; color: #8a5a00; }
+.emp-invite-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
+.emp-invite-status > div { padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fbfcff; }
+.emp-invite-status small { display: block; font-size: 11px; color: var(--muted); }
+.emp-invite-status strong { display: block; margin: 3px 0; font-size: 13px; }
+.emp-invite-status span { display: block; font-size: 10px; line-height: 1.6; color: var(--muted); }
+.emp-invite-mail { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.emp-invite-mail summary, .emp-invite-preview summary { cursor: pointer; font-size: 12px; color: var(--purple); }
+.emp-invite-mail .field { margin-top: 8px; }
+.emp-invite-preview { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.emp-invite-timeline { margin-top: 16px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.emp-invite-timeline h3 { margin: 0 0 6px; font-size: 13px; }
+.emp-flow-wide { flex-wrap: wrap; }
+.emp-layer-block { margin-top: 8px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.emp-layer-block.is-1 { border-color: #e3c7c7; background: #fffafa; }
+.emp-layer-block.is-2 { border-color: #ecd9b8; background: #fffdf7; }
+.emp-layer-block.is-3 { border-color: #cfe0f3; background: #fafdff; }
+.emp-layer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+.emp-layer-head span { font-variant-numeric: tabular-nums; color: var(--muted); }
+.emp-layer-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.emp-layer-item { padding: 2px 7px; border-radius: 999px; background: #f2f4fa; font-size: 11px; color: var(--muted); }
+.emp-layer-item.is-done { background: #f0faf3; color: #1f7a45; }
+.emp-layer-item.is-missing { background: #fff1f1; color: #b42318; }
+.emp-return-picks { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.emp-return-picks strong { display: block; margin-bottom: 6px; font-size: 12px; }
+.emp-return-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px; }
+.emp-return-items { display: flex; gap: 5px; flex-wrap: wrap; margin: 8px 0; }
+.emp-special-block { border-left: 3px solid #8a5a00; background: #fffdf7; }
+.emp-special-pending { margin-top: 8px; padding: 9px 11px; border: 1px dashed #e0c99a; border-radius: 8px; background: #fff; }
+.emp-special-pending > p { margin: 4px 0 8px; font-size: 11px; color: var(--muted); }
+.emp-special-table { display: grid; gap: 8px; }
+.emp-special-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: end; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.emp-special-row strong { font-size: 12px; }
+.emp-special-row label span { display: block; font-size: 10px; color: var(--muted); }
+.emp-special-row input[type="date"] { border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px; font: inherit; }
+.emp-special-list { display: grid; gap: 7px; margin-top: 10px; }
+.emp-approval-row { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 12px; }
+.emp-approval-row strong { display: block; }
+.emp-approval-row > span { display: block; margin-top: 2px; color: var(--muted); }
+.emp-approval-row.is-expired { border-color: #f0b4ae; background: #fff7f6; }
+.emp-approval-row.is-rejected { border-color: #e3c7c7; background: #fffafa; }
+.emp-approval-row.is-approved { border-color: #b9e3c6; background: #f7fdf9; }
+.emp-special-extend-box { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 7px; }
+.emp-special-extend-box label span { display: block; font-size: 10px; color: var(--muted); }
+.emp-special-extend-box input { border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px; font: inherit; }
+.emp-special-extend-reason { flex: 1 1 200px; }
+.emp-preview { margin-top: 10px; padding: 10px 12px; border: 1px dashed #d7dbe8; border-radius: 9px; background: #fbfcff; }
+.emp-preview-block { margin-top: 9px; padding-top: 8px; border-top: 1px solid #edf0f7; font-size: 12px; }
+.emp-preview-block > strong { display: block; margin-bottom: 3px; font-size: 12px; }
+.emp-preview-block p { margin: 3px 0; line-height: 1.7; }
+.emp-preview-doc { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px dashed #edf0f7; font-size: 11px; }
+.emp-preview-doc span:last-child { color: var(--muted); }
+@media (max-width: 760px) {
+  .emp-special-row { grid-template-columns: 1fr; }
+  .emp-invite-status { grid-template-columns: 1fr; }
+}
