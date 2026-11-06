@@ -711,3 +711,59 @@ a.emp-file.is-open { color: var(--purple); text-decoration: underline; }
 .emp-rules-scope{margin:14px 0;color:var(--muted);line-height:1.6}.emp-document-guide{margin:14px 0;background:#f8f6ff;border-color:#e6def9}.emp-rule-group{margin-top:22px}.emp-rule-group h3{margin:0 0 10px;font-size:14px}.emp-rule-group .emp-rules{margin:0}
 
 .emp-rule-group-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.emp-rule-group-heading h3{margin:0}.emp-rule-heading-actions{display:flex;align-items:center;gap:8px}.emp-custom-rule-list:not(:empty){display:grid;gap:10px;margin-bottom:12px}.emp-custom-rule{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:end;padding:12px;border:1px solid #e2def5;border-radius:10px;background:#faf9ff}.emp-custom-rule label{display:grid;gap:5px;font-size:12px;font-weight:600}.emp-custom-rule input,.emp-custom-rule textarea{width:100%;box-sizing:border-box;border:1px solid #dce2ef;border-radius:7px;padding:8px;font:inherit;background:#fff;resize:vertical}@media(max-width:700px){.emp-custom-rule{grid-template-columns:1fr}}
+
+/* ======================================================================
+   B2-b1：右栏账号、个人资料、证件、变更记录与补件核对卡
+   规则：HR-ACCESS-26/43/53、HR-ORG-20～27、HR-DOC-01～41、HR-DATA-12～16
+   ====================================================================== */
+.emp-account-actions { flex-wrap: wrap; gap: 8px; }
+.emp-account-actions button[disabled] { opacity: .5; cursor: not-allowed; }
+.emp-account-link { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.emp-account-link summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--purple); }
+.emp-account-link .small { margin-top: 6px; }
+.emp-link-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.emp-link-row select, .emp-link-row input { flex: 1 1 170px; min-width: 140px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font: inherit; background: #fff; }
+.emp-account-pending { margin-top: 10px; padding: 10px 12px; border: 1px solid #f0d9b5; border-radius: 9px; background: #fffaf1; }
+.emp-account-pending strong { display: block; font-size: 12px; }
+.emp-account-pending p { margin: 5px 0 0; font-size: 11px; line-height: 1.6; color: var(--muted); }
+.emp-account-store-note { margin: 8px 0 0; font-size: 11px; line-height: 1.6; color: #8a5a00; }
+.emp-account-store-note a { color: var(--purple); font-weight: 600; }
+.emp-disabled-reason { margin: 6px 0 0; font-size: 11px; line-height: 1.6; color: var(--muted); }
+.emp-readonly-field { grid-column: 1 / -1; }
+.emp-readonly-value { display: grid; gap: 2px; padding: 9px 11px; border: 1px dashed var(--line); border-radius: 9px; background: #f7f8fc; }
+.emp-readonly-value strong { font-size: 13px; }
+.emp-readonly-value span { font-size: 11px; color: var(--muted); }
+.emp-transfer-form { margin-top: 10px; padding: 12px; border: 1px solid #e5dff8; border-radius: 10px; background: #faf9ff; }
+.emp-transfer-note { margin: 8px 0 0; font-size: 11px; line-height: 1.7; color: var(--muted); }
+.emp-transfer-error { margin: 6px 0 0; min-height: 0; font-size: 12px; font-weight: 600; color: var(--red); }
+.emp-field-hidden .emp-hidden-value { padding: 9px 11px; border: 1px dashed #d7dbe8; border-radius: 8px; background: #f3f4f8; color: var(--muted); font-size: 12px; letter-spacing: .5px; }
+.emp-field-hidden small { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.emp-inline-note, .emp-field-note, .emp-role-note { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: #f7f8fc; font-size: 11px; line-height: 1.7; color: var(--muted); }
+.emp-role-add { margin-top: 10px; }
+.emp-role-add summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--purple); }
+.emp-doc-head-tags { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.emp-doc-layer { padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; background: #eef1f8; color: #5b6480; }
+.emp-doc-layer.is-submit { background: #fdecef; color: #a60e29; }
+.emp-doc-layer.is-beforeStart { background: #fff3e0; color: #8a5a00; }
+.emp-doc-layer.is-later { background: #eef6ff; color: #2f5f9e; }
+.emp-doc-file { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.emp-doc-nofile { font-size: 11px; color: var(--muted); }
+.emp-doc-version { padding: 1px 6px; border-radius: 999px; background: #eef1f8; font-size: 10px; color: var(--muted); }
+.emp-replace-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--muted); }
+.emp-replace-controls input[type="text"], .emp-replace-controls .emp-replace-reason { flex: 1 1 180px; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font: inherit; background: #fff; }
+.emp-doc-flag { margin: 8px 0 0; font-size: 11px; line-height: 1.7; color: var(--muted); }
+.emp-doc-history { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.emp-doc-history summary { cursor: pointer; font-size: 11px; color: var(--purple); }
+.emp-doc-history ul { margin: 6px 0 0; padding-left: 18px; font-size: 11px; color: var(--muted); line-height: 1.8; }
+.emp-doc-history li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.emp-health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 8px; }
+.emp-health-grid .field span { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; }
+.emp-health-grid .field select, .emp-health-grid .field input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font: inherit; background: #fff; }
+.emp-request-rules { margin-top: 10px; padding: 8px 10px; border: 1px dashed #d7dbe8; border-radius: 8px; background: #fbfcff; }
+.emp-request-rules strong { display: block; font-size: 11px; }
+.emp-request-rules span { font-size: 11px; line-height: 1.7; color: var(--muted); }
+.emp-history-mask { font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); letter-spacing: .5px; }
+.emp-effective-tag { margin-left: 2px; padding: 1px 5px; border-radius: 999px; background: #eef1f8; font-size: 10px; color: var(--muted); }
+.emp-file.is-hidden-name { color: var(--muted); font-size: 11px; }
+@media (max-width: 640px) { .emp-health-grid { grid-template-columns: 1fr; } }
+.emp-replace-hint { flex: 1 1 100%; color: var(--muted); }
