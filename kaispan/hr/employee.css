@@ -914,3 +914,9 @@ a.emp-file.is-open { color: var(--purple); text-decoration: underline; }
 .emp-retention-cat { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px dashed var(--line); }
 .emp-retention-cat:first-of-type { border-top: none; }
 .emp-boss-confirm .hr-boss-table { margin-top: 8px; }
+
+/* 第 2 档老板端：二三期恢复展示的不灰期次标签，和“后续流程示例”只读区块 */
+.emp-phase-tag { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #f0ebff; color: #5b3fc4; font-size: 11px; font-weight: 600; vertical-align: middle; white-space: nowrap; }
+.emp-future-flow { margin-top: 16px; border-style: dashed; }
+.emp-future-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.emp-future-grid ul { margin: 6px 0; padding-left: 18px; }

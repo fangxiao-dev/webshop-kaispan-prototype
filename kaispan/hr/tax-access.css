@@ -78,3 +78,5 @@
 .hr-todo-later-table td:first-child { white-space: nowrap; }
 .hr-todo-later-table small { display: block; margin-top: 6px; }
 .hr-todo-table tr.is-muted td { opacity: .5; }
+
+.hr-todo-phase { margin-left: 6px; }

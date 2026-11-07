@@ -98,7 +98,7 @@ assert.ok(ctx.empPushBlockReason(pendingPush, '2026-11-06').includes('不在岗'
 /* 首页：数人、占位卡、无排班工资假数据（HR-TODO-50/51/53） */
 const home = ctx.employeeHomePage();
 assert.ok(home.includes('人待处理'));
-assert.ok(home.includes('即将开放'));
+assert.ok(home.includes('排班与考勤') && home.includes('工资与发薪'), '二三期模块卡不再关掉；本测试没加载模块文件，所以是“未加载”占位');
 assert.ok(!home.includes('本月计薪工时') && !home.includes('本周人工成本'), '不再显示假数据');
 assert.ok(home.includes('税务师权限'));
 
