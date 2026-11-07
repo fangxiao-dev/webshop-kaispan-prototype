@@ -138,7 +138,7 @@ assert.ok(rulesPage.includes('其他资料保存年限'));
 assert.ok(rulesPage.includes('法定最长试用期'));
 assert.ok(rulesPage.includes('只读'));
 assert.ok(rulesPage.includes('已确认答复'), '答复 83/83 后，待老板确认清单改为已确认答复汇总');
-assert.ok(!rulesPage.includes('待老板确认'), '页面上不再有待老板确认黄标');
+assert.deepEqual([...rulesPage.matchAll(/data-boss-code="([^"]+)"/g)].map(m => m[1]).sort(), ['1.2', '8.15', '9.1'], '只有答复有歧义的 1.2、8.15、9.1 带待老板确认黄标');
 assert.ok(rulesPage.includes('二、三期使用'));
 
 /* 参数默认值、范围和 0 值规则（HR-CONTRACT-19/20/39～47） */

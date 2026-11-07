@@ -158,10 +158,14 @@ ctx.hrSetMgrPerm({ export: true });
 ctx.hrSetView('owner');
 assert.equal(ctx.hrCan('exportSensitive'), true);
 
-/* 待老板确认黄标已去掉，改为已确认答复汇总 */
-assert.equal(typeof ctx.hrBossMark, 'undefined');
+/* 已确认答复汇总；只有答复有歧义的三题（1.2、8.15、9.1）重新挂待老板确认黄标 */
+assert.equal(typeof ctx.hrBossMark, 'function');
+assert.equal(ctx.hrBossMark('1.1'), '', '已确认的题不挂黄标');
 const rules = ctx.employeeRulesPage();
-assert.ok(rules.includes('已确认答复') && !rules.includes('待老板确认'));
+assert.ok(rules.includes('已确认答复'));
+assert.deepEqual([...rules.matchAll(/data-boss-code="([^"]+)"/g)].map(m => m[1]).sort(), ['1.2', '8.15', '9.1']);
+const pendingRows = run('HR_ANSWERS').filter(r => r[3] === '待老板确认').map(r => r[0]).sort();
+assert.deepEqual(pendingRows, ['1.2', '8.15', '9.1']);
 const answers = run('HR_ANSWERS');
 const chapters = new Set(answers.map(r => r[0]).filter(code => /^\d/.test(code)));
 assert.equal(chapters.size, 83, '第 1–9 章 83 题都有一行');

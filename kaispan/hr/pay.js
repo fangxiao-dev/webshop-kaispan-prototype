@@ -667,6 +667,11 @@ function paySeed() {
 /* ============================================================== 页面 ===== */
 function payStore() { return empScope() || empStores()[0]; }
 
+/* 答复有歧义的题挂“待老板确认”黄标（hr-answers.js）；单测不加载 hr-answers.js 时不显示。 */
+function payBossMark(code) {
+  return typeof hrBossMark === "function" ? hrBossMark(code) : "";
+}
+
 function payMonth() {
   const m = state().params.get("m") || "";
   return /^\d{4}-\d{2}$/.test(m) ? m : payPrevMonth();
@@ -746,8 +751,8 @@ function payShell(active, inner) {
         ${schGuide(PAY_GUIDE)}
       </div>
     </div>
-    ${empScope() ? "" : `<p class="sch-scope-hint">${empT(`按门店算。现在看的是 ${store}，换一家请用顶栏的门店选择器。`,
-        `Filialbezogen. Angezeigt wird ${store} — Filiale oben in der Kopfzeile wechseln.`)}</p>`}
+    ${empScope() ? "" : `<p class="sch-scope-hint">${empT(`按门店展示和交付。现在看的是 ${store}，换一家请用顶栏的门店选择器。`,
+        `Filialbezogen angezeigt. Angezeigt wird ${store} — Filiale oben in der Kopfzeile wechseln.`)}${payBossMark("1.2")}</p>`}
     ${inner}`;
 }
 
@@ -934,6 +939,8 @@ function payWorkConfirmPanel(store, month, run) {
     </tbody></table></div>
     ${run.state === "open" ? `<div class="pay-acts"><button type="button" class="ghost-btn pay-refresh">刷新核对</button><button type="button" class="primary-btn pay-handover" data-month="${month}">确认无误，移交税务师</button></div><p class="pay-hint">员工在本月最后一个工作日结束后收到工时邮件，回复确认后更新状态。当前为离线演示，不会自动收发邮件；移交不代替员工确认。</p>` : ""}
     <p class="pay-hint">${empT("邮件按钮会打开你自己的邮件客户端并预填工时、打卡时间和计算规则；最终发送由你在邮件客户端确认。", "Die Erinnerung öffnet einen vorbereiteten E-Mail-Entwurf in deinem Mailprogramm.")}</p>
+    <p class="pay-hint">${empT("员工怎样才算确认（系统里点确认，还是回邮件说“无误”）、邮件里的截止日期定在几号，还没定。", "Wie die Bestätigung zählt (im System oder per Antwort-Mail) und die Frist in der Mail sind noch offen.")}${payBossMark("9.1")}</p>
+    <p class="pay-hint">${empT("交给税务师：现在按门店各交一份；同一公司是否统一算工资、封账，还没定。", "Übergabe an die Steuerberatung: derzeit je Filiale; ob dieselbe Firma gemeinsam abrechnet und abschließt, ist offen.")}${payBossMark("1.2")}</p>
   </section>`;
 }
 

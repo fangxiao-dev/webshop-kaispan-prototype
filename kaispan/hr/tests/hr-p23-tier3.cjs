@@ -132,6 +132,12 @@ function boot() {
   const { run } = boot();
   assert.ok(!run("LV_TYPES.some(t => t.id === 'sonder')"));
   assert.match(fs.readFileSync('leave.js', 'utf8'), /<option value="sonder" disabled[^>]*>\$\{empT\("特殊假（本项目不做）"/);
+  /* 1.2、9.1、8.15 答复有歧义：挂待老板确认黄标，注释和文案不替老板下定论 */
+  const leaveSrc = fs.readFileSync('leave.js', 'utf8'), paySrc = fs.readFileSync('pay.js', 'utf8');
+  assert.ok(!leaveSrc.includes('R5-25：半天假不做'), '8.15 注释不再写成“半天假不做”');
+  assert.ok(leaveSrc.includes('lvBossMark("8.15")'));
+  assert.ok(!paySrc.includes('按门店算。'), '1.2 不再写“按门店算”');
+  assert.ok(paySrc.includes('payBossMark("1.2")') && paySrc.includes('payBossMark("9.1")'));
 }
 
 console.log('PASS: p23 tier3 — 8.3 补签加班只老板批, 8.6 顶班老板批后计薪, 8.12 付钱/存账户二选一, 9.4 更正需税务师采纳, 9.9 差旅申报+老板批准, 8.19 特殊假灰项');
