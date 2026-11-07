@@ -701,13 +701,14 @@ function attUndoDecision(recId, by) {
   const next = JSON.parse(JSON.stringify(rec));
   next.decision = null;
   const linked = attLinkedOt(next);
-  if (linked && !linked.revoked && typeof hrsRevokeOt === "function") {
+  /* 只撤回自动补签生成的加班单；手动“转加班申请”建的单（otSource=manual）是独立的审批，不跟决议一起撤 */
+  if (linked && !linked.revoked && next.otSource !== "manual" && typeof hrsRevokeOt === "function") {
     hrsRevokeOt(linked.id, "补签决议已撤销，加班单撤回");
     next.otId = null;
     next.otSource = null;
   }
   attWrite(next, { at: empNow(), by: by || empT("店长", "Leitung"),
-                   what: { zh: linked && !linked.revoked ? "撤销处理，退回待处理；关联的加班审批单已撤回" : "撤销处理，退回待处理",
+                   what: { zh: linked && !linked.revoked && next.otSource !== "manual" ? "撤销处理，退回待处理；关联的加班审批单已撤回" : "撤销处理，退回待处理",
                            de: "Bearbeitung zurückgenommen" } });
   return next;
 }

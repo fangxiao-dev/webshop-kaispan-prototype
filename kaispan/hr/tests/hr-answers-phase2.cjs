@@ -22,7 +22,7 @@ const base = {
 const ctx = vm.createContext(base);
 vm.runInContext(fs.readFileSync('hours.js', 'utf8'), ctx);
 vm.runInContext(fs.readFileSync('attend.js', 'utf8'), ctx);
-store.kaispanHrsOt = [];
+store[vm.runInContext('HRS_OT_KEY', ctx)] = [];
 const shift = { id: 's1', start: '07:00', end: '15:00' };
 let rec = { id: 'r1', store: 'Demo', empId: 'e1', date: '2026-11-05', shiftId: 's1', in: null, out: null, decision: null, otId: null, log: [] };
 ctx.attEnsure = () => rec;
@@ -74,6 +74,64 @@ ctx.hrsDecideOt(pendingAfter[0].id, 'approved');
 assert.equal(approved(), 2);
 fix('15:00');
 assert.equal(approved(), 0, '已批准后改回不超时：撤销原批准');
+
+/* fix2：已撤回的单不能再批准（也不能被旧回调复活），新单批准后旧单重放不重复计薪；工资快照不变 */
+const staffE1 = { id: 'e1', name: 'E One', status: 'active', entryDate: '2020-01-01', contact: {}, ids: {}, contract: { type: 'teilzeit', payType: 'hourly', rate: 20, hoursMin: 0, hoursMax: 80 } };
+Object.assign(ctx, { empStaff: () => [staffE1], empById: id => (id === 'e1' ? staffE1 : null), empRaw: x => x, empContractType: t => ({ name: { de: t, zh: t }, id: t }) });
+ctx.attAdjust = () => 0;
+ctx.attMonthPending = () => 0;
+ctx.attRangePairs = () => [];
+ctx.hrsMonthProgress = () => ({ ready: true, issues: [] });
+vm.runInContext(fs.readFileSync('pay.js', 'utf8'), ctx);
+const overtimeFor = () => ctx.hrsOtRange('Demo', 'e1', '2026-11-01', '2026-11-30');
+const payOt = () => ctx.paySnapshot('Demo', '2026-11').e1.ot;
+store[vm.runInContext('HRS_OT_KEY', ctx)] = [];
+fix('15:00');
+fix('16:00');
+const staleId = rec.otId;
+fix('15:00');
+assert.equal(ots().find(x => x.id === staleId).revoked, true);
+const beforeRange = overtimeFor();
+const beforePay = payOt();
+const replay = ctx.hrsDecideOt(staleId, 'approved');
+assert.equal(replay.ok, false);
+assert.equal(replay.code, 'revoked', '撤回旧单再批准被拒，返回明确错误码');
+assert.equal(ots().find(x => x.id === staleId).state, 'rejected', '被拒后不改状态');
+assert.equal(ctx.hrsDecideOt(staleId, 'rejected').code, 'revoked');
+assert.equal(overtimeFor(), beforeRange);
+assert.equal(payOt(), beforePay, '工资快照不变');
+fix('16:00');
+const newId = ots().find(x => x.state === 'pending').id;
+assert.notEqual(newId, staleId);
+assert.equal(ctx.hrsDecideOt(newId, 'approved').ok, true);
+assert.equal(overtimeFor(), 1);
+const paidOnce = payOt();
+ctx.hrsDecideOt(staleId, 'approved');
+assert.equal(overtimeFor(), 1, '新单批准后旧单重放不重复计薪');
+assert.equal(payOt(), paidOnce);
+assert.equal(ctx.hrsOtRange('Demo', 'e1', '2026-11-05', '2026-11-05'), 1);
+/* 即使有人直接把 revoked 单的 state 写成 approved，累计也始终排除 revoked */
+const forced = ctx.hrsOtAll().map(x => (x.id === staleId ? { ...x, state: 'approved' } : x));
+ctx.empWrite(vm.runInContext('HRS_OT_KEY', ctx), forced);
+assert.equal(overtimeFor(), 1, 'hrsOtRange 始终排除 revoked');
+
+/* fix2：撤销补签决议只撤回自动生成的单；手动“转加班申请”的 pending/approved 单不变 */
+for (const finalState of ['pending', 'approved']) {
+  store[vm.runInContext('HRS_OT_KEY', ctx)] = [];
+  rec = { id: 'r2', store: 'Demo', empId: 'e1', date: '2026-11-05', shiftId: 's1', in: { at: '07:00' }, out: { at: '16:00' }, decision: null, otId: null, otSource: null, log: [] };
+  ctx.attExcess = () => 1;
+  const converted = ctx.attToOvertime('r2', 'manager');
+  assert.equal(converted.otSource, 'manual');
+  const manualId = rec.otId;
+  if (finalState === 'approved') ctx.hrsDecideOt(manualId, 'approved');
+  const manualBefore = ots().find(x => x.id === manualId);
+  ctx.attUndoDecision('r2');
+  const manualAfter = ots().find(x => x.id === manualId);
+  assert.equal(manualAfter.state, finalState, `手动单 ${finalState} 撤销决议后保持原状态`);
+  assert.equal(manualAfter.hours, manualBefore.hours);
+  assert.ok(!manualAfter.revoked);
+  assert.equal(overtimeFor(), finalState === 'approved' ? manualBefore.hours : 0);
+}
 
 /* R5-25/R5-29：休假页没有特殊假；R5-30：病假第一天起要 AU */
 const leaveCtx = vm.createContext({ ...base, empRule: id => (id === 'auAfterDays' ? 1 : 6) });
