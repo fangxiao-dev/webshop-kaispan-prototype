@@ -1,5 +1,5 @@
 /* ==========================================================================
-   KaiSpan · 休假（年假 / 病假 / 无薪假 / 特殊假）
+   KaiSpan · 休假（年假 / 病假 / 无薪假；答复 R5-29：特殊假不做，R5-25：半天假不做）
    --------------------------------------------------------------------------
    在 attend.js 之后、hours.js 之前以 defer 加载，前缀 lv。
 
@@ -31,15 +31,11 @@ const LV_TYPES = [
     note: { zh: "扣年假额度，照付工资。", de: "Zählt auf den Urlaubsanspruch, wird bezahlt." } },
   { id: "krank", paid: true, quota: false,
     name: { zh: "病假", de: "Krankmeldung" },
-    note: { zh: "不扣年假。6 周内照付（Lohnfortzahlung），超过转 Krankengeld。连续 3 天以上要 AU。",
-            de: "Kein Urlaubsabzug. Bis 6 Wochen Lohnfortzahlung, danach Krankengeld. Ab dem 3. Tag AU nötig." } },
+    note: { zh: "不扣年假。6 周内照付（Lohnfortzahlung），超过转 Krankengeld。第一天起要 AU（医生证明）。年假期间生病不自动处理，需要时手动修改。",
+            de: "Kein Urlaubsabzug. Bis 6 Wochen Lohnfortzahlung, danach Krankengeld. AU ab dem ersten Tag. Krankheit im Urlaub wird nicht automatisch verrechnet, nur manuell angepasst." } },
   { id: "unbezahlt", paid: false, quota: false,
     name: { zh: "无薪假", de: "Unbezahlter Urlaub" },
-    note: { zh: "不扣年假，也不计工资。要双方同意。", de: "Kein Urlaubsabzug, keine Vergütung. Beidseitig zu vereinbaren." } },
-  { id: "sonder", paid: true, quota: false,
-    name: { zh: "特殊假", de: "Sonderurlaub" },
-    note: { zh: "婚丧、搬家等。照付但不扣年假，具体几天看合同或行业协议。",
-            de: "Hochzeit, Trauerfall, Umzug. Bezahlt, ohne Urlaubsabzug; Dauer laut Vertrag oder Tarif." } }
+    note: { zh: "不扣年假，也不计工资。要双方同意。", de: "Kein Urlaubsabzug, keine Vergütung. Beidseitig zu vereinbaren." } }
 ];
 
 function lvType(id) {
@@ -323,7 +319,7 @@ function lvCancel(id, by, why) {
 /* --------------------------------------------------------------- AU ---- */
 /* 连续病假到第几天要医生证明，是合规参数不是硬编码：法定是第 4 天起，
    但很多雇主在合同里约定第 1 天就要。 */
-function lvAuAfter() { return Number(empRule("auAfterDays")) || 3; }
+function lvAuAfter() { const days = Number(empRule("auAfterDays")); return Number.isFinite(days) && days >= 1 ? days : 1; }
 function lvPayWeeks() { return Number(empRule("lohnfortzahlungWeeks")) || 6; }
 
 function lvAuNeeded(x) {

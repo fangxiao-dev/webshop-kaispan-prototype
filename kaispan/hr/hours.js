@@ -97,7 +97,7 @@ function hrsOvertime(store, empId, month, upto) {
 
 function hrsOtRange(store, empId, from, to) {
   return hrsOt(store, empId)
-    .filter(x => x.state === "approved" && String(x.date) >= from && String(x.date) <= to)
+    .filter(x => x.state === "approved" && !x.revoked && String(x.date) >= from && String(x.date) <= to)
     .reduce((sum, x) => sum + x.hours, 0);
 }
 
@@ -391,11 +391,31 @@ function hrsAddOt(store, empId, date, hours, reason, by) {
   return all;
 }
 
+/* 补签改了超时：同一张加班单改小时数、重新回到待审批（已批准的先撤销原批准，被撤销的小时不再进 hrsOtRange）。 */
+function hrsReviseOt(id, hours, reason) {
+  const all = hrsOtAll().map(x => x.id !== id || x.revoked ? x
+    : { ...x, hours: hrsRound(hours), reason: reason || x.reason, state: "pending", note: "", decidedAt: null, revisedAt: empNow() });
+  empWrite(HRS_OT_KEY, all);
+  return all;
+}
+
+/* 撤回加班单：补签被撤销、改回不超时，或批准后的补签被改动。revoked 标记区分“系统撤回”和老板主动驳回。 */
+function hrsRevokeOt(id, note) {
+  const all = hrsOtAll().map(x => x.id !== id ? x
+    : { ...x, state: "rejected", revoked: true, note: note || "", decidedAt: empNow() });
+  empWrite(HRS_OT_KEY, all);
+  return all;
+}
+
+/* 已撤回（revoked）的单不能再批准或驳回：补签改了之后旧单已作废，旧页面的按钮或回调重放也不能让它复活、重复计薪。 */
 function hrsDecideOt(id, state, note) {
+  const target = hrsOtAll().find(x => x.id === id);
+  if (!target) return { ok: false, code: "missing", message: "找不到这张加班单" };
+  if (target.revoked) return { ok: false, code: "revoked", message: "这张加班单已被补签变更撤回，不能再审批；请处理新的加班单" };
   const all = hrsOtAll().map(x => x.id !== id ? x
     : { ...x, state, note: note || "", decidedAt: empNow() });
   empWrite(HRS_OT_KEY, all);
-  return all;
+  return { ok: true, list: all };
 }
 
 /* ============================================================== 页面 ====== */
@@ -745,11 +765,13 @@ function hrsBindAll() {
   }));
 
   document.querySelectorAll(".hrs-ot-ok").forEach(b => b.addEventListener("click", () => {
-    hrsDecideOt(b.dataset.id, "approved");
+    const res = hrsDecideOt(b.dataset.id, "approved");
+    if (!res.ok) { empFlash(b, res.message); }
     app();
   }));
   document.querySelectorAll(".hrs-ot-no").forEach(b => b.addEventListener("click", () => {
-    hrsDecideOt(b.dataset.id, "rejected");
+    const res = hrsDecideOt(b.dataset.id, "rejected");
+    if (!res.ok) { empFlash(b, res.message); }
     app();
   }));
 }

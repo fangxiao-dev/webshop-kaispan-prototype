@@ -9,7 +9,12 @@ const localStorage = {
   setItem: (key, value) => memory.set(key, String(value)),
   removeItem: key => memory.delete(key)
 };
-const ctx = vm.createContext({ console, URLSearchParams, localStorage });
+const FIXED_NOW = new Date('2026-11-06T10:00:00').getTime();
+class FixedDate extends Date {
+  constructor(...args) { super(...(args.length ? args : [FIXED_NOW])); }
+  static now() { return FIXED_NOW; }
+}
+const ctx = vm.createContext({ console, URLSearchParams, localStorage, Date: FixedDate });
 for (const file of ['viewpoint.js', 'hr-model.js', 'employee.js', 'employee-ui-i18n.js', 'employee-ui.js']) {
   vm.runInContext(fs.readFileSync(file, 'utf8'), ctx);
 }
@@ -109,10 +114,10 @@ assert.equal(ctx.empReinvite('e15', 'jonas.neu@example.com').ok, true);
 assert.equal(ctx.empById('e15').contact.email, 'jonas.neu@example.com');
 assert.equal(ctx.empById('e15').invite.state, 'sent');
 
-/* 审核：提交层缺项只能退回；通过必须填入职日期；合同条件保持公司值；试用期留空=无试用期 */
+/* 审核：缺项不挡审核但需特殊审批；通过必须填入职日期；合同条件保持公司值；试用期留空=无试用期 */
 const fakeMissing = clone('e15', { id: 't-missing', invite: { ...clone('e15').invite, state: 'submitted', submitted: {} } });
 save(fakeMissing);
-assert.equal(ctx.empApproveInvite('t-missing', { entryDate: '2026-12-01' }).code, 'layer1_missing');
+assert.equal(ctx.empApproveInvite('t-missing', { entryDate: '2026-12-01' }).code, 'special_reason');
 assert.equal(ctx.empApproveInvite('e16', { entryDate: '' }).code, 'entry_date');
 assert.equal(ctx.empApproveInvite('e16', { entryDate: '2026-11-20', probationEnd: '' }).ok, true);
 const approved16 = ctx.empById('e16');
@@ -133,29 +138,36 @@ assert.equal(ctx.empSendInvite('e15').code, 'permission');
 ctx.state = () => ({ params: new URLSearchParams('id=t-missing'), route: 'employee' });
 const managerDetail = ctx.employeeInviteDetailPage();
 const managerNew = ctx.employeeNewPage();
-assert.ok(managerNew.includes('店长默认不能发邀请'));
+assert.ok(managerNew.includes('老板已对你关闭「发邀请」权限'));
 ctx.state = () => ({ params: new URLSearchParams('id=e16'), route: 'employee' });
 assert.ok(managerDetail.includes('需要查看敏感资料权限'));
-assert.ok(managerDetail.includes('店长默认不能发邀请'));
+assert.ok(managerDetail.includes('老板已对你关闭「发邀请」权限'));
 ctx.hrSetView('owner');
 
-/* 特殊审批：只限 6 项、批准必须给最晚补交日、默认 min(今天+30, 入职+60)、最多延期一次（HR-ONB-30～34） */
-const e20 = clone('e18', { id: 't-special', entryDate: '2026-11-20', invite: { ...clone('e18').invite, state: 'approved', approvedAt: '2026-11-01T09:00:00.000Z' } });
-e20.employeePortal = { specialSubmission: { state: 'pending', items: ['steuerId', 'rentenversicherung'], labels: ['Steuer-ID', 'Sozialversicherungsnummer'], reason: '还在办', at: '2026-11-05T09:00:00.000Z' } };
-save(e20);
-/* 批准必须显式给最晚补交日；空值不再自动补默认（HR-ONB-32） */
-assert.equal(ctx.empResolveSpecialSubmission('t-special', 'approved', '', '', 'steuerId').code, 'deadline');
-const special1 = ctx.empResolveSpecialSubmission('t-special', 'approved', '2026-12-06', '', 'steuerId');
-assert.equal(special1.ok, true);
-assert.equal(ctx.empById('t-special').missingApprovals.find(x => x.item === 'steuerId').deadline, '2026-12-06');
-assert.equal(ctx.empResolveSpecialSubmission('t-special', 'approved', '2027-02-01', '', 'rentenversicherung').code, 'deadline_over_max');
-assert.equal(ctx.empResolveSpecialSubmission('t-special', 'approved', '2027-01-19', '', 'rentenversicherung').ok, true);
-assert.equal(ctx.empById('t-special').employeePortal.specialSubmission.state, 'approved');
-assert.equal(ctx.empExtendMissingApproval('t-special', 'steuerId', '2026-12-20', '再宽限').ok, true);
-assert.equal(ctx.empExtendMissingApproval('t-special', 'steuerId', '2026-12-25', '再宽限').code, 'extension_limit');
-const badSpecial = clone('t-special', { id: 't-special-bad', employeePortal: { specialSubmission: { state: 'pending', items: ['passport'], labels: ['护照'], reason: 'x', at: '2026-11-05T09:00:00.000Z' } } });
-save(badSpecial);
-assert.equal(ctx.empResolveSpecialSubmission('t-special-bad', 'approved', '2026-12-01', '').code, 'item_not_allowed');
+/* 特殊审批（答复 ANS-1，覆盖 HR-ONB-20/30～34）：三层清单只提示；第一、二层没交齐时通过必须由老板特殊审批并留记录；暂缺申请与延期不再存在 */
+assert.equal(typeof ctx.empResolveSpecialSubmission, 'undefined', '暂缺申请审批一期不做');
+assert.equal(typeof ctx.empExtendMissingApproval, 'undefined', '延期一期不做');
+const gapInvite = clone('e15', { id: 't-gap', entryDate: '', invite: { ...clone('e15').invite, state: 'submitted', submitted: {} } });
+save(gapInvite);
+assert.ok(ctx.empOnbGaps(ctx.empById('t-gap'), 'submitted').length > 0, '空提交有缺项');
+assert.ok(ctx.empWorkflowEntries(ctx.empById('t-gap')).some(x => x.key === 'specialPending'), '老板待办里出现特殊审批待批');
+assert.equal(ctx.empApproveInvite('t-gap', { entryDate: '2026-12-01' }).code, 'special_reason', '老板通过缺项资料必须写原因');
+ctx.hrSetView('manager');
+ctx.hrSetMgrPerm({ invite: false, sensitive: true });
+assert.equal(ctx.empApproveInvite('t-gap', { entryDate: '2026-12-01', specialReason: '想放行' }).code, 'special_owner', '店长不能做特殊审批');
+ctx.hrSetView('owner');
+const gapDetail = ctx.employeeInviteDetailPage ? (ctx.state = () => ({ params: new URLSearchParams('id=t-gap'), route: 'employee' }), ctx.employeeInviteDetailPage()) : '';
+assert.ok(gapDetail.includes('特殊审批原因'), '老板审核卡有原因输入');
+assert.ok(!gapDetail.includes('暂缺'), '审核页不再出现暂缺申请');
+assert.equal(ctx.empApproveInvite('t-gap', { entryDate: '2026-12-01', specialReason: '员工出国，下周补' }).ok, true);
+const gapDone = ctx.empById('t-gap');
+assert.equal(gapDone.invite.state, 'approved');
+assert.equal(gapDone.invite.specialApproval.reason, '员工出国，下周补');
+assert.ok(gapDone.invite.specialApproval.by && gapDone.invite.specialApproval.at, '记录审批人和时间');
+assert.ok(gapDone.invite.specialApproval.labels.length > 0);
+assert.equal(gapDone.history.some(h => h.field === 'approval.special'), true);
+assert.equal(ctx.empWorkflowEntries(gapDone).some(x => x.key === 'specialPending'), false);
+assert.ok(ctx.empSpecialApprovalBlock(gapDone).includes('员工出国，下周补'), '员工档案里能查到特殊审批记录');
 
 /* 邮箱查重与建档补邮箱；无邮箱只能建档 */
 assert.equal(ctx.empInviteEmailConflict('marco@example.com', 'e18'), null);

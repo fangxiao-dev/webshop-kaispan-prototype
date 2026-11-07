@@ -40,11 +40,13 @@ const clone = (id, patch) => {
 /* 1. 实际写入入口校验权限与字段；提案只接收合同条件（HR-ACCESS-07、HR-LIFE-10/13） */
 const leaveTarget = clone('e07', { id: 'c-leave' });
 ctx.hrSetView('manager');
-assert.equal(ctx.empApplyLeave('c-leave', { who: 'employee', noticeDate: '2026-11-06', lastDay: '2026-12-31' }).code, 'permission');
-assert.equal(ctx.empSetLeave('c-leave', { noticeDate: '2026-11-06', lastDay: '2026-12-31' }).code, 'who');
-assert.equal(ctx.empSetLeave('c-leave', { who: 'employee', lastDay: '2026-12-31' }).code, 'notice');
-assert.equal(ctx.empSetLeave('c-leave', { who: 'employee', noticeDate: '2026-11-06', lastDay: '2026-11-31' }).code, 'last_day');
-assert.equal(ctx.empSetLeave('c-leave', { who: 'employee', noticeDate: '2026-11-06', lastDay: '2026-12-31' }).proposal, true);
+assert.equal(ctx.empApplyLeave('c-leave', { noticeDate: '2026-11-06', lastDay: '2026-12-31' }).code, 'permission');
+assert.equal(ctx.empSetLeave('c-leave', { noticeDate: '2026-11-06', lastDay: '2026-12-31' }).code, 'permission', 'ANS-4：店长默认不能办离职');
+ctx.hrSetMgrPerm({ offboard: true });
+assert.equal(ctx.empSetLeave('c-leave', { noticeDate: '2026-11-06', lastDay: '2026-12-31' }).proposal, true, '不再要求“谁提出”');
+assert.equal(ctx.empSetLeave('c-leave', { lastDay: '2026-12-31' }).code, 'notice');
+assert.equal(ctx.empSetLeave('c-leave', { noticeDate: '2026-11-06', lastDay: '2026-11-31' }).code, 'last_day');
+assert.equal(ctx.empSetLeave('c-leave', { noticeDate: '2026-11-06', lastDay: '2026-12-31' }).proposal, true);
 assert.equal(ctx.empById('c-leave').leave, null);
 
 const propTarget = clone('e08', { id: 'c-prop', entryDate: '2022-01-01', probationEnd: null });
@@ -128,14 +130,12 @@ assert.equal(later.inProbation, true);
 assert.equal(later.earliest, '2027-02-28');
 
 /* 8. 离职必填项缺失直接拒绝；默认值只放表单预填（HR-LIFE-13） */
-assert.equal(ctx.empSetLeave('c-leave', { who: '', noticeDate: '', lastDay: '2026-12-01' }).code, 'who');
-assert.equal(ctx.empSetLeave('c-leave', { who: 'employee', noticeDate: '', lastDay: '2026-12-01' }).code, 'notice');
+assert.equal(ctx.empSetLeave('c-leave', { noticeDate: '', lastDay: '2026-12-01' }).code, 'notice');
 
-/* 9. 离职交接、保存期、店长提案、特殊审批、入职当天未办完都进待办（3.3-2/9/10/12） */
+/* 9. 保存期、店长提案、特殊审批、入职当天未办完都进待办（3.3-2/9/10/12） */
 const left = clone('e14', {
   id: 'c-left',
-  leave: { who: 'employee', noticeDate: '2014-01-01', lastDay: '2015-01-01' },
-  leaveHandover: { items: {}, createdAt: '2015-01-01T09:00:00.000Z', doneAt: '' },
+  leave: { noticeDate: '2014-01-01', lastDay: '2015-01-01' },
   retentionHandled: {}
 });
 assert.equal(ctx.empRetentionRows(left).length, 5);
@@ -144,22 +144,17 @@ const proposalHold = clone('e11', {
   id: 'c-hold',
   contractProposal: { state: 'pending', at: '2026-11-05T09:00:00.000Z', by: '店长', validFrom: '2026-11-06', changes: [], data: {} }
 });
-const specialTodo = clone('e12', {
-  id: 'c-special-todo',
-  missingApprovals: [{ item: 'steuerId', label: 'Steuer-ID', status: 'approved', deadline: '2026-10-01', extensionCount: 0 }],
-  employeePortal: { specialSubmission: { state: 'pending', items: ['rentenversicherung'], labels: ['SV-Nr.'], reason: '在办', at: '2026-11-05T09:00:00.000Z' } }
-});
-/* 这一项必须真的还缺，逾期待办才算成立（补齐后待办自动消失，HR-ONB-32） */
-delete specialTodo.ids.steuerId;
-delete specialTodo.ids.steuernummer;
+const specialTodo = clone('e16', { id: 'c-special-todo' });
+specialTodo.invite.state = 'submitted';
+specialTodo.invite.submitted = {};
 ctx.empSaveStaff(specialTodo);
 const newHireToday = clone('e18', { id: 'c-newhire-today', entryDate: '2026-11-06' });
 const todos = ctx.empTodoItems();
-assert.ok(todos.some(t => t.type === '离职交接未办完'));
+assert.ok(!todos.some(t => t.type === '离职交接未办完'), '答复 B14：离职交接待办不再有');
 assert.ok(todos.some(t => t.type === '离职资料保存期到期'));
 assert.ok(todos.some(t => t.type === '店长合同提案待老板确认'));
-assert.ok(todos.some(t => t.type === '特殊审批逾期未补交'));
-assert.ok(todos.some(t => t.type === '特殊审批待批'));
+assert.ok(!todos.some(t => t.type === '特殊审批逾期未补交'), 'ANS-1：暂缺逾期待办不再有');
+assert.ok(todos.some(t => t.type === '特殊审批待批（材料没交齐）'));
 const newHireAlert = ctx.empAlertsFor(ctx.empById('c-newhire-today'), '2026-11-06').find(x => x.kind === 'newhire');
 assert.equal(newHireAlert.level, 'expired', '入职当天仍未办完就算逾期');
 
@@ -171,17 +166,18 @@ assert.ok(ctx.empRetentionHandledFor(ctx.empById('c-left'), 'contract'));
 assert.equal(ctx.empRetentionHandledFor(ctx.empById('c-left'), 'payroll'), null);
 
 /* 11. 员工编号按完整重聘链识别同一个人（HR-LIFE-32、HR-CONTRACT-17） */
-const seg1 = clone('e14', { id: 'c-seg1', employeeNo: '9001', store: 'Martin Cafe', leave: { who: 'employee', noticeDate: '2024-01-01', lastDay: '2024-12-31' } });
-const seg2 = clone('e14', { id: 'c-seg2', employeeNo: '9001', store: 'Martin Cafe', rehireOf: 'c-seg1', status: 'left', leave: { who: 'employee', noticeDate: '2024-12-01', lastDay: '2025-12-31' } });
+const seg1 = clone('e14', { id: 'c-seg1', employeeNo: '9001', store: 'Martin Cafe', leave: { noticeDate: '2024-01-01', lastDay: '2024-12-31' } });
+const seg2 = clone('e14', { id: 'c-seg2', employeeNo: '9001', store: 'Martin Cafe', rehireOf: 'c-seg1', status: 'left', leave: { noticeDate: '2024-12-01', lastDay: '2025-12-31' } });
 seg1.rehiredBy = 'c-seg2';
 ctx.empSaveStaff(seg1);
 const seg3 = clone('e14', { id: 'c-seg3', employeeNo: '9001', store: 'Martin Cafe', rehireOf: 'c-seg2' });
 assert.equal(ctx.empEmployeeNoConflict(ctx.empById('c-seg3'), '9001'), null, '第三段不能跟第一段冲突');
 
-/* 12. 学生工周工时用未舍入值比较（HR-CONTRACT-06/12） */
+/* 12. 答复 B17/B18 覆盖 HR-CONTRACT-06/12：一期不再提示学生工每周 20 小时或 Minijob 收入超限 */
 const hint = ctx.empContractHint({ contract: { type: 'werkstudent', hoursMax: 86.8, rate: 14 }, role: 'front', entryDate: '2026-01-01' });
-assert.ok(hint.includes('已超过'));
-assert.ok(hint.includes('20.03'));
+assert.equal(hint, '', '学生工工时只和合同挂钩，不提示每周 20 小时');
+const minijobHint = ctx.empContractHint({ contract: { type: 'minijob', hoursMax: 100, rate: 14, payType: 'hourly' }, role: 'front', entryDate: '2026-01-01' });
+assert.equal(minijobHint, '', 'Minijob 收入超限提醒一期不做');
 
 /* 13. 每次保存新增一版，同内容同生效日也追加（HR-CONTRACT-02） */
 const ver = clone('e13', { id: 'c-ver' });
@@ -212,7 +208,7 @@ ctx.hrSetMgrPerm({ sensitive: true });
 /* 2. 申请理由和时间线自由文本统一转义（存储型脚本注入） */
 const xss = clone('e16', { id: 'v-xss' });
 xss.invite.state = 'submitted';
-xss.employeePortal = { specialSubmission: { state: 'pending', items: ['steuerId'], labels: ['Steuer-ID'], reason: '<img src=x onerror=alert(1)>', at: '2026-11-05T09:00:00.000Z' } };
+xss.invite.specialApproval = { labels: ['Steuer-ID'], reason: '<img src=x onerror=alert(1)>', by: '老板', at: '2026-11-05T09:00:00.000Z' };
 ctx.empSaveStaff(xss);
 ctx.state = () => ({ params: new URLSearchParams('id=v-xss'), route: 'employee' });
 const xssPage = ctx.employeeInviteDetailPage();
@@ -251,36 +247,15 @@ assert.equal(ctx.empInviteProgress(ctx.empById('v-sent-draft')).complete, true, 
 assert.equal(ctx.empInviteView(ctx.empById('v-sent-draft'), 'submitted').name, 'Yuki', '审核区读提交快照');
 assert.equal(ctx.empInviteView(ctx.empById('v-sent-draft'), 'draft').name, 'Draft Name');
 
-/* 6. 被驳回的暂缺项按必交项处理，不能通过（HR-ONB-32） */
-const rejected = clone('e16', { id: 'v-rejected' });
-rejected.invite.state = 'submitted';
-delete rejected.invite.submitted.ids.steuernummer;
-rejected.missingApprovals = [{ item: 'steuerId', label: 'Steuer-ID', status: 'rejected', reason: '不接受' }];
-ctx.empSaveStaff(rejected);
-assert.equal(ctx.empApproveInvite('v-rejected', { entryDate: '2026-12-01' }).code, 'special_rejected');
-ctx.state = () => ({ params: new URLSearchParams('id=v-rejected'), route: 'employee' });
-assert.ok(ctx.employeeInviteDetailPage().includes('暂缺申请被驳回的项还没补齐'));
-
-/* 7. 同一项不能重复审批；延期只能走延期函数（HR-ONB-34） */
-const twice = clone('e18', {
-  id: 'v-twice',
-  entryDate: '2026-11-20',
-  invite: { ...clone('e18').invite, state: 'approved', approvedAt: '2026-11-01T09:00:00.000Z' },
-  employeePortal: { specialSubmission: { state: 'pending', items: ['steuerId', 'rentenversicherung'], labels: ['Steuer-ID', 'SV-Nr.'], reason: '在办', at: '2026-11-05T09:00:00.000Z' } }
-});
-assert.equal(ctx.empResolveSpecialSubmission('v-twice', 'approved', '2026-12-06', '', 'steuerId').ok, true);
-assert.equal(ctx.empResolveSpecialSubmission('v-twice', 'approved', '2026-12-10', '', 'steuerId').code, 'decided');
-assert.equal(ctx.empExtendMissingApproval('v-twice', 'steuerId', '2026-12-20', '宽限').ok, true);
-assert.equal(ctx.empResolveSpecialSubmission('v-twice', 'approved', '2026-12-25', '', 'steuerId').code, 'decided');
-
-/* 8. 改入职日期后，未结束的暂缺期限按新的“入职日 + 60 天”收紧（HR-ONB-34） */
-const recheck = clone('e16', { id: 'v-recheck' });
-recheck.invite.state = 'submitted';
-recheck.entryDate = '2026-11-20';
-recheck.missingApprovals = [{ item: 'steuerId', label: 'Steuer-ID', status: 'approved', deadline: '2027-01-19', extensionCount: 0 }];
-ctx.empSaveStaff(recheck);
-assert.equal(ctx.empApproveInvite('v-recheck', { entryDate: '2026-10-01' }).ok, true);
-assert.equal(ctx.empById('v-recheck').missingApprovals[0].deadline, '2026-11-30');
+/* 6. 第三层缺项不挡通过也不需要特殊审批（答复 ANS-1，覆盖 HR-ONB-32 的“驳回项按必交项”） */
+const layer3Gap = clone('e16', { id: 'v-layer3' });
+layer3Gap.invite.state = 'submitted';
+delete layer3Gap.invite.submitted.ids.steuernummer;
+delete layer3Gap.invite.submitted.ids.steuerId;
+ctx.empSaveStaff(layer3Gap);
+assert.equal(ctx.empOnbGaps(ctx.empById('v-layer3'), 'submitted').length, 0, '第三层不进特殊审批缺项');
+assert.equal(ctx.empApproveInvite('v-layer3', { entryDate: '2026-12-01' }).ok, true);
+assert.equal(ctx.empById('v-layer3').invite.specialApproval, undefined, '没有第一、二层缺项就不留特殊审批记录');
 
 /* 9. 审核通过时 first/last 同步生成 name（HR-ONB-10/22） */
 const named = clone('e16', { id: 'v-name' });
@@ -307,24 +282,6 @@ assert.equal(ctx.empCancelOnboarding('v-cancel', '岗位取消').ok, true);
 assert.equal(ctx.empById('v-cancel').account.state, 'accepted');
 assert.equal(ctx.empById('v-cancel').status, 'invited');
 assert.equal(ctx.empRosterVisible().some(e => e.id === 'v-cancel'), false);
-
-/* 12. 审批结果由管理端持有；员工端旧 pending 副本不能写回（HR-ONB-31/32） */
-const held = clone('e18', {
-  id: 'v-held',
-  missingApprovals: [{ item: 'steuerId', label: 'Steuer-ID', status: 'approved', deadline: '2026-12-06', extensionCount: 0 }],
-  employeePortal: { specialSubmission: { state: 'approved', items: ['steuerId'], labels: ['Steuer-ID'], resolutions: [{ item: 'steuerId', status: 'approved', deadline: '2026-12-06' }], at: '2026-11-05T09:00:00.000Z' } }
-});
-ctx.euSyncInvite({ employeeId: 'v-held', key: 'v-held-key', specialSubmission: { state: 'pending', items: ['steuerId'], labels: ['Steuer-ID'] } });
-assert.equal(ctx.empById('v-held').employeePortal.specialSubmission.state, 'approved');
-
-/* 13. 补交日必须是真实日历日期，空值不再自动批准（HR-ONB-32） */
-const badDate = clone('e18', {
-  id: 'v-bad-date',
-  entryDate: '2026-11-20',
-  employeePortal: { specialSubmission: { state: 'pending', items: ['steuerId'], labels: ['Steuer-ID'], reason: '在办', at: '2026-11-05T09:00:00.000Z' } }
-});
-assert.equal(ctx.empResolveSpecialSubmission('v-bad-date', 'approved', '2026-11-31', '', 'steuerId').code, 'deadline');
-assert.equal(ctx.empResolveSpecialSubmission('v-bad-date', 'approved', '', '', 'steuerId').code, 'deadline');
 
 /* 15. 合同差异比较补上合同类型、月工时下限、岗位（HR-ONB-10） */
 const compare = clone('e16', { id: 'v-compare' });

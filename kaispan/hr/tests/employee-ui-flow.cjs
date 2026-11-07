@@ -9,6 +9,8 @@ for (const file of ['viewpoint.js', 'hr-model.js', 'employee.js', 'employee-ui-i
 }
 const run = code => vm.runInContext(code, ctx);
 const realEuInvitation = ctx.euInvitation;
+/* 员工端默认德语（B62），本文件的旧断言按中文文案写，没选语言时在这里固定回中文；默认德语另见 hr-answers-261107.cjs */
+run("globalThis.euLang=function(){const key=euSession.key||euInvitation()?.key;const d=empRead(EU_KEY,{})[key];return EU_LANGUAGES.find(x=>x[0]===d?.profile?.language)?.[1]||'zh';}");
 
 let staff = [];
 const store = {};
@@ -184,16 +186,12 @@ const e11 = seed('e11', { invite: { portalVersion: 2, state: 'approved', contrac
 const panel11 = ctx.euContractPanel(ctx.euBoundData({ employeeId: 'e11', profile: {}, docs: {} }));
 assert.match(panel11, /个人调查问卷/);
 assert.match(panel11, /下载个人调查问卷|已填写并签署的个人调查问卷/);
-assert.equal(ctx.euApprovalText({ status: 'approved', deadline: '2026-12-01' }), '已批准暂缺（12 月 1 日 前）');
-assert.equal(ctx.euApprovalText({ status: 'rejected', deadline: '2026-12-01' }), '暂缺已驳回');
-assert.match(ctx.euApprovalText({ status: 'approved', deadline: '2026-11-01' }), /已逾期未补交/);
-assert.equal(ctx.euApprovalText({ status: 'pending' }), '等待审批');
 const demo11 = ctx.euBoundData({ employeeId: 'e1', profile: {}, docs: {}, demoWorkspaceAt: '2026-11-06T11:00:00.000Z' });
 assert.equal(ctx.euStage(demo11), 'archived', '测试跳过要真正进入工作台');
 
 /* 12. 各演示状态 × 页签渲染烟测：不能漏 undefined / NaN */
 ctx.euInvitation = () => ({ key: 'k1', employeeId: 'e1', name: 'Alex Chen', email: 'alex@example.com', store: 'Martin Biergarten', demo: true });
-for (const demo of ['', 'returned', 'company', 'veteran', 'link', 'contract', 'contract-returned', 'missing-approved', 'offline']) {
+for (const demo of ['', 'returned', 'company', 'veteran', 'link', 'contract', 'contract-returned', 'offline']) {
   for (const tab of ['tasks', 'docs', 'home']) {
     run(`euSession.demo=${JSON.stringify(demo)};euSession.key="k1";euSession.step="materials";euSession.tab=${JSON.stringify(tab)};euSession.preview=null`);
     const html = ctx.euRender();
@@ -238,8 +236,7 @@ const d16 = ctx.euBoundData({ employeeId: 'e16', profile: {}, docs: {}, updateRe
 ctx.euSyncInvite(d16);
 assert.equal(emp('e16').employeePortal.updateRequest.state, 'done', '普通保存不能把已采纳请求改回 pending');
 assert.equal(emp('e16').employeePortal.specialSubmission.state, 'approved', '普通保存不能把已批准暂缺改回 pending');
-assert.equal(ctx.euSpecialPending(d16, 'steuerId'), false);
-assert.ok(!/等待审批/.test(ctx.euSpecialBlock(d16)), '店长批准后不再显示等待审批');
+assert.ok(!/申请暂缺|等待审批/.test(ctx.euSubmissionActions(d16)), 'ANS-1：员工端一期没有“申请暂缺”入口');
 
 /* 17. F5 资料页身份控件写 updateDraft，材料清单按草稿算 */
 const e17 = seed('e17', { status: 'active', contract: { type: 'teilzeit', isStudent: false, nationalityClass: 'eu' } });
@@ -305,7 +302,6 @@ run('euSession.demo=""');
 /* 23. F11 动态整句与日期跟界面语言走（德语） */
 run('empWrite("kaispanEmployeeUIDemoV1",{kde:{profile:{language:"Deutsch"}}});euSession.key="kde";euSession.demo=""');
 assert.equal(ctx.euMonthDay('2026-12-01'), '1.12.2026');
-assert.ok(ctx.euApprovalText({ status: 'approved', deadline: '2026-12-01' }).includes('Genehmigt'));
 assert.notEqual(ctx.euT('入职已完成，可在这里更新个人资料与材料。'), '入职已完成，可在这里更新个人资料与材料。');
 assert.ok(ctx.euTF('还要补：{items}。请先在资料修改里填写或上传新版本。', { items: 'Reisepass' }).includes('Noch nötig'));
 
