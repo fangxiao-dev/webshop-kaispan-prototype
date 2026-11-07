@@ -132,3 +132,5 @@
   .lv-taken-row { grid-template-columns: 1fr; }
   .lv-taken-act { flex-wrap: wrap; }
 }
+
+.lv-type-off { color: #9aa1b5; }

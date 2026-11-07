@@ -466,6 +466,26 @@ function attAdjust(store, empId, month) {
   return attRangeAdjust(store, empId, first, empShiftDate(`${hrsMonthAddRaw(month, 1)}-01`, -1));
 }
 
+/* 答复 8.6（推荐）：没排班但打了卡（临时顶班），店长“照打卡记”之后还要老板批准才计入工资。
+   批准前、驳回后都是 0 小时；没有 cover 记录的旧数据同样不计，避免绕过老板。 */
+function attCoverPaid(rec) {
+  return !!(rec && rec.cover && rec.cover.state === "approved");
+}
+
+function attCoverDecide(recId, state, note) {
+  if (typeof hrIsOwner === "function" && !hrIsOwner()) {
+    return { ok: false, code: "owner-only", message: "临时顶班要老板批准才计入工资；店长不能批准或驳回" };
+  }
+  const rec = attById(recId);
+  if (!rec || !rec.cover || rec.cover.state !== "pending") return { ok: false, code: "not-pending", message: "这条顶班记录当前不在待老板审批状态" };
+  const next = JSON.parse(JSON.stringify(rec));
+  next.cover = { ...next.cover, state: state === "approved" ? "approved" : "rejected", note: note || "", decidedAt: empNow(), decidedBy: "老板" };
+  attWrite(next, { at: empNow(), by: empT("老板", "Inhaber"),
+    what: state === "approved" ? { zh: "老板批准临时顶班，计入工资", de: "Inhaber genehmigt Aushilfsschicht — wird vergütet" }
+                              : { zh: `老板驳回临时顶班，不计工资${note ? `：${note}` : ""}`, de: "Inhaber lehnt Aushilfsschicht ab — nicht vergütet" } });
+  return { ok: true, rec: next };
+}
+
 /* 任意区间的考勤调整。工时页面日 / 周 / 月三个视图算的是同一条链，只是区间不同。 */
 function attRangeAdjust(store, empId, from, to) {
   const t = empToday();
@@ -476,6 +496,7 @@ function attRangeAdjust(store, empId, from, to) {
       if (typeof lvOn === "function" && lvOn(store, empId, rec.date)) return sum;
       const shift = attShiftById(store, empId, rec.date, rec.shiftId);
       if (!attSettled(rec, shift, t, store)) return sum;
+      if (!shift && !attCoverPaid(rec)) return sum;
       return sum + attPayableNet(rec, shift) - attPlannedNet(shift);
     }, 0);
 }
@@ -637,6 +658,13 @@ function attDecide(store, empId, date, shiftId, kind, opts) {
   }[kind] || { zh: "处理", de: "Bearbeitet" };
   const why = rec.decision.why ? empT(`：${rec.decision.why}`, `: ${rec.decision.why}`) : "";
   attWrite(rec, { at: rec.decision.at, by, what: { zh: label.zh + why, de: label.de + why } });
+  if (!shift && (kind === "ok" || kind === "fix")) {
+    rec.cover = { state: "pending", by, at: rec.decision.at };
+    attWrite(rec, { at: rec.decision.at, by, what: { zh: "没排班的顶班，已提交老板审批，批准前不计工资", de: "Aushilfsschicht ohne Plan — zur Freigabe beim Inhaber, bis dahin nicht vergütet" } });
+  } else if (rec.cover) {
+    rec.cover = null;
+    attWrite(rec);
+  }
   attSyncFixOt(rec, shift, by);
   return rec;
 }
@@ -687,7 +715,7 @@ function attSyncFixOt(rec, shift, by) {
     if (rec.otId) { rec.otId = null; rec.otSource = null; log("补签不再超出班表", "Nicht mehr über Plan"); }
     return rec;
   }
-  const list = hrsAddOt(rec.store, rec.empId, rec.date, hours, reason);
+  const list = hrsAddOt(rec.store, rec.empId, rec.date, hours, reason, undefined, "fix");
   rec.otId = Array.isArray(list) && list[0] ? list[0].id : null;
   rec.otSource = "fix";
   log(`补签超出班表 ${schH(hours)}，已提交老板审批`, `${schH(hours)} über Plan — zur Freigabe beim Inhaber eingereicht`);
@@ -700,6 +728,7 @@ function attUndoDecision(recId, by) {
   if (!rec || !rec.decision) return null;
   const next = JSON.parse(JSON.stringify(rec));
   next.decision = null;
+  next.cover = null;
   const linked = attLinkedOt(next);
   /* 只撤回自动补签生成的加班单；手动“转加班申请”建的单（otSource=manual）是独立的审批，不跟决议一起撤 */
   if (linked && !linked.revoked && next.otSource !== "manual" && typeof hrsRevokeOt === "function") {
@@ -1280,6 +1309,19 @@ function attFixPanel(row) {
       ${d ? `<button class="ghost-btn att-undo" data-rec="${rec.id}">${empT("撤销处理", "Bearbeitung zurücknehmen")}</button>` : ""}
     </div>
 
+    ${rec && rec.cover ? (() => {
+      const c = rec.cover;
+      const locked = !hrIsOwner();
+      return `<div class="att-cover is-${c.state}"><p>${c.state === "pending"
+        ? empT("临时顶班：店长已确认，等老板批准。批准前不计工资。", "Aushilfsschicht: bestätigt, wartet auf Freigabe des Inhabers — bis dahin nicht vergütet.")
+        : c.state === "approved" ? empT("临时顶班：老板已批准，计入工资。", "Aushilfsschicht: vom Inhaber genehmigt, wird vergütet.")
+        : empT(`临时顶班：老板已驳回，不计工资${c.note ? `（${empEsc(c.note)}）` : ""}。`, "Aushilfsschicht: abgelehnt, nicht vergütet.")}</p>
+        ${c.state === "pending" ? `<div class="button-row">
+          <button class="ghost-btn att-cover-no" data-rec="${rec.id}"${locked ? ` disabled title="${empEsc("只有老板能批准或驳回临时顶班")}"` : ""}>${empT("驳回", "Ablehnen")}</button>
+          <button class="primary-btn att-cover-ok" data-rec="${rec.id}"${locked ? ` disabled title="${empEsc("只有老板能批准或驳回临时顶班")}"` : ""}>${empT("批准计薪", "Genehmigen")}</button>
+          ${locked ? `<span class="att-fix-cap">${empT("只有老板能批准或驳回", "Nur der Inhaber")}</span>` : ""}</div>` : ""}</div>`;
+    })() : ""}
+
     ${rec && rec.otId ? `<p class="att-fix-ot">${empT("超出部分已提交加班审批，批准前不进工资。",
       "Mehrstunden eingereicht; sie zählen erst nach Freigabe.")} <a href="#${slug("employee", "排班管理")}?v=month&m=${row.date.slice(0, 7)}">${
       empT("去月度结算审批 →", "Zur Freigabe →")}</a></p>` : ""}
@@ -1342,6 +1384,13 @@ function attBindAll() {
     }
     attDecide(store, emp, date, shift || null, kind, { why, start, end });
     attGo(attHref({ d: date, fix: null }));
+  }));
+
+  document.querySelectorAll(".att-cover-ok, .att-cover-no").forEach(b => b.addEventListener("click", () => {
+    const ok = b.classList.contains("att-cover-ok");
+    const res = attCoverDecide(b.dataset.rec, ok ? "approved" : "rejected", ok ? "" : (window.prompt ? window.prompt("驳回理由（可空）") || "" : ""));
+    if (!res.ok) { empFlash(b, res.message); return; }
+    app();
   }));
 
   /* 病假不是考勤的一种决议，是一条休假记录 —— 记完这一天就归休假管了，

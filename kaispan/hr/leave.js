@@ -827,7 +827,7 @@ function lvAddPanel(store, staff) {
       <label>${empT("员工", "Mitarbeiter")}<select class="lv-add-emp">${staff.map(e =>
         `<option value="${e.id}">${empEsc(e.name)}</option>`).join("")}</select></label>
       <label>${empT("类型", "Art")}<select class="lv-add-type">${LV_TYPES.map(x =>
-        `<option value="${x.id}">${empText(x.name)}</option>`).join("")}</select></label>
+        `<option value="${x.id}">${empText(x.name)}</option>`).join("")}<option value="sonder" disabled class="lv-type-off">${empT("特殊假（本项目不做）", "Sonderurlaub (nicht im Projekt)")}</option></select></label>
       <label>${empT("从", "Von")}<input type="date" class="lv-add-from" value="${t}"></label>
       <label>${empT("到", "Bis")}<input type="date" class="lv-add-to" value="${t}"></label>
       <label class="lv-add-why">${empT("理由", "Grund")}<input class="lv-add-reason" placeholder="${

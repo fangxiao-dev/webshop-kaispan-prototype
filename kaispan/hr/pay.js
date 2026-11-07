@@ -104,6 +104,7 @@ function payGet(store, month) {
       if(i===3)Object.assign(contract,{type:"werkstudent",hoursMin:30,hoursMax:80});
       if(i===5)Object.assign(contract,{payType:"pauschal",rate:3000});
       run.openDrafts[e.id]={hours:values[i%values.length],contract,bonus:i===0?120:0,urlaubDays:i===2?2:0,krankDays:i===1?1:0,travel:i===2?46.8:0};
+      if(i===2)run.travelClaims={...(run.travelClaims||{}),[e.id]:{claimed:46.8,receipts:["车票-示例.pdf"],state:"approved",approved:46.8,at:empNow(),decidedAt:empNow(),note:""}};
     });
     run.confirmations={...(run.confirmations||{})};
     Object.keys(run.openDrafts).forEach((id,i)=>{if(i===0||i===2)run.confirmations[id]={at:`${month}-28T18:00:00`,by:empById(id)?.name,source:"employee_reply_demo"};});
@@ -135,6 +136,7 @@ function payPrepareClosedExamples(run, deadline) {
       iban: e.ids?.iban || "", bic: e.ids?.bic || "" };
     run.confirmations[e.id] = { at: `${deadline}T08:00:00`, by: e.name };
     run.extras[e.id] = { bonus: i === 0 ? 120 : 0, travel: i === 2 ? 46.8 : 0 };
+    if (i === 2) run.travelClaims = { ...(run.travelClaims || {}), [e.id]: { claimed: 46.8, receipts: ["车票-示例.pdf"], state: "approved", approved: 46.8, at: empNow(), decidedAt: empNow(), note: "" } };
     if (i === 1 && !hrsAzkAll().some(a => a.payrollOpening && a.store === run.store && a.empId === e.id)) {
       const records = hrsAddAzk(run.store, e.id, payMonthAdd(run.month, -1), "in", 12, "月度结算演示：上期结转余额");
       records[0].payrollOpening = `${run.store}|${run.month}|${e.id}`;
@@ -916,7 +918,15 @@ function payWorkConfirmPanel(store, month, run) {
           <td><strong>€${Number(currentGross).toFixed(2)}</strong><small>${r.h.hourly ? empT(`€${Number(r.h.rate || 0).toFixed(2)} / 小时`, `€${Number(r.h.rate || 0).toFixed(2)} / Std.`) : empT("固定工资", "Festgehalt")}</small></td>
           <td>€${bonus.toFixed(2)}</td>
 
-          <td><button type="button" class="pay-travel-open" data-id="${r.id}" data-month="${month}" aria-label="${empEsc(r.e.name || r.id)} 差旅费明细"><strong>€${travel.toFixed(2)}</strong><small>查看明细 ›</small></button>${run.state === "open" ? `<input type="hidden" class="pay-extra" data-id="${r.id}" data-kind="travel" value="${travel}">` : ""}</td>
+          <td>${(() => {
+            const claim = payTravelClaim(run, r.id);
+            const status = !claim ? "" : claim.state === "submitted" ? `员工申报 €${claim.claimed.toFixed(2)} · 待老板审核`
+              : claim.state === "approved" ? `员工申报 €${claim.claimed.toFixed(2)} · 老板已批准 €${Number(claim.approved).toFixed(2)}` : `员工申报 €${claim.claimed.toFixed(2)} · 已退回：${empEsc(claim.note)}`;
+            const review = claim && claim.state === "submitted" && run.state === "open"
+              ? `<span class="pay-travel-review"><button type="button" class="ghost-btn pay-travel-open" data-id="${r.id}" data-month="${month}">${empT("退回…", "Zurück…")}</button>
+                  <button type="button" class="primary-btn pay-travel-approve" data-id="${r.id}" data-month="${month}"${hrIsOwner() ? "" : ' disabled title="差旅只有老板能审核"'}>${empT("批准", "Genehmigen")}</button></span>` : "";
+            return `<button type="button" class="pay-travel-open" data-id="${r.id}" data-month="${month}" aria-label="${empEsc(r.e.name || r.id)} 差旅费明细"><strong>€${travel.toFixed(2)}</strong><small>${status || "未申报 · 查看明细 ›"}</small></button>${review}`;
+          })()}${run.state === "open" ? `<input type="hidden" class="pay-extra" data-id="${r.id}" data-kind="travel" value="${travel}">` : ""}</td>
           ${showPdf ? `<td><a href="#" class="pay-pdf-open" data-id="${r.id}" data-month="${month}" title="${empEsc(slip?.file || '待上传工资单')}">${slip?.file ? 'PDF' : '待上传 PDF'}</a>
             ${slip?.file ? `<small><button type="button" class="pay-pdf-open pay-pdf-status ${mismatch ? 'is-mismatch' : 'is-match'}" data-id="${r.id}" data-month="${month}">${mismatch ? '不匹配' : '匹配'}</button></small>` : ''}${run.sentToEmpDemo?.[r.id] ? `<small class="pay-mail-demo-tag">模拟已发送</small>` : ''}</td>` : ''}
           ${run.state!=="open"?`<td><a class="ghost-btn" href="${payHref({corr:r.id})}">提交修改</a></td>`:""}</tr>`;
@@ -941,7 +951,7 @@ function payCorrectionPanel(store, month, run) {
   const diff = currentHours < low ? currentHours-low : currentHours > high ? currentHours-high : 0;
   const balance = hrsBalance(store,id,month), advice = payAccountAdvice({ diff, balance, hours:currentHours,high,gross:currentGross,hourly:snap.payType === "hourly",rate:snap.rate,type:contract.type });
   return `<section class="card pay-correction"><div class="section-title"><div><h2>${empT("提交给税务师的修改", "Korrektur an Steuerberatung")}</h2>
-    <p>${empT("已发工资的月份只向税务师提交修改意见，由税务师决定怎么处理（答复 R6-12）。选择员工后先显示原申报数据，再填写修改值；这里仅保存修改记录，不覆盖原快照。", "Für ausgezahlte Monate nur ein Änderungsvorschlag an die Steuerberatung; sie entscheidet (R6-12). Originalmeldung bleibt erhalten.")}</p></div></div>
+    <p>${empT("已发工资的月份只向税务师提交修改意见，由税务师决定怎么处理（答复 R6-12）。选择员工后先显示原申报数据，再填写修改值；提交只记一条修改意见，税务师决定前不改工时账户、不改对账预期；老板录入“税务师已采纳”后才生效。", "Für ausgezahlte Monate nur ein Änderungsvorschlag an die Steuerberatung; sie entscheidet (R6-12). Originalmeldung bleibt erhalten.")}</p></div></div>
     <label class="pay-correction-select">${empT("员工", "Mitarbeiter")}<select class="pay-correction-employee">${ids.map(i => `<option value="${i}" ${i === id ? "selected" : ""}>${empEsc(run.snap[i].name)}</option>`).join("")}</select></label>
     <div class="pay-correction-account" data-balance="${balance}" data-rate="${snap.rate}" data-hourly="${snap.payType === "hourly" ? "1" : ""}">
       <strong>Arbeitszeitkonto · 当前余额 ${balance < 0 ? "−" : ""}${schH(Math.abs(balance))}</strong><small>${advice ? empEsc(advice.text) : "存入或取出由你决定"} · 紫色仅为建议；点击下方提交修改后才保存。</small>
@@ -960,6 +970,15 @@ function payCorrectionPanel(store, month, run) {
       <label>Krank 天<input type="number" min="0" step="0.5" class="pay-corr-krank" value="${value("krankDays", snap.krankDays)}"></label>
       <label>Reisekosten €<input type="number" min="0" step="0.01" class="pay-corr-travel" value="${value("travel", additions.travel)}"></label>
       <button class="primary-btn pay-corr-save" data-id="${id}" data-month="${month}">${empT("提交修改", "Korrektur einreichen")}</button></div></div>
+      ${(() => {
+        const props = (run.correctionProposals || []).filter(x => x.empId === id);
+        if (!props.length) return "";
+        const label = { proposed: "等税务师决定", adopted: "税务师已采纳，已生效", declined: "税务师未采纳，保持原数" };
+        return `<div class="pay-proposals"><strong>${empT("修改意见记录", "Änderungsvorschläge")}</strong>${props.map(x => `<div class="pay-proposal is-${x.status}">
+          <span>${empStamp(x.at)} · ${schH(x.values.hours)} · Brutto €${Number(x.values.gross).toFixed(2)}${x.account ? ` · ${x.account.type === "in" ? "存入" : "取出"} ${schH(x.account.hours)}` : ""} · ${label[x.status]}</span>
+          ${x.status === "proposed" ? `<button type="button" class="ghost-btn pay-prop-no" data-month="${month}" data-id="${x.id}"${hrIsOwner() ? "" : ' disabled title="税务师的决定由老板录入"'}>${empT("税务师未采纳", "Nicht übernommen")}</button>
+          <button type="button" class="primary-btn pay-prop-ok" data-month="${month}" data-id="${x.id}"${hrIsOwner() ? "" : ' disabled title="税务师的决定由老板录入"'}>${empT("录入：税务师已采纳（演示）", "Übernommen (Demo)")}</button>` : ""}</div>`).join("")}</div>`;
+      })()}
       ${saved ? `<p class="pay-hint">${empT(`已保存修改：${schH(saved.hours)} · Brutto €${Number(saved.gross).toFixed(2)}（${empStamp(saved.at)}）`, `Gespeichert: ${schH(saved.hours)} · Brutto €${Number(saved.gross).toFixed(2)}`)}</p>` : ""}</section>`;
 }
 
@@ -1232,7 +1251,53 @@ function payTransferAccount(store, month, id, type, rawHours) {
   return { ok: true, hours, entry };
 }
 
-/* 德国境内出差参考计算。行程公里和票据由记录提供，不从城市名称推断。 */
+/* 答复 9.9（推荐）：差旅由员工填金额并上传票据，老板审核后把批准金额交税务师；系统不自己算补贴。
+   run.travelClaims[empId] = { claimed: 员工申报金额, receipts: [票据文件名], state: "submitted"|"approved"|"returned",
+                              approved: 老板批准金额|null, note: 退回理由, at, decidedAt }。
+   只有 approved 的金额写入 run.extras[empId].travel（工资页和交给税务师的数）；下面的自动计算只是灰色参考，不入账。
+   员工端（employee-ui.js）提交时调用 payTravelSubmit，或直接按上述结构写 travelClaims。 */
+function payTravelClaim(run, id) {
+  return run && run.travelClaims ? run.travelClaims[id] || null : null;
+}
+
+function payTravelSubmit(store, month, id, claim) {
+  const run = payGet(store, month);
+  if (run.state !== "open") return { ok: false, message: "已封账，请从右侧提交修改" };
+  const claimed = Math.round(Number(claim && claim.amount) * 100) / 100;
+  if (!(claimed > 0)) return { ok: false, message: "请填写差旅金额" };
+  const receipts = (claim.receipts || []).filter(Boolean);
+  if (!receipts.length) return { ok: false, message: "请上传票据" };
+  run.travelClaims = { ...(run.travelClaims || {}), [id]: { claimed, receipts, state: "submitted", approved: null, note: "", at: empNow(), decidedAt: null } };
+  paySave(run, payLog(run, { zh: `${empById(id)?.name || id} 申报差旅 €${claimed.toFixed(2)}，等老板审核`, de: "Reisekosten eingereicht" }, empById(id)?.name || id));
+  return { ok: true, run };
+}
+
+function payTravelReview(store, month, id, decision, opts) {
+  if (typeof hrIsOwner === "function" && !hrIsOwner()) return { ok: false, message: "差旅只有老板能审核" };
+  const run = payGet(store, month), claim = payTravelClaim(run, id);
+  if (run.state !== "open") return { ok: false, message: "已封账，请从右侧提交修改" };
+  if (!claim || claim.state !== "submitted") return { ok: false, message: "没有待审核的差旅申报" };
+  const o = opts || {};
+  let next;
+  if (decision === "approved") {
+    const amount = Math.round(Number(o.amount ?? claim.claimed) * 100) / 100;
+    if (!(amount >= 0) || !Number.isFinite(amount)) return { ok: false, message: "批准金额无效" };
+    next = { ...claim, state: "approved", approved: amount, note: o.note || "", decidedAt: empNow() };
+    run.extras = { ...(run.extras || {}), [id]: { ...(run.extras?.[id] || {}), travel: amount } };
+    if (run.openDrafts?.[id]) run.openDrafts[id].travel = amount;
+  } else {
+    const note = String(o.note || "").trim();
+    if (!note) return { ok: false, message: "退回要写理由" };
+    next = { ...claim, state: "returned", approved: null, note, decidedAt: empNow() };
+    run.extras = { ...(run.extras || {}), [id]: { ...(run.extras?.[id] || {}), travel: 0 } };
+    if (run.openDrafts?.[id]) run.openDrafts[id].travel = 0;
+  }
+  run.travelClaims = { ...run.travelClaims, [id]: next };
+  paySave(run, payLog(run, { zh: `${empById(id)?.name || id} 差旅${decision === "approved" ? `老板批准 €${next.approved.toFixed(2)}` : `被退回：${next.note}`}`, de: decision === "approved" ? "Reisekosten genehmigt" : "Reisekosten zurückgegeben" }, "老板"));
+  return { ok: true, run };
+}
+
+/* 德国境内出差参考计算（参考值，不入账）。行程公里和票据由记录提供，不从城市名称推断。 */
 /* 明确标注的演示 PDF；真实上传文件通过 dataUrl/ref 显示。 */
 function payDemoPdfBytes(name, month, slip) {
   const ascii = value => String(value ?? '').replace(/[^\x20-\x7e]/g,'?');
@@ -1380,25 +1445,37 @@ function payTravelDrawerContent(store, month, id) {
     const hours=Number(trip.hours ?? ((new Date(trip.returned)-new Date(trip.departure))/3600000));
     const transport={own_car:"私人自有汽车",other_motor:"其他私人机动车",public:"火车 / 公共交通",flight:"飞机"}[trip.transport] || "其他交通";
     const costRow=(label,amount)=>`<div><dt>${label}</dt><dd>${euro(amount)}</dd></div>`;
-    return `<section class="pay-travel-trip"><div class="pay-travel-trip-title"><h3>${trip.example ? "示例行程" : `行程 ${index+1}`}</h3><span>${trip.example ? "示例数据 · 里程以实际记录为准" : "行程记录"}</span></div>
+    return `<section class="pay-travel-trip"><div class="pay-travel-trip-title"><h3>${trip.example ? "示例行程" : `行程 ${index+1}`}</h3><span>${trip.example ? "示例数据 · 参考值，不入账" : "参考行程 · 参考值，不入账"}</span></div>
       <div class="pay-travel-route"><strong>${empEsc(trip.from||"未填写")}</strong><span>→</span><strong>${empEsc(trip.to||"未填写")}</strong>${trip.back ? `<span>→</span><strong>${empEsc(trip.back)}</strong>` : ""}</div>
       <p>${empEsc(trip.purpose||"未填写出差事由")}</p>
       <dl class="pay-travel-facts"><div><dt>出发</dt><dd>${empEsc(String(trip.departure||"未填写").replace("T"," "))}</dd></div><div><dt>返回</dt><dd>${empEsc(String(trip.returned||"未填写").replace("T"," "))}</dd></div>
         <div><dt>外出时长</dt><dd>${Number.isFinite(hours) ? `${hours.toFixed(1)} 小时` : "未填写"}</dd></div><div><dt>交通方式</dt><dd>${transport}</dd></div><div><dt>总行驶里程（含返程）</dt><dd>${cost.km} km</dd></div><div><dt>计费方式</dt><dd>${cost.rate ? `€${cost.rate.toFixed(2)} / km` : "按实际车票 / 机票"}</dd></div></dl>
-      <dl class="pay-travel-costs">${costRow(cost.rate ? `里程费：${cost.km} km × €${cost.rate.toFixed(2)}` : "车票 / 机票",cost.mileage+cost.tickets)}${costRow("餐食定额（扣减后）",cost.meals)}${costRow("酒店（按凭证）",cost.hotel)}${costRow("停车费",cost.parking)}${costRow("过路费",cost.tolls)}${costRow("其他费用",cost.other)}<div class="pay-travel-total"><dt>行程合计</dt><dd>${euro(cost.total)}</dd></div></dl>
+      <dl class="pay-travel-costs">${costRow(cost.rate ? `里程费：${cost.km} km × €${cost.rate.toFixed(2)}` : "车票 / 机票",cost.mileage+cost.tickets)}${costRow("餐食定额（扣减后）",cost.meals)}${costRow("酒店（按凭证）",cost.hotel)}${costRow("停车费",cost.parking)}${costRow("过路费",cost.tolls)}${costRow("其他费用",cost.other)}<div class="pay-travel-total pay-travel-ref"><dt>参考值，不入账</dt><dd>${euro(cost.total)}</dd></div></dl>
       ${cost.mealDays.length ? `<div class="pay-travel-meals"><h4>每日餐食补助</h4>${cost.mealDays.map(day=>`<p>${empEsc(day.date||"")} · 外出 ${Number(day.hours)||0}h · 基础 ${euro(day.base)} − 已提供餐食扣减 ${euro(day.reduction)} = <strong>${euro(day.allowance)}</strong><small>${day.breakfast||day.lunch||day.dinner ? `提供餐食：${[day.breakfast?"早餐":"",day.lunch?"午餐":"",day.dinner?"晚餐":""].filter(Boolean).join("、")}` : "未提供餐食"}</small></p>`).join("")}</div>` : ""}
       <p class="pay-travel-receipts">凭证：${trip.receipts?.length ? trip.receipts.map(item=>empEsc(typeof item==="string"?item:item.name||"未命名凭证")).join("、") : trip.example ? "示例未上传实际凭证" : "暂无凭证"}</p></section>`;
   };
   return `<header class="pay-travel-head"><div><h2>差旅费明细 · Reisekosten</h2><p>${empEsc(employee?.name || id)} · ${empEsc(month)}</p></div><button type="button" class="pay-travel-close" aria-label="关闭差旅明细">×</button></header>
-    <div class="pay-travel-body"><div class="pay-travel-reported"><span>本月记录金额</span><strong>${euro(reported)}</strong><small>${run.state!=="open" ? "已封账，费用修改请从主表右侧提交修改。" : "当前月份未封账。"}</small></div>
+    <div class="pay-travel-body"><div class="pay-travel-reported"><span>入账金额（老板已批准）</span><strong>${euro(reported)}</strong><small>${run.state!=="open" ? "已封账，费用修改请从主表右侧提交修改。" : "当前月份未封账。"}</small></div>
+    ${(() => {
+      const claim=payTravelClaim(run,id);
+      if(!claim) return `<p class="pay-travel-empty">员工还没有申报差旅。员工在自己的页面填金额并上传票据；系统不自己算补贴。</p>`;
+      const rec=claim.receipts?.length ? claim.receipts.map(x=>empEsc(typeof x==="string"?x:x.name||"票据")).join("、") : "无";
+      const review=claim.state==="submitted" && run.state==="open" ? `<div class="pay-travel-review-form"><label>批准金额 €<input type="number" min="0" step="0.01" class="pay-travel-amount" value="${claim.claimed}"></label>
+        <label>退回理由<input type="text" class="pay-travel-note" placeholder="退回时必填"></label>
+        <div class="pay-acts"><button type="button" class="ghost-btn pay-travel-return" data-id="${id}" data-month="${month}"${hrIsOwner()?"":' disabled title="差旅只有老板能审核"'}>退回</button><button type="button" class="primary-btn pay-travel-approve-form" data-id="${id}" data-month="${month}"${hrIsOwner()?"":' disabled title="差旅只有老板能审核"'}>批准并交税务师</button></div></div>` : "";
+      return `<section class="pay-travel-claim is-${claim.state}"><h3>员工申报</h3><p>员工申报 <strong>${euro(claim.claimed)}</strong> · 票据：${rec}</p><p>${claim.state==="submitted"?"待老板审核":claim.state==="approved"?`老板已批准 ${euro(claim.approved)}，这个金额交给税务师`:`已退回：${empEsc(claim.note)}`}</p>${review}</section>`;
+    })()}
     ${!records.length ? `<p class="pay-travel-empty">${exampleTotalMatch ? "以下为当前演示费用的行程示例。" : reported ? "已记录费用总额，尚未录入对应行程。以下计算示例不计入本月金额。" : "本月暂无申报行程。以下计算示例不计入本月金额。"}</p>` : ""}
     ${run.state==="open" ? `<button type="button" class="ghost-btn pay-travel-edit" data-id="${id}" data-month="${month}">编辑行程与费用</button>` : ""}
     ${shown.map(renderTrip).join("")}
-    <details class="pay-travel-rules" open><summary>德国境内出差参考规则 · 2026</summary><ul><li>私人汽车：按实际行驶公里计 €0.30/km；其他私人机动车 €0.20/km。</li><li>当天外出超过 8 小时：餐食定额 €14；不超过 8 小时：€0。</li><li>完整外出 24 小时：€28；有外宿的抵达日、离开日各 €14。</li><li>提供早餐扣 €5.60；午餐、晚餐各扣 €11.20，当日补助最低为 €0。</li><li>酒店、车票和停车等按凭证展示；国外差旅及长期驻点另按相应规则核对。</li></ul>
+    <details class="pay-travel-rules" open><summary>德国境内出差参考规则 · 2026（灰色参考，不入账）</summary><ul><li>私人汽车：按实际行驶公里计 €0.30/km；其他私人机动车 €0.20/km。</li><li>当天外出超过 8 小时：餐食定额 €14；不超过 8 小时：€0。</li><li>完整外出 24 小时：€28；有外宿的抵达日、离开日各 €14。</li><li>提供早餐扣 €5.60；午餐、晚餐各扣 €11.20，当日补助最低为 €0。</li><li>酒店、车票和停车等按凭证展示；国外差旅及长期驻点另按相应规则核对。</li></ul>
       <p>适用于离开住所和第一工作地点的业务出差；普通上下班通勤使用另一套规则。</p>
       <a href="https://esth.bundesfinanzministerium.de/lsth/2026/tabellarische-Uebersicht/Reisekosten-bei-Ausw%C3%A4rtst%C3%A4tigkeiten.html" target="_blank" rel="noopener noreferrer">BMF 2026 官方差旅标准 ↗</a> · <a href="https://www.gesetze-im-internet.de/estg/__9.html" target="_blank" rel="noopener noreferrer">EStG §9 ↗</a></details></div>`;
 }
 
+/* 答复 9.4：已发工资的更正“只给税务师提修改意见，由税务师决定”。
+   提交只是一条独立的修改意见记录（run.correctionProposals），不改工时账户、不改对账预期（corrections 不动）；
+   老板录入“税务师已采纳”（payAdoptCorrection）之后才生效。 */
 function paySubmitCorrection(store, month, id, values, account = {}) {
   const run = payGet(store, month), original = run.snap[id];
   if (!original) return { ok: false, message: "找不到原封账记录" };
@@ -1410,15 +1487,40 @@ function paySubmitCorrection(store, month, id, values, account = {}) {
     hours = Math.round(account.hours*100)/100;
     if (hours <= 0) return { ok: false, message: "最少调整 0.01 小时" };
   }
-  const signed = account.type === "in" ? -hours : hours;
-  const entry = account.type ? hrsAddAzk(store, id, month, account.type, hours, "封账后提交修改：店长决定调整工时账户", true)[0] : null;
-  run.correctionHistory = [{ empId: id, original, previous: run.corrections?.[id] || null, at: empNow() }, ...(run.correctionHistory || [])];
-  run.corrections = { ...(run.corrections || {}), [id]: { ...values,
-    hours: Math.round((values.hours + signed)*100)/100,
-    gross: original.payType === "hourly" ? Math.round((values.gross + signed*original.rate)*100)/100 : values.gross,
-    ...(entry ? { azkEntry: entry.id } : {}), at: empNow(), by: "Martin", status: "pending_advisor" } };
-  if (entry) run.azkAdded = { ...(run.azkAdded || {}), [id]: entry.id };
-  paySave(run, payLog(run, { zh: `提交 ${original.name} 的修改：${schH(run.corrections[id].hours)} · Brutto €${run.corrections[id].gross.toFixed(2)}${entry ? ` · 工时账户${account.type === "in" ? "存入" : "取出"} ${schH(hours)}` : ""}`, de: `Korrektur für ${original.name}` }, "Martin"));
+  const list = run.correctionProposals || [];
+  let n = list.length + 1;
+  while (list.some(x => x.id === `cp${n}`)) n += 1;
+  const proposal = { id: `cp${n}`, empId: id, values: { ...values }, account: account.type ? { type: account.type, hours } : null,
+    status: "proposed", at: empNow(), by: "Martin" };
+  run.correctionProposals = [proposal, ...list];
+  paySave(run, payLog(run, { zh: `向税务师提交 ${original.name} 的修改意见：${schH(values.hours)} · Brutto €${Number(values.gross).toFixed(2)}${account.type ? ` · 建议工时账户${account.type === "in" ? "存入" : "取出"} ${schH(hours)}` : ""}（税务师决定前不生效）`, de: `Änderungsvorschlag für ${original.name} (wirkt erst nach Entscheidung der Steuerberatung)` }, "Martin"));
+  return { ok: true, run, proposal, entry: null };
+}
+
+/* 老板录入税务师的决定。“采纳”才把修改写进对账预期，并按意见调整工时账户；“未采纳”只留记录。 */
+function payDecideCorrection(store, month, proposalId, adopted) {
+  if (typeof hrIsOwner === "function" && !hrIsOwner()) return { ok: false, message: "税务师的决定由老板录入" };
+  const run = payGet(store, month);
+  const proposal = (run.correctionProposals || []).find(x => x.id === proposalId);
+  if (!proposal || proposal.status !== "proposed") return { ok: false, message: "这条修改意见已经有结果" };
+  const id = proposal.empId, original = run.snap[id];
+  if (!original) return { ok: false, message: "找不到原封账记录" };
+  let entry = null;
+  if (adopted) {
+    const values = proposal.values, account = proposal.account;
+    const hours = account ? account.hours : 0;
+    const signed = account ? (account.type === "in" ? -hours : hours) : 0;
+    entry = account ? hrsAddAzk(store, id, month, account.type, hours, "税务师已采纳修改意见：调整工时账户", true)[0] : null;
+    run.correctionHistory = [{ empId: id, original, previous: run.corrections?.[id] || null, at: empNow() }, ...(run.correctionHistory || [])];
+    run.corrections = { ...(run.corrections || {}), [id]: { ...values,
+      hours: Math.round((values.hours + signed)*100)/100,
+      gross: original.payType === "hourly" ? Math.round((values.gross + signed*original.rate)*100)/100 : values.gross,
+      ...(entry ? { azkEntry: entry.id } : {}), at: empNow(), by: "Martin", status: "advisor_adopted", proposalId } };
+    if (entry) run.azkAdded = { ...(run.azkAdded || {}), [id]: entry.id };
+  }
+  run.correctionProposals = run.correctionProposals.map(x => x.id !== proposalId ? x
+    : { ...x, status: adopted ? "adopted" : "declined", decidedAt: empNow(), decidedBy: "老板", ...(entry ? { azkEntry: entry.id } : {}) });
+  paySave(run, payLog(run, { zh: `${original.name} 的修改意见：税务师${adopted ? "已采纳，已生效" : "未采纳，保持原数"}`, de: adopted ? "Steuerberatung hat übernommen" : "Steuerberatung hat abgelehnt" }, "老板"));
   return { ok: true, run, entry };
 }
 
@@ -1584,7 +1686,19 @@ function payBindAll() {
     dialog.innerHTML=payTravelDrawerContent(store,b.dataset.month,b.dataset.id);
     dialog.querySelector(".pay-travel-close").addEventListener("click",()=>dialog.close());
     dialog.querySelector(".pay-travel-edit")?.addEventListener("click",()=>{payTravelEdit(store,b.dataset.month,b.dataset.id);});
+    dialog.querySelector(".pay-travel-approve-form")?.addEventListener("click",ev=>{
+      const res=payTravelReview(store,b.dataset.month,b.dataset.id,"approved",{amount:Number(dialog.querySelector(".pay-travel-amount")?.value)});
+      if(!res.ok){empFlash(ev.currentTarget,res.message);return;} dialog.close(); app();
+    });
+    dialog.querySelector(".pay-travel-return")?.addEventListener("click",ev=>{
+      const res=payTravelReview(store,b.dataset.month,b.dataset.id,"returned",{note:dialog.querySelector(".pay-travel-note")?.value});
+      if(!res.ok){empFlash(ev.currentTarget,res.message);return;} dialog.close(); app();
+    });
     dialog.showModal();
+  }));
+  document.querySelectorAll(".pay-travel-approve").forEach(b=>b.addEventListener("click",()=>{
+    const res=payTravelReview(store,b.dataset.month,b.dataset.id,"approved");
+    if(!res.ok){empFlash(b,res.message);return;} app();
   }));
 
   document.querySelectorAll(".pay-contact-close").forEach(b => b.addEventListener("click", () => {
@@ -1612,13 +1726,18 @@ function payBindAll() {
     const gross = Number(document.querySelector(".pay-corr-gross").value) || 0;
     const nextBalance = Number(box.dataset.balance) - signed;
     const nextGross = gross + (box.dataset.hourly ? signed * Number(box.dataset.rate) : 0);
-    box.querySelector(".pay-corr-account-preview").textContent = `${type ? (type === "in" ? "存入" : "取出") + " " + amount + "h；" : "不调整账户；"}提交后余额 ${nextBalance.toFixed(2)}h · 本月工时 ${(hours+signed).toFixed(2)}h · Brutto €${nextGross.toFixed(2)}`;
+    box.querySelector(".pay-corr-account-preview").textContent = `${type ? (type === "in" ? "存入" : "取出") + " " + amount + "h；" : "不调整账户；"}税务师采纳后余额 ${nextBalance.toFixed(2)}h · 本月工时 ${(hours+signed).toFixed(2)}h · Brutto €${nextGross.toFixed(2)}`;
     document.querySelectorAll(".pay-corr-direction").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.type === type)));
   };
   document.querySelectorAll(".pay-corr-direction").forEach(b=>b.addEventListener("click",()=>{
     document.querySelector(".pay-corr-account-type").value=b.dataset.type; updateAccountPreview();
   }));
   document.querySelectorAll(".pay-corr-account-hours, .pay-corr-hours, .pay-corr-gross").forEach(input=>input.addEventListener("input",updateAccountPreview));
+  document.querySelectorAll(".pay-prop-ok, .pay-prop-no").forEach(b => b.addEventListener("click", () => {
+    const res = payDecideCorrection(store, b.dataset.month, b.dataset.id, b.classList.contains("pay-prop-ok"));
+    if (!res.ok) { empFlash(b, res.message); return; }
+    app();
+  }));
   document.querySelectorAll(".pay-corr-save").forEach(b => b.addEventListener("click", () => {
     const id = b.dataset.id, run = payGet(store, b.dataset.month);
     const hours = Number(document.querySelector(".pay-corr-hours")?.value), gross = Number(document.querySelector(".pay-corr-gross")?.value);
@@ -1743,14 +1862,14 @@ function payTravelEdit(store,month,id){
  let trips=JSON.parse(JSON.stringify(Array.isArray(stored)?stored:stored?[stored]:[]));
  const backup=JSON.parse(JSON.stringify(trips));
  const render=()=>{
- dialog.innerHTML=`<header class="pay-travel-head"><div><h2>编辑差旅行程 · ${empEsc(empById(id)?.name)}</h2><p>${month} · 新增、删除及修改在保存后生效</p></div></header><form class="pay-trip-form"><div class="pay-trip-list">${trips.map((t,i)=>`<fieldset data-trip="${i}"><legend>行程 ${i+1}</legend><div class="pay-edit-grid">${[["from","出发城市","text"],["to","到达城市","text"],["back","返程城市","text"],["purpose","事由","text"],["departure","出发时间","datetime-local"],["returned","返回时间","datetime-local"],["km","总里程 km","number"],["tickets","车票 / 机票 €","number"],["hotel","酒店 €","number"],["parking","停车 €","number"],["tolls","过路费 €","number"],["other","其他 €","number"]].map(([key,label,type])=>`<label>${label}<input data-key="${key}" type="${type}" ${type==="number"?'min="0" step="0.01"':''} value="${empEsc(String(t[key]??""))}"></label>`).join("")}<label>交通方式<select data-key="transport">${[["own_car","私人汽车"],["other_motor","其他机动车"],["public","公共交通"],["flight","飞机"]].map(([v,n])=>`<option value="${v}" ${t.transport===v?'selected':''}>${n}</option>`).join("")}</select></label></div><button type="button" class="ghost-btn pay-trip-delete" data-index="${i}">删除此行程</button></fieldset>`).join("")||'<p class="pay-hint">暂无行程，点击下方新增。</p>'}</div><button type="button" class="ghost-btn pay-trip-add">＋ 新增行程</button><p class="pay-hint">按里程、票据及境内每日餐补参考规则汇总；最终费用仍可核对。取消不会修改原记录。</p><div class="pay-acts"><button type="button" class="ghost-btn pay-trip-cancel">取消</button><button type="submit" class="primary-btn">保存行程</button></div></form>`;
+ dialog.innerHTML=`<header class="pay-travel-head"><div><h2>编辑差旅行程 · ${empEsc(empById(id)?.name)}</h2><p>${month} · 仅作参考行程，保存后不会改动入账的差旅金额</p></div></header><form class="pay-trip-form"><div class="pay-trip-list">${trips.map((t,i)=>`<fieldset data-trip="${i}"><legend>行程 ${i+1}</legend><div class="pay-edit-grid">${[["from","出发城市","text"],["to","到达城市","text"],["back","返程城市","text"],["purpose","事由","text"],["departure","出发时间","datetime-local"],["returned","返回时间","datetime-local"],["km","总里程 km","number"],["tickets","车票 / 机票 €","number"],["hotel","酒店 €","number"],["parking","停车 €","number"],["tolls","过路费 €","number"],["other","其他 €","number"]].map(([key,label,type])=>`<label>${label}<input data-key="${key}" type="${type}" ${type==="number"?'min="0" step="0.01"':''} value="${empEsc(String(t[key]??""))}"></label>`).join("")}<label>交通方式<select data-key="transport">${[["own_car","私人汽车"],["other_motor","其他机动车"],["public","公共交通"],["flight","飞机"]].map(([v,n])=>`<option value="${v}" ${t.transport===v?'selected':''}>${n}</option>`).join("")}</select></label></div><button type="button" class="ghost-btn pay-trip-delete" data-index="${i}">删除此行程</button></fieldset>`).join("")||'<p class="pay-hint">暂无行程，点击下方新增。</p>'}</div><button type="button" class="ghost-btn pay-trip-add">＋ 新增行程</button><p class="pay-hint">按里程、票据及境内每日餐补参考规则汇总，仅作灰色参考值，不入账；入账金额只来自员工申报、老板批准。取消不会修改原记录。</p><div class="pay-acts"><button type="button" class="ghost-btn pay-trip-cancel">取消</button><button type="submit" class="primary-btn">保存行程</button></div></form>`;
  const collect=()=>dialog.querySelectorAll("[data-trip]").forEach(el=>{const t=trips[Number(el.dataset.trip)];el.querySelectorAll("[data-key]").forEach(x=>t[x.dataset.key]=x.type==="number"?Number(x.value):x.value);if(t.departure&&t.returned){t.hours=(new Date(t.returned)-new Date(t.departure))/3600000;const oldDays=t.days||[];t.days=[];let day=t.departure.slice(0,10),end=t.returned.slice(0,10);for(let limit=0;day<=end&&limit<366;limit++){const old=oldDays.find(x=>x.date===day)||{};const arrival=day===t.departure.slice(0,10),departure=day===end;const multi=t.departure.slice(0,10)!==end;t.days.push({...old,date:day,hours:multi?(arrival||departure?0:24):t.hours,overnight:multi,arrival,departure});const next=new Date(`${day}T12:00:00`);next.setDate(next.getDate()+1);day=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,"0")}-${String(next.getDate()).padStart(2,"0")}`;}}});
  dialog.querySelectorAll(".pay-trip-delete").forEach(b=>b.onclick=()=>{collect();trips.splice(Number(b.dataset.index),1);render();});
  dialog.querySelector(".pay-trip-add").onclick=()=>{collect();trips.push({from:"",to:"",transport:"own_car",km:0});render();};
  dialog.querySelector(".pay-trip-cancel").onclick=()=>{dialog.innerHTML=payTravelDrawerContent(store,month,id);bindView();};
  dialog.querySelector("form").onsubmit=ev=>{ev.preventDefault();collect();if(trips.some(t=>!t.from||!t.to||t.hours<0)){empFlash(ev.submitter,"请填写起止城市，并检查时间");return;}
  const fresh=payGet(store,month);if(fresh.state!=="open")return;const amount=Math.round(trips.reduce((n,t)=>n+payTravelBreakdown(t).total,0)*100)/100;
- fresh.travelHistory=[{id,before:backup,amount:fresh.extras?.[id]?.travel,at:empNow()},...(fresh.travelHistory||[])];fresh.travelDetails={...(fresh.travelDetails||{}),[id]:trips};fresh.extras={...(fresh.extras||{}),[id]:{...(fresh.extras?.[id]||{}),travel:amount}};if(fresh.openDrafts?.[id])fresh.openDrafts[id].travel=amount;payInvalidateEmployeeReply(fresh,id);paySave(fresh,payLog(fresh,{zh:`更新 ${empById(id)?.name} 差旅：${trips.length} 条，€${amount.toFixed(2)}`,de:"Reisen bearbeitet"},"Martin"));dialog.close();app();};
+ fresh.travelHistory=[{id,before:backup,amount:fresh.extras?.[id]?.travel,at:empNow()},...(fresh.travelHistory||[])];fresh.travelDetails={...(fresh.travelDetails||{}),[id]:trips};fresh.travelRefAmount={...(fresh.travelRefAmount||{}),[id]:amount};payInvalidateEmployeeReply(fresh,id);paySave(fresh,payLog(fresh,{zh:`更新 ${empById(id)?.name} 差旅参考行程：${trips.length} 条，参考 €${amount.toFixed(2)}（不入账）`,de:"Reisen bearbeitet"},"Martin"));dialog.close();app();};
  };
  const bindView=()=>{dialog.querySelector(".pay-travel-close").onclick=()=>dialog.close();dialog.querySelector(".pay-travel-edit").onclick=()=>render();};render();
 }
