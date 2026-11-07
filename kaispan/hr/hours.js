@@ -416,13 +416,16 @@ function hrsDropOtAzk(otId) {
   if (all.some(x => x.otId === otId)) empWrite(HRS_AZK_KEY, all.filter(x => x.otId !== otId));
 }
 
-/* 答复 8.3：补签超时产生的加班单（src=fix）每一个都要老板批，店长不行。手动加班申请的审批人维持原样。 */
+/* 答复 8.3：补签超时产生的加班单（src=fix）每一个都要老板批。
+   答复 8.12（推荐 R5-21）：付钱还是存工时账户由老板在批准加班时决定，所以手动加班申请也只有老板能批。 */
 function hrsOtOwnerOnly(ot) {
-  return !!ot && ot.src === "fix";
+  return !!ot;
 }
 
-function hrsOtDenyReason() {
-  return "补签超出班表产生的加班，每一个都需要老板审批（答复 R5-10）；店长不能批准或驳回";
+function hrsOtDenyReason(ot) {
+  return ot && ot.src === "fix"
+    ? "补签超出班表产生的加班，每一个都需要老板审批（答复 R5-10）；店长不能批准或驳回"
+    : "加班付钱还是存工时账户由老板在批准时决定（答复 R5-21）；店长不能批准或驳回";
 }
 
 /* 答复 8.12（推荐）：批准时由老板二选一——付钱（进当月计薪）或存工时账户（这部分小时不进当期计薪，进账户余额）。
@@ -431,7 +434,7 @@ function hrsOtDenyReason() {
 function hrsDecideOt(id, state, note, opts) {
   const target = hrsOtAll().find(x => x.id === id);
   if (!target) return { ok: false, code: "missing", message: "找不到这张加班单" };
-  if (hrsOtOwnerOnly(target) && typeof hrIsOwner === "function" && !hrIsOwner()) return { ok: false, code: "owner-only", message: hrsOtDenyReason() };
+  if (hrsOtOwnerOnly(target) && typeof hrIsOwner === "function" && !hrIsOwner()) return { ok: false, code: "owner-only", message: hrsOtDenyReason(target) };
   const mode = state === "approved" && opts && opts.mode === "account" ? "account" : "pay";
   if (target.revoked) return { ok: false, code: "revoked", message: "这张加班单已被补签变更撤回，不能再审批；请处理新的加班单" };
   const all = hrsOtAll().map(x => x.id !== id ? x
@@ -663,10 +666,10 @@ function hrsOtRow(x) {
     ${x.state === "pending"
       ? (() => {
         const locked = hrsOtOwnerOnly(x) && !hrIsOwner();
-        const dis = locked ? ` disabled title="${empEsc(hrsOtDenyReason())}"` : "";
+        const dis = locked ? ` disabled title="${empEsc(hrsOtDenyReason(x))}"` : "";
         return `<div class="button-row">
-         ${hrsOtOwnerOnly(x) ? `<span class="hrs-ot-src">${empT("补签超时 · 只有老板能批", "Nacherfassung · nur Inhaber")}</span>` : ""}
-         ${locked ? `<span class="hrs-ot-lock">${empEsc(hrsOtDenyReason())}</span>` : `<label class="hrs-ot-mode">${empT("批准后", "Nach Freigabe")}
+         ${x.src === "fix" ? `<span class="hrs-ot-src">${empT("补签超时 · 只有老板能批", "Nacherfassung · nur Inhaber")}</span>` : ""}
+         ${locked ? `<span class="hrs-ot-lock">${empEsc(hrsOtDenyReason(x))}</span>` : `<label class="hrs-ot-mode">${empT("批准后", "Nach Freigabe")}
            <select class="hrs-ot-paymode" data-id="${x.id}"><option value="pay">${empT("付钱（计入工资）", "auszahlen")}</option>
            <option value="account">${empT("存工时账户（不计本月工资）", "aufs Zeitkonto")}</option></select></label>`}
          <button class="ghost-btn hrs-ot-no" data-id="${x.id}"${dis}>${empT("驳回", "Ablehnen")}</button>

@@ -30,8 +30,13 @@ function boot() {
   assert.equal(ctx.hrsOtRange('S', 'E', '2026-11-01', '2026-11-30'), 0, '店长批不了，不进工资');
   assert.ok(ctx.hrsOtRow(ctx.hrsOt('S', 'E')[0]).includes('disabled'), '店长视角按钮置灰');
   const manual = ctx.hrsAddOt('S', 'E', '2026-11-06', 2, '手动')[0];
-  assert.equal(ctx.hrsDecideOt(manual.id, 'approved').ok, true, '手动申请店长仍可批');
+  const azkBefore = ctx.hrsAzkAll().length;
+  const mres = ctx.hrsDecideOt(manual.id, 'approved', '', { mode: 'account' });
+  assert.equal(mres.ok, false, '8.12：手动加班的付钱/存账户也由老板决定，店长不能批'); assert.equal(mres.code, 'owner-only');
+  assert.equal(ctx.hrsDecideOt(manual.id, 'rejected').code, 'owner-only');
+  assert.equal(ctx.hrsAzkAll().length, azkBefore, '店长被拒时不产生账户存入');
   ctx.hrSetView('owner');
+  assert.equal(ctx.hrsDecideOt(manual.id, 'approved').ok, true, '老板可批手动加班');
   assert.equal(ctx.hrsDecideOt(fix.id, 'approved').ok, true);
   assert.equal(ctx.hrsOtRange('S', 'E', '2026-11-01', '2026-11-30'), 3);
   assert.match(fs.readFileSync('attend.js', 'utf8'), /hrsAddOt\(rec\.store, rec\.empId, rec\.date, hours, reason, undefined, "fix"\)/, '补签生成的单带 src=fix');
