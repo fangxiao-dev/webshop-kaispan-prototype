@@ -3,34 +3,77 @@ const fs = require('fs');
 const vm = require('vm');
 const assert = require('assert/strict');
 
-/* R5-10：补签晚于班表收工 → 超出部分一律提交老板审批 */
-const otCalls = [];
-const writes = [];
+/* R5-10：补签晚于班表收工 → 超出部分一律提交老板审批，且和补签保持同步。
+   用真实 hours.js（hrsAddOt / hrsDecideOt / hrsOtRange）和真实 attend.js；只用内存容器代替班表查找和考勤记录存取。 */
+const store = {};
 const base = {
   URL, Math, Number, String, Date, JSON, Object, Array,
   empRule: id => (id === 'punchGraceMin' ? 5 : 15),
   empT: zh => zh,
   empNow: () => '2026-11-06T12:00:00',
+  empToday: () => '2026-11-06',
+  empShiftDate: (d, n) => { const t = new Date(`${d}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); },
+  empRead: (k, f) => (k in store ? JSON.parse(JSON.stringify(store[k])) : f),
+  empWrite: (k, v) => { store[k] = JSON.parse(JSON.stringify(v)); },
   schMin: s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; },
-  schEndMin: (start, end) => { const s = base.schMin(start), e = base.schMin(end); return e <= s ? e + 1440 : e; },
+  schEndMin: (start, end) => { const a = base.schMin(start), e = base.schMin(end); return e <= a ? e + 1440 : e; },
   schH: n => `${n}h`
 };
 const ctx = vm.createContext(base);
+vm.runInContext(fs.readFileSync('hours.js', 'utf8'), ctx);
 vm.runInContext(fs.readFileSync('attend.js', 'utf8'), ctx);
+store.kaispanHrsOt = [];
 const shift = { id: 's1', start: '07:00', end: '15:00' };
-const rec = { id: 'r1', store: 'Demo', empId: 'e1', date: '2026-11-05', shiftId: 's1', in: null, out: null, decision: null, otId: null, log: [] };
+let rec = { id: 'r1', store: 'Demo', empId: 'e1', date: '2026-11-05', shiftId: 's1', in: null, out: null, decision: null, otId: null, log: [] };
 ctx.attEnsure = () => rec;
+ctx.attById = () => JSON.parse(JSON.stringify(rec));
 ctx.attShiftById = () => shift;
 ctx.attEffective = () => null;
-ctx.attWrite = (r, entry) => { writes.push(entry); return r; };
-ctx.hrsAddOt = (store, empId, date, hours, reason) => { otCalls.push({ hours, reason }); return [{ id: 'ot1' }]; };
-ctx.attDecide('Demo', 'e1', '2026-11-05', 's1', 'fix', { start: '07:00', end: '16:00', why: '晚收工' });
-assert.equal(otCalls.length, 1, '补签晚收工一律提交老板审批');
-assert.equal(otCalls[0].hours, 1);
-assert.equal(rec.otId, 'ot1');
-rec.otId = null;
-ctx.attDecide('Demo', 'e1', '2026-11-05', 's1', 'fix', { start: '07:00', end: '15:00', why: '准点' });
-assert.equal(otCalls.length, 1, '没有超出班表就不需要审批');
+ctx.attWrite = (r, entry) => { r.log = [...(r.log || []), entry]; rec = JSON.parse(JSON.stringify(r)); return rec; };
+const ots = () => ctx.hrsOt('Demo', 'e1');
+const approved = () => ctx.hrsOtRange('Demo', 'e1', '2026-11-05', '2026-11-05');
+const fix = end => ctx.attDecide('Demo', 'e1', '2026-11-05', 's1', 'fix', { start: '07:00', end, why: '补签' });
+
+fix('16:00');
+assert.equal(ots().length, 1, '补签晚收工一律提交老板审批');
+assert.equal(ots()[0].hours, 1);
+assert.equal(ots()[0].state, 'pending');
+assert.equal(approved(), 0, '批准前不进工资');
+
+fix('17:00');
+assert.equal(ots().length, 1, '再次补签更新同一张待审批单，不留旧单');
+assert.equal(ots()[0].hours, 2);
+assert.equal(ots()[0].state, 'pending');
+
+fix('16:00');
+assert.equal(ots()[0].hours, 1, '16:00→17:00→16:00 回到 1 小时');
+
+fix('15:00');
+assert.equal(approved(), 0);
+assert.equal(ots().filter(x => x.state === 'pending').length, 0, '改回不超时：待审批单撤回');
+assert.equal(rec.otId, null);
+assert.ok(ots().every(x => x.state === 'rejected' && x.revoked), '被撤回的单标记 revoked');
+
+fix('16:00');
+const first = ots().find(x => x.state === 'pending').id;
+ctx.attUndoDecision('r1');
+assert.equal(ots().find(x => x.id === first).state, 'rejected', '撤销补签决议：加班单撤回');
+assert.equal(rec.otId, null);
+assert.equal(approved(), 0);
+
+fix('16:00');
+const second = ots().find(x => x.state === 'pending').id;
+ctx.hrsDecideOt(second, 'approved');
+assert.equal(approved(), 1, '批准后进工资');
+fix('17:00');
+assert.equal(approved(), 0, '已批准后修改补签：原批准撤销，被撤销的小时不再进工资');
+const pendingAfter = ots().filter(x => x.state === 'pending');
+assert.equal(pendingAfter.length, 1);
+assert.equal(pendingAfter[0].hours, 2, '按新超时重新提交老板审批');
+ctx.hrsDecideOt(pendingAfter[0].id, 'approved');
+assert.equal(approved(), 2);
+fix('15:00');
+assert.equal(approved(), 0, '已批准后改回不超时：撤销原批准');
 
 /* R5-25/R5-29：休假页没有特殊假；R5-30：病假第一天起要 AU */
 const leaveCtx = vm.createContext({ ...base, empRule: id => (id === 'auAfterDays' ? 1 : 6) });

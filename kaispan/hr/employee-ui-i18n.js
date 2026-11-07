@@ -165,3 +165,32 @@ const EU_ROUND3_COPY={en:{
  Object.entries(EU_ROUND3_COPY).forEach(([lang,map])=>Object.assign(EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={}),map));
  ['vi','ko','ja'].forEach(lang=>{const map=EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={});Object.keys(EU_ROUND3_COPY.en).forEach(key=>{if(!map[key])map[key]=EU_ROUND3_COPY.en[key];});});
 })();
+
+/* 2026-11-07 老板问卷答复后新增的员工端文案（ANS-1/ANS-2/B37）：英文、德文；越南语、韩语、日语回落英文。 */
+const EU_ANSWERS_COPY={en:{
+"建议提交时就有":"Best to have when submitting",
+"{done} / {total} 项已完成，只是提示，缺项不挡提交":"{done} / {total} done — only a hint, missing items do not block submission",
+"{done} / {total} 项已完成，缺项只是提示":"{done} / {total} done — missing items are only a hint",
+"第一层还缺 {n} 项（只是提示，不挡提交）":"{n} item(s) of layer 1 still missing (only a hint, does not block submission)",
+"三层清单只提示还缺什么，不会挡住提交；没交齐的项目，店长审核时可能退回，或由老板做特殊审批。提交后页面锁定，可以撤回再改。":"The three layers only show what is still missing and never block submission. Your manager may return missing items, or the owner may approve them as a special case. After submitting the page is locked; you can withdraw and edit again.",
+"审核已通过。上传签好的劳动合同和个人调查问卷（两份）后，才会开放班表、资料等工作台；在那之前这里只有入职任务页。":"Approved. Once you upload the signed employment contract and personal questionnaire (both), the workspace with roster and documents opens; until then only the onboarding tasks page is available.",
+"审核通过后，员工上传签好的合同和问卷（两份）才开放工作台，之前只有入职任务页。":"After approval the workspace opens once you upload the signed contract and questionnaire (both); until then only the onboarding tasks page is available.",
+"居留许可":"Residence permit",
+"居留许可（必须填写截止日期）":"Residence permit (expiry date is mandatory)",
+"所有证件都要填写截止日期，请按材料填写完整年月日。":"Every document needs an expiry date; please enter the full date as shown on the document."
+},de:{
+"建议提交时就有":"Am besten schon bei der Abgabe vorhanden",
+"{done} / {total} 项已完成，只是提示，缺项不挡提交":"{done} / {total} erledigt — nur ein Hinweis, fehlende Punkte verhindern die Abgabe nicht",
+"{done} / {total} 项已完成，缺项只是提示":"{done} / {total} erledigt — fehlende Punkte sind nur ein Hinweis",
+"第一层还缺 {n} 项（只是提示，不挡提交）":"Stufe 1: noch {n} Punkt(e) offen (nur ein Hinweis, die Abgabe bleibt möglich)",
+"三层清单只提示还缺什么，不会挡住提交；没交齐的项目，店长审核时可能退回，或由老板做特殊审批。提交后页面锁定，可以撤回再改。":"Die drei Stufen zeigen nur, was noch fehlt, und blockieren die Abgabe nicht. Die Filialleitung kann Fehlendes zurückgeben oder der Inhaber gibt es als Sonderfall frei. Nach der Abgabe ist die Seite gesperrt; Sie können zurückziehen und erneut bearbeiten.",
+"审核已通过。上传签好的劳动合同和个人调查问卷（两份）后，才会开放班表、资料等工作台；在那之前这里只有入职任务页。":"Freigegeben. Sobald Sie den unterschriebenen Arbeitsvertrag und den Personalfragebogen (beide) hochgeladen haben, öffnet sich der Arbeitsbereich mit Dienstplan und Unterlagen; bis dahin gibt es nur die Aufgabenseite zum Einstieg.",
+"审核通过后，员工上传签好的合同和问卷（两份）才开放工作台，之前只有入职任务页。":"Nach der Freigabe öffnet sich der Arbeitsbereich, sobald Sie den unterschriebenen Vertrag und den Fragebogen (beide) hochladen; bis dahin gibt es nur die Aufgabenseite zum Einstieg.",
+"居留许可":"Aufenthaltstitel",
+"居留许可（必须填写截止日期）":"Aufenthaltstitel (Ablaufdatum ist Pflicht)",
+"所有证件都要填写截止日期，请按材料填写完整年月日。":"Für jeden Nachweis ist ein Ablaufdatum Pflicht; bitte das vollständige Datum wie auf dem Dokument eintragen."
+}};
+(function(){
+ Object.entries(EU_ANSWERS_COPY).forEach(([lang,map])=>Object.assign(EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={}),map));
+ ['vi','ko','ja'].forEach(lang=>{const map=EU_TRANSLATIONS[lang]||(EU_TRANSLATIONS[lang]={});Object.keys(EU_ANSWERS_COPY.en).forEach(key=>{if(!map[key]||/[一-龥]/.test(map[key]))map[key]=EU_ANSWERS_COPY.en[key];});});
+})();

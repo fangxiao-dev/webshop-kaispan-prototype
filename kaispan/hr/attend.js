@@ -637,18 +637,60 @@ function attDecide(store, empId, date, shiftId, kind, opts) {
   }[kind] || { zh: "处理", de: "Bearbeitet" };
   const why = rec.decision.why ? empT(`：${rec.decision.why}`, `: ${rec.decision.why}`) : "";
   attWrite(rec, { at: rec.decision.at, by, what: { zh: label.zh + why, de: label.de + why } });
-  /* 答复 R5-10：补签的收工时间晚于班表，超出的部分一律提交老板审批（走 hours.js 里已有的加班审批），批准前不进工资 */
-  if (kind === "fix" && shift && o.end && typeof hrsAddOt === "function" && !rec.otId) {
-    const plan = attPlanMin(shift);
-    const over = (attNear(schMin(o.end), plan.end) - plan.end) / 60;
-    if (over > attGrace() / 60) {
-      const hours = Math.round(over * 4) / 4;
-      const list = hrsAddOt(rec.store, rec.empId, rec.date, hours,
-        empT(`补签比班表晚收工 ${Math.round(over * 60)} 分钟，需老板审批`, `Nacherfassung ${Math.round(over * 60)} Minuten über Plan — Freigabe durch Inhaber nötig`));
-      rec.otId = Array.isArray(list) && list[0] ? list[0].id : null;
-      attWrite(rec, { at: empNow(), by, what: { zh: `补签超出班表 ${schH(over)}，已提交老板审批`, de: `${schH(over)} über Plan — zur Freigabe beim Inhaber eingereicht` } });
+  attSyncFixOt(rec, shift, by);
+  return rec;
+}
+
+/* 答复 R5-10：补签的收工时间晚于班表，超出的部分一律提交老板审批（走 hours.js 里已有的加班审批），批准前不进工资。
+   补签和加班单保持同步：改了超时就更新或重提，改回准点、换成别的处理方式、撤销补签就撤回；
+   已批准的加班单被改动时先撤销原批准，再按新的超时重新提交审批。手动“转加班申请”建的单（otSource=manual）不在这里动。 */
+function attFixOvertimeHours(rec, shift) {
+  const d = rec && rec.decision;
+  if (!d || d.kind !== "fix" || !shift || !d.end) return 0;
+  const plan = attPlanMin(shift);
+  const over = (attNear(schMin(d.end), plan.end) - plan.end) / 60;
+  return over > attGrace() / 60 ? Math.round(over * 4) / 4 : 0;
+}
+
+function attLinkedOt(rec) {
+  if (!rec || !rec.otId || typeof hrsOtAll !== "function") return null;
+  return hrsOtAll().find(x => x.id === rec.otId) || null;
+}
+
+function attSyncFixOt(rec, shift, by) {
+  if (typeof hrsAddOt !== "function") return rec;
+  if (rec.otSource === "manual") return rec;
+  const linked = attLinkedOt(rec);
+  const hours = attFixOvertimeHours(rec, shift);
+  const reason = hours
+    ? empT(`补签比班表晚收工 ${Math.round(hours * 60)} 分钟，需老板审批`, `Nacherfassung ${Math.round(hours * 60)} Minuten über Plan — Freigabe durch Inhaber nötig`)
+    : "";
+  const log = (zh, de) => attWrite(rec, { at: empNow(), by, what: { zh, de } });
+  if (linked && !linked.revoked) {
+    const unchanged = linked.hours === hours;
+    if (unchanged) return rec;
+    if (!hours) {
+      hrsRevokeOt(linked.id, "补签已改，原加班单撤回");
+      rec.otId = null;
+      rec.otSource = null;
+      log("补签不再超出班表，已撤回原加班审批单", "Nicht mehr über Plan — Freigabeantrag zurückgezogen");
+      return rec;
     }
+    if (linked.state === "pending") {
+      hrsReviseOt(linked.id, hours, reason);
+      log(`补签超出班表改为 ${schH(hours)}，已更新待审批的加班单`, `Überschreitung jetzt ${schH(hours)} — Freigabeantrag aktualisiert`);
+      return rec;
+    }
+    hrsRevokeOt(linked.id, "补签已改，原批准撤销，重新提交老板审批");
   }
+  if (!hours) {
+    if (rec.otId) { rec.otId = null; rec.otSource = null; log("补签不再超出班表", "Nicht mehr über Plan"); }
+    return rec;
+  }
+  const list = hrsAddOt(rec.store, rec.empId, rec.date, hours, reason);
+  rec.otId = Array.isArray(list) && list[0] ? list[0].id : null;
+  rec.otSource = "fix";
+  log(`补签超出班表 ${schH(hours)}，已提交老板审批`, `${schH(hours)} über Plan — zur Freigabe beim Inhaber eingereicht`);
   return rec;
 }
 
@@ -658,8 +700,15 @@ function attUndoDecision(recId, by) {
   if (!rec || !rec.decision) return null;
   const next = JSON.parse(JSON.stringify(rec));
   next.decision = null;
+  const linked = attLinkedOt(next);
+  if (linked && !linked.revoked && typeof hrsRevokeOt === "function") {
+    hrsRevokeOt(linked.id, "补签决议已撤销，加班单撤回");
+    next.otId = null;
+    next.otSource = null;
+  }
   attWrite(next, { at: empNow(), by: by || empT("店长", "Leitung"),
-                   what: { zh: "撤销处理，退回待处理", de: "Bearbeitung zurückgenommen" } });
+                   what: { zh: linked && !linked.revoked ? "撤销处理，退回待处理；关联的加班审批单已撤回" : "撤销处理，退回待处理",
+                           de: "Bearbeitung zurückgenommen" } });
   return next;
 }
 
@@ -678,6 +727,7 @@ function attToOvertime(recId, by) {
   const list = hrsAddOt(rec.store, rec.empId, rec.date, Math.round(hours * 4) / 4, reason);
   const next = JSON.parse(JSON.stringify(attById(recId)));
   next.otId = Array.isArray(list) && list[0] ? list[0].id : null;
+  next.otSource = "manual";
   next.decision = { kind: "ok", by: by || empT("店长", "Leitung"), at: empNow(),
                     why: empT("超出部分已提交加班审批", "Mehrstunden zur Freigabe eingereicht"),
                     start: null, end: null };

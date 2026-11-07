@@ -1580,6 +1580,13 @@ function empEmployeeSideEntries(e, today) {
   return out;
 }
 
+/* 管理端（老板/店长）能办的流程事项：去掉只能员工本人办的，再按 ANS-3 做老板视角的升级筛选。
+   名单页、首页人数和全站待办（empTodoItems）都从这里取，口径和升级标识保持一致。 */
+function empAdminWorkflowEntries(e, today) {
+  const day = today || empToday();
+  return empApplyEscalation(empWorkflowEntries(e, day).filter(x => !x.employeeOnly), day);
+}
+
 /* 名单页每行「待处理」列和首页数人共用这一份清单，避免两处口径不一样。
    只含老板/店长能办的事项（H04-C1）；员工本人要办的见 empEmployeeSideEntries。 */
 function empPendingEntries(e, today) {
@@ -1592,7 +1599,7 @@ function empPendingEntries(e, today) {
       : a.kind === "probation" ? "probation" : a.kind === "befristet" ? "befristet" : "doc";
     out.push(empTodoEntry(e, key, a.level, { alert: a, days: a.days, detail: a }));
   });
-  out.push(...empApplyEscalation(empWorkflowEntries(e, day).filter(x => !x.employeeOnly), day));
+  out.push(...empAdminWorkflowEntries(e, day));
   const byKey = new Map();
   out.forEach(item => {
     const prev = byKey.get(item.key);
@@ -1787,10 +1794,10 @@ function empMarkSofort(id, on, extra = {}) {
 }
 
 /* 特殊审批（ANS-1）：三层材料清单只提示缺什么，不挡员工提交，也不挡审核按钮的存在；
-   审核通过时第一、二层还有缺项（入职后才产生的“签好的合同”不算），必须由老板做一次特殊审批，
+   审核通过时第二层还有缺项（入职后才产生的“签好的合同”不算），必须由老板做一次特殊审批，
    留下原因、审批人和时间。暂缺申请、延期次数一期不做。 */
 function empOnbGaps(e, force) {
-  return empOnbItems(e, force).filter(x => !x.done && x.layer <= 2 && x.key !== "contract");
+  return empOnbItems(e, force).filter(x => !x.done && x.layer === 2 && x.key !== "contract");
 }
 
 function empSpecialNeeded(e) {
@@ -4277,7 +4284,7 @@ function empApproveInvite(id, options) {
   const specialReason = String(options?.specialReason || "").trim();
   if (gaps.length) {
     if (!empCan("ownerOnly")) {
-      return { ok: false, code: "special_owner", message: empT("第一、二层材料没交齐，通过需要老板做“特殊审批”；店长只能退回补充或等老板处理。", "Unterlagen Ebene 1/2 fehlen: Freigabe nur per Sonderfreigabe des Inhabers.") };
+      return { ok: false, code: "special_owner", message: empT("第二层材料没交齐，通过需要老板做“特殊审批”；店长只能退回补充或等老板处理。第一层缺项只提示，不挡审核。", "Unterlagen der Ebene 2 fehlen: Freigabe nur per Sonderfreigabe des Inhabers. Lücken in Ebene 1 sind nur ein Hinweis.") };
     }
     if (!specialReason) {
       return { ok: false, code: "special_reason", message: empT("材料没交齐就通过，必须写特殊审批的原因。", "Für die Sonderfreigabe ist eine Begründung nötig.") };
@@ -6442,7 +6449,7 @@ function employeeNewPage() {
         <p class="small">${empT("邀请邮件是固定的中德英三语通用信，不能改语言、主题或正文；要准备的材料只在员工打开链接后的第一屏列出（HR-ACCESS-25）。", "Die Einladungs-E-Mail ist ein festes dreisprachiges Schreiben und nicht editierbar (HR-ACCESS-25).")}</p>
       </div>
       <div class="card emp-new-personal-card">
-        <div class="section-title"><div><h2>员工个人资料与材料</h2><p>与员工端 UI 使用同一套字段。你可以代填、上传已有材料，也可以直接邀请员工自己补充。三层清单只提示缺什么，不挡员工提交；第一、二层没交齐时，通过需要老板特殊审批。</p></div></div>
+        <div class="section-title"><div><h2>员工个人资料与材料</h2><p>与员工端 UI 使用同一套字段。你可以代填、上传已有材料，也可以直接邀请员工自己补充。三层清单只提示缺什么，不挡员工提交；第二层没交齐时，通过需要老板特殊审批。</p></div></div>
         <div class="emp-new-personal">${empNewPersonalEditor()}</div>
         <div class="button-row" style="margin-top:16px">
           <button class="ghost-btn emp-create-btn" data-send="0">${empT("只建档，不发邀请", "Nur Akte anlegen")}</button>
@@ -6701,7 +6708,7 @@ function employeeInviteDetailPage() {
 
     ${inv.state === "submitted" ? `<section class="card emp-approve" data-id="${empEsc(e.id)}">
       <div class="section-title"><div><h2>${empT("审核", "Prüfung")}</h2>
-        <p>${empT("个人信息以员工为准、合同条件以公司为准；材料清单只提示缺什么，不挡审核；第一、二层没交齐时，通过需要老板做特殊审批（答复 ANS-1，覆盖 HR-ONB-20）。", "Persönliche Daten gelten nach Mitarbeiter, Vertragsbedingungen nach Betrieb; fehlende Unterlagen nur als Hinweis, bei Lücken in Ebene 1/2 Sonderfreigabe durch den Inhaber (ANS-1).")}</p></div>
+        <p>${empT("个人信息以员工为准、合同条件以公司为准；材料清单只提示缺什么，不挡审核；第二层没交齐时，通过需要老板做特殊审批（答复 ANS-1，覆盖 HR-ONB-20）。", "Persönliche Daten gelten nach Mitarbeiter, Vertragsbedingungen nach Betrieb; fehlende Unterlagen nur als Hinweis, bei Lücken in Ebene 1/2 Sonderfreigabe durch den Inhaber (ANS-1).")}</p></div>
         ${empPill(canSensitive ? "blue" : "gray", canSensitive ? empT("可审核", "Prüfung möglich") : empT("需要查看敏感资料权限", "Vertrauliche Daten nötig"))}</div>
       ${canSensitive ? "" : `<p class="emp-approve-warn">${empT("审核（通过与退回）需要“查看敏感资料”权限；没有权限时按钮置灰，由老板或其他有权限的人处理（HR-ACCESS-55）。", "Prüfung erfordert „Vertrauliche Daten ansehen“ (HR-ACCESS-55).")}</p>`}
       <div class="form-grid">
@@ -6711,8 +6718,8 @@ function employeeInviteDetailPage() {
       </div>
       <p class="small">${empT("在职状态由日期推算，不再手选。默认结束日 = 入职日 + 月数 − 1 天；有效结束日不超过入职日 + 6 个月。", "Status wird aus Daten abgeleitet. Standard: Eintritt + Monate − 1 Tag; wirksam höchstens Eintritt + 6 Monate.")}</p>
       ${gaps.length ? `<div class="emp-special-gap">
-        <p class="emp-approve-warn">${empT(`第一、二层还差 ${gaps.length} 项：${gaps.map(m => empRaw(m.label)).join("、")}。这只是提示，员工提交和审核都没有被挡；但通过时需要老板做特殊审批并写原因。`,
-          `Ebene 1/2: ${gaps.length} Angaben fehlen: ${gaps.map(m => empRaw(m.label)).join(", ")}. Nur ein Hinweis; zur Freigabe ist eine Sonderfreigabe des Inhabers mit Begründung nötig.`)}</p>
+        <p class="emp-approve-warn">${empT(`第二层还差 ${gaps.length} 项：${gaps.map(m => empRaw(m.label)).join("、")}。这只是提示，员工提交和审核都没有被挡；但通过时需要老板做特殊审批并写原因。第一层缺项只提示，店长可直接审核通过。`,
+          `Ebene 2: ${gaps.length} Angaben fehlen: ${gaps.map(m => empRaw(m.label)).join(", ")}. Nur ein Hinweis; zur Freigabe ist eine Sonderfreigabe des Inhabers mit Begründung nötig.`)}</p>
         ${empCan("ownerOnly")
           ? `<div class="field"><label>${empT("特殊审批原因（必填；会记录原因、审批人和时间）", "Begründung der Sonderfreigabe (Pflicht; mit Person und Zeit protokolliert)")}</label>
               <input class="emp-special-reason" data-emp-field="approve.specialReason" placeholder="${empT("例如：员工出国中，医保卡号下周补", "z. B.: Person im Ausland, Nummer folgt nächste Woche")}"></div>`
@@ -6866,7 +6873,7 @@ function empInviteReview(e, pr) {
     <div class="emp-review-block">
       <h3>${empT("必填三层", "Drei Pflichtebenen")}</h3>
       ${empInviteLayerBlock(e, pr)}
-      <p class="small">${empT("三层清单只提示缺什么，不挡员工提交；第一、二层没交齐时，通过需要老板做特殊审批并留记录；第三层缺项不影响通过（答复 ANS-1）。", "Die drei Ebenen zeigen nur, was fehlt, und blockieren die Abgabe nicht; bei Lücken in Ebene 1/2 braucht die Freigabe eine Sonderfreigabe des Inhabers; Ebene 3 stört nicht (ANS-1).")}</p>
+      <p class="small">${empT("三层清单只提示缺什么，不挡员工提交；第二层没交齐时，通过需要老板做特殊审批并留记录；第三层缺项不影响通过（答复 ANS-1）。", "Die drei Ebenen zeigen nur, was fehlt, und blockieren die Abgabe nicht; bei Lücken in Ebene 2 braucht die Freigabe eine Sonderfreigabe des Inhabers; Ebene 3 stört nicht (ANS-1).")}</p>
     </div>
     ${compare.rows.length ? `<div class="emp-review-block">
       <h3>${empT("公司填的 vs 员工填的", "Betrieb vs. Mitarbeiter")}</h3>
@@ -6908,7 +6915,7 @@ function empSpecialApprovalBlock(e) {
   if (!record) return "";
   return `<div class="emp-review-block emp-special-block">
     <h3>${empT("特殊审批记录", "Sonderfreigabe (Protokoll)")}</h3>
-    <p>${empT(`通过时第一、二层没交齐：${empEsc((record.labels || []).join("、"))}`, `Bei Freigabe fehlten: ${empEsc((record.labels || []).join(", "))}`)}</p>
+    <p>${empT(`通过时第二层没交齐：${empEsc((record.labels || []).join("、"))}`, `Bei Freigabe fehlten: ${empEsc((record.labels || []).join(", "))}`)}</p>
     <p class="small">${empT("原因", "Begründung")}：${empEsc(record.reason || "—")} · ${empT("审批人", "Freigegeben von")}：${empEsc(record.by || "—")} · ${empStamp(record.at)}</p>
   </div>`;
 }
@@ -8498,21 +8505,23 @@ function empFlash(button, text) {
 /* 首页和待办页读 liveTodos()，证件预警从真实档案实时算，不写死。
    这些条目渲染在 .emp-page 之外，所以走全站词典翻译，中文文案要留在 deTranslations 里。 */
 function empTodoItems() {
-  const review = empInvites(empScope()).filter(e => e.invite.state === "submitted").map(e => ({
-    type: "入职待审核",
-    title: `${e.name} 已提交入职资料，等待审核`,
-    module: "员工助手", store: e.store,
-    due: "尽快处理", risk: "普通", status: "待审批",
-    href: `#${slug("employee", "邀请详情")}?id=${encodeURIComponent(e.id)}`
-  }));
-  /* 入职停滞四类也进待办，标题只写姓名和事项类别（HR-ONB-47、HR-TODO-05）。 */
-  const stalls = empOnboardingStalls(empScope()).map(s => ({
-    type: "入职流程停滞",
-    title: `${s.name}：入职流程停滞`,
-    module: "员工助手", store: s.store,
-    due: "已超过提醒天数", risk: "普通", status: "未处理",
-    href: `#${slug("employee", "邀请详情")}?id=${encodeURIComponent(s.id)}`
-  }));
+  /* 入职待审核和审核停滞：和 empPendingEntries 同一事项集合；老板视角下发给店长的这两类超过 2 个工作日才出现，并带升级标识；
+     员工本人才能办的停滞（等提交、等补交、等签回）不进管理端全站待办（H04-C1）。 */
+  const review = [];
+  const stalls = [];
+  empInvites(empScope()).filter(e => !empStatusHidden(e)).forEach(e => {
+    const note = item => (item.escalated ? `（${empRaw(EMP_ESCALATE_NOTE)}）` : "");
+    empAdminWorkflowEntries(e).forEach(item => {
+      const href = `#${slug("employee", "邀请详情")}?id=${encodeURIComponent(e.id)}`;
+      if (item.key === "review") {
+        review.push({ type: "入职待审核", title: `${e.name} 已提交入职资料，等待审核${note(item)}`, module: "员工助手", store: e.store,
+          due: "尽快处理", risk: "普通", status: "待审批", href, escalated: !!item.escalated });
+      } else if (item.key === "stalled") {
+        stalls.push({ type: "入职流程停滞", title: `${e.name || empT("（未填姓名）", "(ohne Namen)")}：入职流程停滞${note(item)}`, module: "员工助手", store: e.store,
+          due: "已超过提醒天数", risk: "普通", status: "未处理", href, escalated: !!item.escalated });
+      }
+    });
+  });
   const kindText = { doc: "员工证件到期", probation: "试用期即将结束", befristet: "定期合同即将到期", profile: "员工资料缺失", newhire: "新人上工前待办" };
   /* 首页待办要控制条数，但控制方式有讲究：
      1. 同一个人同一类只出一条 —— 否则 Nico 缺五项资料就是五行。
@@ -8559,7 +8568,7 @@ function empTodoItems() {
   };
   const flow = [];
   empRosterVisible(empScope()).forEach(emp => {
-    empWorkflowEntries(emp).forEach(item => {
+    empAdminWorkflowEntries(emp).forEach(item => {
       const meta = flowMeta[item.key];
       if (!meta) return;
       const type = item.key === "managerChange"

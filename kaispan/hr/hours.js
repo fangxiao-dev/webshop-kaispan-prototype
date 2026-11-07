@@ -391,6 +391,22 @@ function hrsAddOt(store, empId, date, hours, reason, by) {
   return all;
 }
 
+/* 补签改了超时：同一张加班单改小时数、重新回到待审批（已批准的先撤销原批准，被撤销的小时不再进 hrsOtRange）。 */
+function hrsReviseOt(id, hours, reason) {
+  const all = hrsOtAll().map(x => x.id !== id ? x
+    : { ...x, hours: hrsRound(hours), reason: reason || x.reason, state: "pending", note: "", decidedAt: null, revisedAt: empNow() });
+  empWrite(HRS_OT_KEY, all);
+  return all;
+}
+
+/* 撤回加班单：补签被撤销、改回不超时，或批准后的补签被改动。revoked 标记区分“系统撤回”和老板主动驳回。 */
+function hrsRevokeOt(id, note) {
+  const all = hrsOtAll().map(x => x.id !== id ? x
+    : { ...x, state: "rejected", revoked: true, note: note || "", decidedAt: empNow() });
+  empWrite(HRS_OT_KEY, all);
+  return all;
+}
+
 function hrsDecideOt(id, state, note) {
   const all = hrsOtAll().map(x => x.id !== id ? x
     : { ...x, state, note: note || "", decidedAt: empNow() });
