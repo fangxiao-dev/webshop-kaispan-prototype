@@ -247,6 +247,17 @@ function storeRecords(list) { const all = ctx.empRead('kaispanEmployeeTravelExpe
   ctx.hrSetView('owner');
 }
 
+/* ---- 走查发现：未入职的演示员工提交差旅不进老板工资表，差旅区要明说，在职员工不显示 ---- */
+{
+  assert.ok(!render('hours').includes('eu-travel-demo-note'), '在职员工不显示演示提示');
+  const demoGuy = JSON.parse(JSON.stringify(actor));
+  Object.assign(demoGuy, { id: 'p23t2-uidemo', name: 'UI Demo', status: 'invited', uiDemo: true });
+  ctx.empSaveStaff(demoGuy);
+  writeData({ employeeId: demoGuy.id, name: demoGuy.name });
+  assert.ok(render('hours').includes('eu-travel-demo-note'), '演示员工显示提示');
+  writeData();
+}
+
 /* ---- 提交表单的假 DOM 冒烟：换班表单与差旅按钮的绑定函数能跑 ---- */
 {
   assert.doesNotThrow(() => { run('euBindSwap()'); run('euBindTravelExpenses()'); });
