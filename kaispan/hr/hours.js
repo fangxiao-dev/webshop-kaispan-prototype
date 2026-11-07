@@ -84,8 +84,9 @@ function hrsBalance(store, empId, month) {
 
 /* 这个月在账户上的动作，对计薪工时的净影响：取出加、存入减。 */
 function hrsAzkDelta(store, empId, month) {
+  /* 加班批准时选“存工时账户”产生的存入（带 otId）不再减计薪：那笔加班本来就没进计薪（hrsOtRange 已排除），再减就扣了两次。 */
   return hrsAzk(store, empId)
-    .filter(x => x.month === month)
+    .filter(x => x.month === month && !x.otId)
     .reduce((sum, x) => sum + (x.type === "out" ? x.hours : -x.hours), 0);
 }
 
@@ -97,7 +98,7 @@ function hrsOvertime(store, empId, month, upto) {
 
 function hrsOtRange(store, empId, from, to) {
   return hrsOt(store, empId)
-    .filter(x => x.state === "approved" && !x.revoked && String(x.date) >= from && String(x.date) <= to)
+    .filter(x => x.state === "approved" && !x.revoked && x.payMode !== "account" && String(x.date) >= from && String(x.date) <= to)
     .reduce((sum, x) => sum + x.hours, 0);
 }
 
@@ -383,38 +384,70 @@ function hrsDropAzk(id) {
 
 /* by: "self" = 员工在自己 App 里报的；不写就是店长在班表下面录的。
    两条路进的是同一份数据、同一个待审批状态 —— 批准之前一分钟都不进工资。 */
-function hrsAddOt(store, empId, date, hours, reason, by) {
+function hrsAddOt(store, empId, date, hours, reason, by, src) {
   const all = hrsOtAll().slice();
   all.unshift({ id: hrsNextId(all, "o"), empId, store, date, hours: hrsRound(hours),
-                reason: reason || "", state: "pending", by: by || "manager", at: empNow() });
+                reason: reason || "", state: "pending", by: by || "manager", at: empNow(), ...(src ? { src } : {}) });
   empWrite(HRS_OT_KEY, all);
   return all;
 }
 
 /* 补签改了超时：同一张加班单改小时数、重新回到待审批（已批准的先撤销原批准，被撤销的小时不再进 hrsOtRange）。 */
 function hrsReviseOt(id, hours, reason) {
+  hrsDropOtAzk(id);
   const all = hrsOtAll().map(x => x.id !== id || x.revoked ? x
-    : { ...x, hours: hrsRound(hours), reason: reason || x.reason, state: "pending", note: "", decidedAt: null, revisedAt: empNow() });
+    : { ...x, hours: hrsRound(hours), reason: reason || x.reason, state: "pending", note: "", decidedAt: null, payMode: null, revisedAt: empNow() });
   empWrite(HRS_OT_KEY, all);
   return all;
 }
 
 /* 撤回加班单：补签被撤销、改回不超时，或批准后的补签被改动。revoked 标记区分“系统撤回”和老板主动驳回。 */
 function hrsRevokeOt(id, note) {
+  hrsDropOtAzk(id);
   const all = hrsOtAll().map(x => x.id !== id ? x
     : { ...x, state: "rejected", revoked: true, note: note || "", decidedAt: empNow() });
   empWrite(HRS_OT_KEY, all);
   return all;
 }
 
+/* 加班撤回/重提时，把它“存工时账户”产生的存入一并撤掉，账户不留孤儿小时。 */
+function hrsDropOtAzk(otId) {
+  const all = hrsAzkAll();
+  if (all.some(x => x.otId === otId)) empWrite(HRS_AZK_KEY, all.filter(x => x.otId !== otId));
+}
+
+/* 答复 8.3：补签超时产生的加班单（src=fix）每一个都要老板批。
+   答复 8.12（推荐 R5-21）：付钱还是存工时账户由老板在批准加班时决定，所以手动加班申请也只有老板能批。 */
+function hrsOtOwnerOnly(ot) {
+  return !!ot;
+}
+
+function hrsOtDenyReason(ot) {
+  return ot && ot.src === "fix"
+    ? "补签超出班表产生的加班，每一个都需要老板审批（答复 R5-10）；店长不能批准或驳回"
+    : "加班付钱还是存工时账户由老板在批准时决定（答复 R5-21）；店长不能批准或驳回";
+}
+
+/* 答复 8.12（推荐）：批准时由老板二选一——付钱（进当月计薪）或存工时账户（这部分小时不进当期计薪，进账户余额）。
+   opts.mode: "pay"（默认）| "account"。 */
 /* 已撤回（revoked）的单不能再批准或驳回：补签改了之后旧单已作废，旧页面的按钮或回调重放也不能让它复活、重复计薪。 */
-function hrsDecideOt(id, state, note) {
+function hrsDecideOt(id, state, note, opts) {
   const target = hrsOtAll().find(x => x.id === id);
   if (!target) return { ok: false, code: "missing", message: "找不到这张加班单" };
+  if (hrsOtOwnerOnly(target) && typeof hrIsOwner === "function" && !hrIsOwner()) return { ok: false, code: "owner-only", message: hrsOtDenyReason(target) };
+  const mode = state === "approved" && opts && opts.mode === "account" ? "account" : "pay";
   if (target.revoked) return { ok: false, code: "revoked", message: "这张加班单已被补签变更撤回，不能再审批；请处理新的加班单" };
   const all = hrsOtAll().map(x => x.id !== id ? x
-    : { ...x, state, note: note || "", decidedAt: empNow() });
+    : { ...x, state, note: note || "", decidedAt: empNow(), payMode: state === "approved" ? mode : null });
   empWrite(HRS_OT_KEY, all);
+  hrsDropOtAzk(id);
+  if (mode === "account") {
+    hrsAddAzk(target.store, target.empId, String(target.date).slice(0, 7), "in", target.hours,
+      `加班批准后存入工时账户（${target.date}）`, true);
+    const azk = hrsAzkAll();
+    azk[0] = { ...azk[0], otId: id };
+    empWrite(HRS_AZK_KEY, azk);
+  }
   return { ok: true, list: all };
 }
 
@@ -631,10 +664,20 @@ function hrsOtRow(x) {
         ? `<i data-user-text>${empEsc(x.reason)}</i>` : empT("没写原因", "kein Grund")}${
         x.by === "self" ? ` · ${empT("他自己报的", "selbst gemeldet")}` : ""}</span></div>
     ${x.state === "pending"
-      ? `<div class="button-row"><button class="ghost-btn hrs-ot-no" data-id="${x.id}">${empT("驳回", "Ablehnen")}</button>
-         <button class="primary-btn hrs-ot-ok" data-id="${x.id}">${empT("批准", "Genehmigen")}</button></div>`
+      ? (() => {
+        const locked = hrsOtOwnerOnly(x) && !hrIsOwner();
+        const dis = locked ? ` disabled title="${empEsc(hrsOtDenyReason(x))}"` : "";
+        return `<div class="button-row">
+         ${x.src === "fix" ? `<span class="hrs-ot-src">${empT("补签超时 · 只有老板能批", "Nacherfassung · nur Inhaber")}</span>` : ""}
+         ${locked ? `<span class="hrs-ot-lock">${empEsc(hrsOtDenyReason(x))}</span>` : `<label class="hrs-ot-mode">${empT("批准后", "Nach Freigabe")}
+           <select class="hrs-ot-paymode" data-id="${x.id}"><option value="pay">${empT("付钱（计入工资）", "auszahlen")}</option>
+           <option value="account">${empT("存工时账户（不计本月工资）", "aufs Zeitkonto")}</option></select></label>`}
+         <button class="ghost-btn hrs-ot-no" data-id="${x.id}"${dis}>${empT("驳回", "Ablehnen")}</button>
+         <button class="primary-btn hrs-ot-ok" data-id="${x.id}"${dis}>${empT("批准", "Genehmigen")}</button></div>`;
+      })()
       : `<b class="hrs-ot-state is-${x.state}">${x.state === "approved"
-          ? empT("已批准，计入本月", "genehmigt") : empT("已驳回", "abgelehnt")}</b>`}
+          ? (x.payMode === "account" ? empT("已批准，存入工时账户", "genehmigt, Zeitkonto") : empT("已批准，计入本月", "genehmigt"))
+          : empT("已驳回", "abgelehnt")}</b>`}
   </div>`;
 }
 
@@ -685,7 +728,7 @@ function hrsAzkCard(store, month, readOnly = false) {
               <td><strong>${x.type === "in" ? "+" : "−"}${schH(x.hours)}</strong></td>
               <td><span class="hrs-run">${run[x.empId] > 0 ? "+" : ""}${schH(run[x.empId])}</span></td>
               <td class="wl-why is-soft" data-user-text>${empEsc(x.reason)}</td>
-              <td class="wl-act">${readOnly ? "" : `<button class="ghost-btn is-danger hrs-azk-undo" data-id="${x.id}">${empT("撤销", "Rückgängig")}</button>`}</td>
+              <td class="wl-act">${readOnly || x.otId ? "" : `<button class="ghost-btn is-danger hrs-azk-undo" data-id="${x.id}">${empT("撤销", "Rückgängig")}</button>`}</td>
             </tr>`;
           }).join("");
         })()}</tbody>
@@ -765,7 +808,8 @@ function hrsBindAll() {
   }));
 
   document.querySelectorAll(".hrs-ot-ok").forEach(b => b.addEventListener("click", () => {
-    const res = hrsDecideOt(b.dataset.id, "approved");
+    const sel = document.querySelector(`.hrs-ot-paymode[data-id="${b.dataset.id}"]`);
+    const res = hrsDecideOt(b.dataset.id, "approved", "", { mode: sel ? sel.value : "pay" });
     if (!res.ok) { empFlash(b, res.message); }
     app();
   }));

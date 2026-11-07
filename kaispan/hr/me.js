@@ -593,9 +593,12 @@ function mePunchCard(e) {
 
   const asked = rows.some(r => r.rec && r.rec.helpAsk);
   const blocked = mePunchMsg && mePunchMsg.code === "far" && Date.now() - mePunchMsg.t < 120000;
+  const wrongCity = mePunchMsg && mePunchMsg.code === "wrongcity" && Date.now() - mePunchMsg.t < 120000;
   const issues = rows.flatMap(r => r.issues).filter(i => i.level === "bad" && i.code !== "helpask" && i.code !== "farblock");
   return `<section class="me-punch ${blocked ? "is-blocked" : ""}">
     ${body}
+    ${wrongCity ? `<div class="me-punch-far"><strong>${empT(`打不了卡：今天出差，定位要在差旅申报的城市 ${empEsc(mePunchMsg.city || "")}`,
+      `Erfassung nicht möglich: Heute Dienstreise, Standort muss in ${empEsc(mePunchMsg.city || "")} liegen`)}</strong></div>` : ""}
     ${blocked ? `<div class="me-punch-far">
       <strong>${empT(`打不了卡：你离门店 ${mePunchMsg.dist} 米，允许范围是 ${mePunchMsg.radius} 米`,
                      `Erfassung nicht möglich: ${mePunchMsg.dist} m entfernt, zulässig sind ${mePunchMsg.radius} m`)}</strong>
@@ -1024,7 +1027,9 @@ function meBindAll() {
     attAskGeo().then(pos => {
       const r = attPunch(b.dataset.store, b.dataset.emp, empToday(), b.dataset.kind, { pos, src: "self" });
       mePunchMsg = r && r.ok === false && r.code === "far"
-        ? { code: "far", dist: r.dist, radius: r.radius, t: Date.now() } : null;
+        ? { code: "far", dist: r.dist, radius: r.radius, t: Date.now() }
+        : r && r.ok === false && r.code === "wrongcity"
+          ? { code: "wrongcity", city: r.city, t: Date.now() } : null;
       app();
     });
   }));

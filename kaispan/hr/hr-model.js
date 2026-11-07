@@ -92,7 +92,7 @@ function hrProbationDefaultEnd(entryDate, months) {
   if (Number.isNaN(date.getTime())) return "";
   const day = date.getUTCDate();
   date.setUTCMonth(date.getUTCMonth() + Number(months));
-  if (date.getUTCDate() !== day) date.setUTCDate(0);
+  if (date.getUTCDate() !== day) { date.setUTCDate(0); return date.toISOString().slice(0, 10); }
   date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10);
 }

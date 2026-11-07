@@ -1484,7 +1484,6 @@ const EMP_TODO_CODES = {
   newhire: { code: "27", name: { zh: "新人上工前清单", de: "Vor Arbeitsbeginn" } },
   topup: { code: "28", name: { zh: "补件待员工处理", de: "Nachreichung offen" } },
   reviewUpdate: { code: "29", name: { zh: "补件 / 资料更新待核对", de: "Nachreichung prüfen" } },
-  specialPending: { code: "30", name: { zh: "特殊审批待批（材料没交齐）", de: "Sonderfreigabe offen (Unterlagen fehlen)" } },
   stalled: { code: "32", name: { zh: "入职流程停滞", de: "Onboarding hängt" } },
   probation: { code: "33", name: { zh: "试用期即将结束", de: "Probezeit endet" } },
   befristet: { code: "34", name: { zh: "定期合同即将到期", de: "Befristung endet" } },
@@ -1519,7 +1518,7 @@ function empWorkflowEntries(e, today) {
   if (e.employeePortal?.supplementSubmission?.status === "submitted" || e.request?.state === "submitted") {
     out.push(empTodoEntry(e, "reviewUpdate", "warn", { mgrOnly: true, since: e.employeePortal?.supplementSubmission?.at || e.request?.submittedAt || "" }));
   }
-  if (empSpecialNeeded(e)) out.push(empTodoEntry(e, "specialPending", "warn"));
+  if (inv?.pendingConfirm && inv.state !== "approved") out.push(empTodoEntry(e, "review", "warn", { mgrOnly: true, since: inv.pendingConfirm.at }));
   if (e.account?.state === "pending_link" || e.accountLinkRequest?.state === "pending") {
     out.push(empTodoEntry(e, "linkConfirm", "warn", { employeeOnly: true }));
   }
@@ -1548,6 +1547,38 @@ function empWorkdaysElapsed(since, today) {
   return count;
 }
 
+/* AM-07：从店长副本首次待处理的时刻起算 2 个工作日（周一至周五，不扣法定假日），同一钟点到点即升级。
+   周四 10:00 → 下周一 10:00；周五 15:00 → 下周二 15:00；周末开始的从下周一 00:00 起算（周六 → 下周三 00:00）。
+   since 带时刻就按时刻算，只有日期按当天 00:00。 */
+function empEscalationDeadline(since) {
+  const raw = String(since || "");
+  if (!empValidExpiry(raw.slice(0, 10))) return null;
+  const start = raw.length > 10 ? new Date(raw) : new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return null;
+  const at = new Date(start.getTime());
+  if (at.getDay() === 0) { at.setDate(at.getDate() + 1); at.setHours(0, 0, 0, 0); }
+  else if (at.getDay() === 6) { at.setDate(at.getDate() + 2); at.setHours(0, 0, 0, 0); }
+  let left = 2;
+  while (left > 0) {
+    at.setDate(at.getDate() + 1);
+    if (at.getDay() !== 0 && at.getDay() !== 6) left -= 1;
+  }
+  return at;
+}
+
+/* now 可以是带时刻的字符串；只给日期时，今天取当前时刻，别的日期取当天 00:00。 */
+function empEscalationNow(now) {
+  const raw = String(now || "");
+  if (raw.length > 10) return new Date(raw);
+  if (!raw || raw === empToday()) return new Date();
+  return new Date(`${raw}T00:00:00`);
+}
+
+function empEscalationDue(since, now) {
+  const deadline = empEscalationDeadline(since);
+  return !!deadline && empEscalationNow(now).getTime() >= deadline.getTime();
+}
+
 const EMP_ESCALATE_WORKDAYS = 2;
 const EMP_ESCALATE_NOTE = { zh: "店长 2 个工作日未处理", de: "Filialleitung seit 2 Arbeitstagen untätig" };
 
@@ -1557,7 +1588,7 @@ function empApplyEscalation(entries, day) {
   return entries.filter(item => {
     if (!item.mgrOnly) return true;
     if (typeof hrIsOwner !== "function" || !hrIsOwner()) return true;
-    if (empWorkdaysElapsed(item.since, day) > EMP_ESCALATE_WORKDAYS) {
+    if (empEscalationDue(item.since, day)) {
       item.escalated = true;
       return true;
     }
@@ -1677,6 +1708,13 @@ const EMP_NEWHIRE_TASKS = [
    一个勾不叫闭环，叫备忘录。真正缺的是「要报哪些数据、我手上齐不齐、怎么交出去」。
    下面这张单子把公司侧（合规设置里填的）和员工侧（档案里的）拼到一起，
    缺的标红并给一条直达链接，凑齐了能一键复制给税务师，报完记一笔时间。 */
+/* AM-12 / HR-ORG-04：雇主法定名称缺失是公司设置问题，数据单显示“请先补全公司资料”，也不能记“已申报”。
+   员工资料“齐全”仍只看姓名、生日、地址。 */
+function empSofortEmployerReady(e) {
+  const legal = String(empEmployer(e.store)?.legalName || "").trim();
+  return !!legal && legal !== e.store;
+}
+
 function empSofortRows(e, noSv) {
   const emp = empEmployer(e.store);
   const rules = { href: `#${slug("employee", "合规设置")}`, name: { zh: "去合规设置填", de: "In den Einstellungen ergänzen" } };
@@ -1723,6 +1761,7 @@ function empSofortPanel(e) {
   const later = rows.filter(r => !r.required && !r.optional && !r.ok);
   const done = !!(e.sofortmeldung && e.sofortmeldung.at);
   const sofort = empSofortState(e);
+  const employerReady = empSofortEmployerReady(e);
   if (done) return `<div class="emp-sofort is-done">
     <span>${empT(`已在 ${empStamp(e.sofortmeldung.at)} 由 ${e.sofortmeldung.by || "—"} 记为申报完成。`, `Am ${empStamp(e.sofortmeldung.at)} durch ${e.sofortmeldung.by || "—"} als gemeldet vermerkt.`)}</span>
     ${noSv ? `<span class="small">${empT("按“无社保号，已由税务师处理”记录。", "Als „keine SV-Nr., Steuerberatung“ erfasst.")}</span>` : ""}
@@ -1751,13 +1790,16 @@ function empSofortPanel(e) {
       <label class="field"><span>${empT("国籍", "Staatsangehörigkeit")}</span><input class="emp-sofort-alt-input" data-field="nationality" value="${empEsc(e.sofortmeldung?.alt?.nationality || "")}"></label>
       <label class="field"><span>${empT("性别", "Geschlecht")}</span><input class="emp-sofort-alt-input" data-field="gender" value="${empEsc(e.sofortmeldung?.alt?.gender || "")}"></label>
     </div><p class="small">${empT("替代资料以税务师给的清单为准；这里只做登记。", "Ersatzangaben nach Liste der Steuerberatung; nur Erfassung.")}</p>` : ""}
-    ${!empEmployer(e.store)?.legalName || !String(empEmployer(e.store)?.address || "").trim()
-      ? `<p class="small">${empT("公司法定名称或经营地址还没填：不挡申报，可以后补。", "Firmenname oder Betriebsstätte fehlt: kein Hindernis, später ergänzen.")} <a href="#${slug("employee", "合规设置")}">${empT("去合规设置", "Zu Einstellungen")}</a></p>` : ""}
+    ${employerReady ? "" : `<p class="emp-approve-warn emp-sofort-employer">${empT("请先补全公司资料：公司法定名称还没填，不能记为已申报。", "Bitte zuerst die Firmendaten ergänzen: Firmenname fehlt, Meldung kann nicht vermerkt werden.")} <a href="#${slug("employee", "合规设置")}">${empT("去合规设置", "Zu Einstellungen")}</a></p>`}
+    ${employerReady && !String(empEmployer(e.store)?.address || "").trim()
+      ? `<p class="small">${empT("经营地址还没填：不挡申报，可以后补。", "Betriebsstätte fehlt: kein Hindernis, später ergänzen.")} <a href="#${slug("employee", "合规设置")}">${empT("去合规设置", "Zu Einstellungen")}</a></p>` : ""}
     <p class="small">${empT("即时申报原则上只需要姓名、生日和注册地址，其余可后补（答复 B58，覆盖 HR-ONB-41）。", "Für die Sofortmeldung genügen grundsätzlich Name, Geburtsdatum und Anschrift; Weiteres kann nachgereicht werden (B58).")}</p>
     <div class="emp-sofort-actions">
       <button class="ghost-btn emp-sofort-copy" data-id="${empEsc(e.id)}">${empT("复制这些数据", "Daten kopieren")}</button>
-      <button class="ghost-btn emp-sofort-done" data-id="${empEsc(e.id)}"${gaps.length ? " disabled" : ""}>${empT("已经报上去了", "Wurde gemeldet")}</button>
-      <span class="small">${gaps.length
+      <button class="ghost-btn emp-sofort-done" data-id="${empEsc(e.id)}"${gaps.length || !employerReady ? " disabled" : ""}>${empT("已经报上去了", "Wurde gemeldet")}</button>
+      <span class="small">${!employerReady
+        ? empT("请先补全公司资料。", "Bitte zuerst die Firmendaten ergänzen.")
+        : gaps.length
         ? empT("缺的补齐了才能记为已申报。", "Erst nach Vervollständigung als gemeldet markierbar.")
         : empT("复制给税务师或自己在 sv.net 报，报完点右边这个记一笔。", "An die Steuerberatung schicken oder selbst über sv.net melden, danach hier vermerken.")}</span>
     </div>
@@ -1783,6 +1825,7 @@ function empMarkSofort(id, on, extra = {}) {
   const e = empById(id);
   if (!e) return null;
   if (empStoreScopeError(e)) return null;
+  if (on && !empSofortEmployerReady(e)) return null;
   e.sofortmeldung = on ? { at: empNow(), by: empActorLabel(), noSv: !!extra.noSv, alt: extra.noSv ? { ...(extra.alt || {}) } : {} } : null;
   e.history = [...(e.history || []), {
     at: empNow(), field: "sofortmeldung",
@@ -1800,8 +1843,14 @@ function empOnbGaps(e, force) {
   return empOnbItems(e, force).filter(x => !x.done && x.layer === 2 && x.key !== "contract");
 }
 
+/* 特殊审批不另建待办：缺项在同一次审核/确认动作上由老板勾选处理（AM-05）。 */
 function empSpecialNeeded(e) {
   return e?.invite?.state === "submitted" && empOnbGaps(e, "submitted").length > 0;
+}
+
+/* 公司代填确认、在岗老员工确认：按正式档案看第二层缺项（AM-05 选 A，与新人审核同口径）。 */
+function empConfirmGaps(e) {
+  return empOnbItems(e, "formal").filter(x => !x.done && x.layer === 2 && x.key !== "contract");
 }
 
 /* 上工那一周的班表里有没有他的班。没定入职日期、排班模块没加载、那周还没排 —— 都算没有。
@@ -2660,7 +2709,7 @@ function empProbationDefaultEndAt(entryDate, months) {
   if (Number.isNaN(date.getTime())) return "";
   const day = date.getUTCDate();
   date.setUTCMonth(date.getUTCMonth() + Number(months));
-  if (date.getUTCDate() !== day) date.setUTCDate(0);
+  if (date.getUTCDate() !== day) { date.setUTCDate(0); return date.toISOString().slice(0, 10); }
   date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10);
 }
@@ -3893,7 +3942,7 @@ function empInviteDraftData(inv) {
 function empInviteView(e, force) {
   const inv = e?.invite || {};
   const sub = force === "draft" ? empInviteDraftData(inv) : (inv.submitted || {});
-  const useSub = force === "draft" || force === "submitted" || (!force && ["submitted", "returned"].includes(inv.state));
+  const useSub = force !== "formal" && (force === "draft" || force === "submitted" || (!force && ["submitted", "returned"].includes(inv.state)));
   if (useSub) {
     const p = sub.profile || {};
     return {
@@ -4456,7 +4505,7 @@ function employeeHomePage() {
   return `
     <div class="page-head">
       <div><h1>${empT("员工助手", "Mitarbeiterassistent")}</h1>
-      <p>${empT("员工档案、证件到期和入职流程集中在这里；排班、考勤和工资在二、三期开放。", "Mitarbeiterakten, Dokumentfristen und Onboarding an einem Ort; Dienstplan, Zeiten und Lohn folgen in Phase 2/3.")}</p></div>
+      <p>${empT("员工档案、证件到期、排班、考勤和工资资料集中在这里。本原型包含各期功能，正式一期范围以规格和修订为准。", "Mitarbeiterakten, Dokumentfristen, Dienstplan, Zeiterfassung und Lohndaten an einem Ort. Dieser Prototyp zeigt alle Phasen; der Umfang von Phase 1 richtet sich nach Spezifikation und Änderungen.")}</p></div>
       <div class="button-row"><a class="ghost-btn" href="#${slug("employee", "税务师权限")}">${empT("税务师权限", "Steuerberater-Zugriff")}</a><a class="ghost-btn" href="#${slug("employee", "合规设置")}">${empT("合规设置", "Compliance")}</a></div>
     </div>
 
@@ -4474,8 +4523,10 @@ function employeeHomePage() {
         </div>
         <span class="emp-module-cta">${empT("进入员工档案 →", "Zur Mitarbeiterakte →")}</span>
       </a>
-      ${empModulePlaceholder("排班与考勤", "Dienstplan und Zeiten", "班表、打卡和工时在二期开放；现在由排班模块自己的提醒承载。", "Dienstplan, Zeiterfassung und Stunden folgen in Phase 2.")}
-      ${empModulePlaceholder("工资与发薪", "Lohn und Auszahlung", "工资单、工时结算和发薪在三期开放；现在没有可用的真实数据。", "Lohnabrechnung und Auszahlung folgen in Phase 3.")}
+      ${typeof schHomeCard === "function" ? empPhaseTagCard(schHomeCard(), "二期", "Phase 2")
+        : empModulePlaceholder("排班与考勤", "Dienstplan und Zeiten", "排班模块没有加载，加载后这里显示班表、考勤和工时。", "Das Dienstplan-Modul ist nicht geladen.")}
+      ${typeof payHomeCard === "function" ? empPhaseTagCard(payHomeCard(), "三期", "Phase 3")
+        : empModulePlaceholder("工资与发薪", "Lohn und Auszahlung", "工资模块没有加载，加载后这里显示工资单和发薪。", "Das Lohn-Modul ist nicht geladen.")}
     </section>
 
     ${empHomeTodoSection(sum)}`;
@@ -4483,10 +4534,16 @@ function employeeHomePage() {
 
 function empModulePlaceholder(zh, de, noteZh, noteDe) {
   return `<div class="emp-module is-soon" aria-disabled="true">
-    <div class="emp-module-head"><h2>${empT(zh, de)}</h2>${empPill("gray", empT("即将开放", "Demnächst"))}</div>
+    <div class="emp-module-head"><h2>${empT(zh, de)}</h2>${empPill("gray", empT("未加载", "Nicht geladen"))}</div>
     <p>${empT(noteZh, noteDe)}</p>
     <span class="emp-module-cta is-muted">${empT("二、三期使用", "Phase 2/3")}</span>
   </div>`;
+}
+
+/* 给二三期模块卡片打一个不灰的期次小标签：插在卡片标题后面，卡片本身仍是可点击的数据卡。 */
+function empPhaseTagCard(html, zh, de) {
+  const tag = `<span class="emp-phase-tag">${empT(zh, de)}</span>`;
+  return String(html).replace("</h2>", `</h2>${tag}`);
 }
 
 /* 待办汇总区 = 上面四张卡各自要办的事，一处看完。
@@ -4501,7 +4558,9 @@ function empModulePlaceholder(zh, de, noteZh, noteDe) {
    工时挂在排班下面（它的下家其实是工资），考勤单独一块（它唯一的产出就是工时）。
    现在按「多久做一次」分：每天每周的现场（排班·考勤·休假）/ 每月一次的结算（工时→工资）。 */
 const EMP_HOME_GROUPS = [
-  { id: "staff", name: { zh: "员工档案", de: "Mitarbeiterakte" } }
+  { id: "staff", name: { zh: "员工档案", de: "Mitarbeiterakte" } },
+  { id: "sch", name: { zh: "排班与考勤", de: "Dienstplan und Zeiten" }, phase: { zh: "二期", de: "Phase 2" } },
+  { id: "pay", name: { zh: "工资与发薪", de: "Lohn und Auszahlung" }, phase: { zh: "三期", de: "Phase 3" } }
 ];
 
 /* 待办条目的 type 是全站统一的字符串（待办页也在用），这里只负责把它压成
@@ -4537,11 +4596,23 @@ function empHomeTodoSection(sum) {
     ...pending.flatMap(e => empPendingEntries(e, today).map(item => empHomeTodoRow(item, "now"))),
     ...soon.map(item => empHomeTodoRow(item, "soon"))
   ].join("");
-  if (!rows) {
+  /* 各模块是独立文件、按需加载的，取不到就当没有；排班 / 考勤 / 休假 / 工资直接读它们给全站待办用的清单 */
+  const sch = typeof schTodoItems === "function" ? schTodoItems() : [];
+  const att = typeof attTodoItems === "function" ? attTodoItems() : [];
+  const lv = typeof lvTodoItems === "function" ? lvTodoItems() : [];
+  const pay = typeof payTodoItems === "function" ? payTodoItems() : [];
+  const moduleGroups = [
+    { id: "sch", items: [...sch, ...att, ...lv] },
+    { id: "pay", items: pay }
+  ].filter(g => g.items.length).map(g => ({
+    ...g, rows: empModuleRows(g.items),
+    label: empT(`${g.items.length} 件`, `${g.items.length} ${g.items.length === 1 ? "Punkt" : "Punkte"}`)
+  }));
+  if (!rows && !moduleGroups.length) {
     return `<section class="card emp-allclear">
-      <strong>${empT("员工档案和证件现在没有要处理的事", "Mitarbeiterakte und Dokumente sind aktuell offen")}</strong>
-      <p>${empT(`证件、试用期、定期合同和关键资料都是齐的，最近 ${empRule("docSoonDays")} 天内也没有到关注期的。排班、考勤和工资在二、三期开放，不在这里假装有数据。`,
-                `Dokumente, Probezeiten, Befristungen und Stammdaten sind vollständig; auch in den nächsten ${empRule("docSoonDays")} Tagen läuft nichts ab. Dienstplan, Zeiten und Lohn folgen später.`)}</p>
+      <strong>${empT("员工档案、排班、考勤、休假和工资现在都没有要处理的事", "Mitarbeiterakte, Dienstplan, Zeiten, Urlaub und Lohn: aktuell nichts offen")}</strong>
+      <p>${empT(`证件、试用期、定期合同和关键资料都是齐的，班表已发布、考勤对得上、工资也走完了，最近 ${empRule("docSoonDays")} 天内也没有到关注期的。`,
+                `Dokumente, Probezeiten, Befristungen und Stammdaten sind vollständig, der Plan ist freigegeben, die Zeiten stimmen und der Lohn ist durch; auch in den nächsten ${empRule("docSoonDays")} Tagen läuft nichts ab.`)}</p>
       <a class="ghost-btn" href="#${slug("employee", "证件到期")}">${empT("查看全部证件", "Alle Dokumente ansehen")}</a>
     </section>`;
   }
@@ -4552,13 +4623,7 @@ function empHomeTodoSection(sum) {
   const tools = `<a class="ghost-btn" href="#${slug("employee", "员工档案")}?f=todo&u=now">${empT(`查看这 ${pending.length} 人`, `${pending.length} Personen ansehen`)}</a>`
     + (soon.length ? `<a class="ghost-btn" href="#${slug("employee", "员工档案")}?f=todo&u=soon">${empT(`只看提前知道 ${soon.length} 人`, `Nur Frühwarnung: ${soon.length}`)}</a>` : "")
     + `<a class="ghost-btn" href="#${slug("employee", "证件到期")}">${empT("按证件看", "Nach Dokument")}</a>`;
-  return `<section class="card emp-alert-card">
-    <div class="section-title">
-      <div><h2>${empT("需要处理的人事事项", "Offene Personalthemen")}</h2>
-      <p>${empT("这里只列已开放的员工档案事项。标题只写员工姓名和事项类别，证件号、日期、金额都在档案里看（HR-TODO-05）。31–90 天的证件关注期单独写“提前知道”，不进待办。",
-                "Nur offene Themen der Mitarbeiterakte. Titel nennen nur Name und Kategorie; Details stehen in der Akte (HR-TODO-05). 31–90 Tage gelten als Frühwarnung, nicht als Aufgabe.")}</p></div>
-    </div>
-    <div class="emp-alert-mod is-mod-staff">
+  const staffGroup = rows ? `<div class="emp-alert-mod is-mod-staff">
       <details class="emp-alert-mod-details" open>
         <summary class="emp-alert-mod-head">
           <h3>${empText(EMP_HOME_GROUPS[0].name)}<i>${label}</i></h3>
@@ -4569,7 +4634,27 @@ function empHomeTodoSection(sum) {
           ${rows}
         </div>
       </details>
+    </div>` : "";
+  const moduleHtml = moduleGroups.map(g => {
+    const meta = EMP_HOME_GROUPS.find(x => x.id === g.id);
+    return `<div class="emp-alert-mod is-mod-${g.id}">
+      <details class="emp-alert-mod-details">
+        <summary class="emp-alert-mod-head">
+          <h3>${empText(meta.name)}<span class="emp-phase-tag">${empText(meta.phase)}</span><i>${g.label}</i></h3>
+          <span class="emp-alert-mod-chevron" aria-hidden="true">⌄</span>
+        </summary>
+        <div class="emp-alert-mod-body">${g.rows}</div>
+      </details>
+    </div>`;
+  }).join("");
+  return `<section class="card emp-alert-card">
+    <div class="section-title">
+      <div><h2>${empT("需要处理的人事事项", "Offene Personalthemen")}</h2>
+      <p>${empT("员工档案、排班、考勤、休假和工资现在要办的事，按块列在这里。标题只写员工姓名和事项类别，证件号、日期、金额都在档案里看（HR-TODO-05）。31–90 天的证件关注期单独写“提前知道”，不进待办。本原型包含各期功能，正式一期范围以规格和修订为准。",
+                "Offene Themen der Mitarbeiterakte, des Dienstplans, der Zeiten, des Urlaubs und des Lohns, nach Bereich sortiert. Titel nennen nur Name und Kategorie; Details stehen in der Akte (HR-TODO-05). 31–90 Tage gelten als Frühwarnung, nicht als Aufgabe. Dieser Prototyp zeigt alle Phasen; der Umfang von Phase 1 richtet sich nach Spezifikation und Änderungen.")}</p></div>
     </div>
+    ${staffGroup}
+    ${moduleHtml}
   </section>`;
 }
 
@@ -5417,7 +5502,8 @@ function empContractDispatchPanel(e) {
     <summary>${empT("发错了，作废重发", "Fehlerhaft — stornieren und neu senden")}</summary>
     <p class="small">${empT("作废要写原因；旧件保留备查，员工端不再能下载；重新发要重新上传两份发出件。", "Stornierung mit Begründung; alte Dateien bleiben, Mitarbeiter können nicht mehr herunterladen.")}</p>
     <div class="emp-link-row"><input class="emp-dispatch-void-reason" placeholder="${empT("作废原因", "Grund der Stornierung")}">
-      <button class="ghost-btn danger-lite emp-dispatch-void-btn" data-id="${empEsc(e.id)}">${empT("作废这次发送", "Stornieren")}</button></div>
+      <button class="ghost-btn danger-lite emp-dispatch-void-btn" data-id="${empEsc(e.id)}"${empCan("sendContract") ? "" : ` disabled title="${empEsc(empDenyReason("sendContract"))}"`}>${empT("作废这次发送", "Stornieren")}</button></div>
+    ${empCan("sendContract") ? "" : `<p class="emp-disabled-reason">${empEsc(empDenyReason("sendContract"))}</p>`}
   </details>` : "";
   return `<section class="card emp-dispatch">
     <div class="section-title"><div><h2>${empT("合同与问卷 · 发送、签回、核对", "Vertrag und Fragebogen · Versand, Unterschrift, Prüfung")}</h2>
@@ -5577,12 +5663,50 @@ function empReviewContractAsset(id, key, decision, reason) {
   return { ok: true, archived: both };
 }
 
+/* 公司代填确认 / 在岗老员工确认时第二层没交齐：员工已确认，但要老板在同一次确认上做特殊审批才生效（AM-05 选 A）。
+   只有老板能批；不另建待办；留审批人、时间、缺项名单。 */
+function empApproveConfirmation(id, options) {
+  const e = empById(id);
+  const pending = e?.invite?.pendingConfirm;
+  if (!pending) return { ok: false, code: "state", message: empT("没有等待特殊审批的确认", "Keine Bestätigung wartet auf Sonderfreigabe") };
+  const scope = empStoreScopeError(e);
+  if (scope) return scope;
+  if (!empCan("ownerOnly")) {
+    return { ok: false, code: "special_owner", message: empT("第二层材料没交齐，通过需要老板做“特殊审批”；店长只能等老板处理。", "Unterlagen der Ebene 2 fehlen: nur per Sonderfreigabe des Inhabers.") };
+  }
+  const reason = String(options?.specialReason || "").trim();
+  if (!reason) return { ok: false, code: "special_reason", message: empT("材料没交齐就通过，必须写特殊审批的原因。", "Für die Sonderfreigabe ist eine Begründung nötig.") };
+  const gaps = empConfirmGaps(e);
+  const next = JSON.parse(JSON.stringify(e));
+  const inv = next.invite;
+  inv.state = "approved";
+  inv.fillMode = pending.mode;
+  inv.approvedAt = inv.approvedAt || empNow();
+  if (pending.mode === "veteran") {
+    inv.veteranConfirmedAt = pending.at;
+    inv.archivedAt = inv.archivedAt || pending.at;
+    inv.archivedBy = inv.archivedBy || "员工确认";
+  } else {
+    inv.confirmedCompanyProfileAt = pending.at;
+  }
+  const labels = gaps.length ? gaps.map(x => empRaw(x.label)) : (pending.labels || []);
+  inv.specialApproval = {
+    path: pending.mode, items: gaps.length ? gaps.map(x => x.key) : (pending.items || []), labels, layers: [2],
+    reason, by: empActorLabel(), at: empNow()
+  };
+  inv.pendingConfirm = null;
+  empLogEvent(next, "approval.special", `特殊审批通过（${pending.mode === "veteran" ? "在岗老员工确认" : "公司代填确认"}）：${labels.join("、")}没交齐；原因：${reason}`, empActorLabel());
+  empSaveWithHistory(next, empActorLabel());
+  return { ok: true };
+}
+
 function empVoidContractDispatch(id, reason) {
   const e = empById(id);
   if (!e?.invite) return { ok: false, code: "missing" };
-  /* 作废不读取文件内容，只需要操作与门店权限；关掉“查看敏感资料”的店长仍可作废（HR-ACCESS-55） */
+  /* 作废含作废重发，属于“发合同”权限（AM-08 ③）；不读取文件内容，不需要“查看敏感资料” */
   const scope = empStoreScopeError(e);
   if (scope) return scope;
+  if (!empCan("sendContract")) return { ok: false, code: "permission", message: empDenyReason("sendContract") };
   const note = String(reason || "").trim();
   if (!note) return { ok: false, code: "reason", message: empT("作废要写原因", "Begründung nötig") };
   const inv = e.invite;
@@ -5746,7 +5870,65 @@ function empTabContract(e, today) {
       ${empProbationBox(e, today)}
     </section>
     ${empLeaveSection(e, today)}
+    ${empFutureFlowExample("contract", e, today)}
     <div hidden>${empContractOverview(e)}</div>`;
+}
+
+/* 后续流程示例（一期不做）：答卷 3.2/3.3/3.7/5.2/6.3 写的是“未来再做”，不是“不做”。
+   内容取自 PR #2 头 13903e7 的离职交接四项、谁提出四选一、最早最后工作日、暂缺延期和临时替代证明，
+   这里只做静态只读展示：不接入一期主流程、不改保存逻辑、不进待办。 */
+const EMP_FUTURE_HANDOVER_ITEMS = [
+  { zh: "归还钥匙和设备", de: "Schlüssel und Geräte zurück" },
+  { zh: "核对最后工时", de: "Letzte Stunden prüfen" },
+  { zh: "确认最后工资", de: "Letzte Abrechnung bestätigen" },
+  { zh: "开具离职证明", de: "Arbeitszeugnis ausstellen" }
+];
+const EMP_FUTURE_LEAVE_TYPES = [
+  { zh: "员工提出", de: "Eigenkündigung" },
+  { zh: "公司提出", de: "Kündigung durch den Betrieb" },
+  { zh: "双方协商", de: "Aufhebungsvertrag" },
+  { zh: "合同到期", de: "Ende der Befristung" }
+];
+
+function empFutureFlowExample(kind, e, today) {
+  const head = `<div class="section-title"><div><h2>${empT("后续流程示例", "Beispiel für spätere Abläufe")} <span class="emp-phase-tag">${empT("后续", "Später")}</span></h2>
+      <p class="small">${empT("后续流程示例（一期不做）：只读展示，不接入一期主流程，不改保存逻辑，也不进待办。本原型包含各期功能，正式一期范围以规格和修订为准。",
+                              "Beispiel für spätere Abläufe (nicht in Phase 1): nur Anzeige, nicht Teil des Phase-1-Ablaufs, ändert nichts und erzeugt keine Aufgaben. Der Umfang von Phase 1 richtet sich nach Spezifikation und Änderungen.")}</p></div></div>`;
+  if (kind === "docs") {
+    return `<section class="card emp-future-flow" data-future-flow="docs">${head}
+      <div class="emp-future-grid">
+        <div><strong>${empT("居留许可临时替代证明", "Fiktionsbescheinigung")}</strong>
+          <p class="small">${empT("居留许可延期办理期间，员工持有临时替代证明（Fiktionsbescheinigung）。示例流程：登记为临时替代证明 → 在它的有效期内按居留许可处理、不算过期 → 仍需跟进正式居留许可，到期前提醒补交。",
+                                  "Während der Verlängerung gilt die Fiktionsbescheinigung als Aufenthaltstitel: Eintrag als vorläufiger Nachweis → bis zum Ablauf nicht überfällig → der endgültige Titel bleibt nachzuverfolgen.")}</p></div>
+        <div><strong>${empT("暂缺延期", "Verlängerung einer Befreiung")}</strong>
+          <p class="small">${empT("某项材料暂缺经批准后，同一项最多延期 1 次，从入职日算最长 60 天；超过后不能再批准或延期。",
+                                  "Fehlt eine Unterlage mit Freigabe, ist je Position höchstens 1 Verlängerung möglich, insgesamt längstens 60 Tage ab Eintritt; danach keine Freigabe oder Verlängerung.")}</p></div>
+      </div>
+    </section>`;
+  }
+  let ref = "";
+  try {
+    const hint = empEarliestLastDay(e, today, "employee");
+    ref = hint && hint.earliest
+      ? empT(`以今天（${empFormatDate(today)}）提出为例，最早最后工作日参考：${empFormatDate(hint.earliest)}（${empText(hint.source)}）。`,
+             `Beispiel bei Kündigung heute (${empFormatDate(today)}): frühester letzter Arbeitstag ${empFormatDate(hint.earliest)} (${empText(hint.source)}).`)
+      : empT("最早最后工作日参考：合同没有填结构化通知期，示例里不推算，请自行确认。", "Frühester letzter Arbeitstag: keine strukturierte Frist im Vertrag, keine Berechnung im Beispiel.");
+  } catch (err) {
+    ref = empT("最早最后工作日参考：示例数据不足，不推算。", "Frühester letzter Arbeitstag: zu wenig Daten für ein Beispiel.");
+  }
+  return `<section class="card emp-future-flow" data-future-flow="contract">${head}
+    <div class="emp-future-grid">
+      <div><strong>${empT("离职交接清单（四项）", "Übergabeliste beim Austritt (4 Punkte)")}</strong>
+        <ul>${EMP_FUTURE_HANDOVER_ITEMS.map(i => `<li>${empText(i)}</li>`).join("")}</ul>
+        <p class="small">${empT("四项全部勾完才算交接办完。", "Erst wenn alle vier erledigt sind, gilt die Übergabe als abgeschlossen.")}</p></div>
+      <div><strong>${empT("离职“谁提出”四选一", "Austritt: Wer kündigt (eine von vier)")}</strong>
+        <ul>${EMP_FUTURE_LEAVE_TYPES.map(i => `<li>${empText(i)}</li>`).join("")}</ul>
+        <p class="small">${empT("是否在试用期内由系统按通知日判断，不再手选。", "Ob Probezeit gilt, wird aus dem Kündigungsdatum abgeleitet.")}</p></div>
+      <div><strong>${empT("最早最后工作日参考", "Frühester letzter Arbeitstag")}</strong>
+        <p class="small">${ref}</p>
+        <p class="small">${empT("只是参考，不是法规结论；最后工作日仍由老板填写。", "Nur Referenz, keine Rechtsauskunft; der letzte Arbeitstag wird weiter vom Inhaber eingetragen.")}</p></div>
+    </div>
+  </section>`;
 }
 
 /* 试用期动作：按默认重算、清空、提前转正。结束日直接修改只有老板/管理员（HR-LIFE-10）。 */
@@ -5985,7 +6167,8 @@ function empTabDocs(e, today) {
       <p class="emp-doc-foot">${empT("只有迁移进系统的老员工允许“仅记录、无文件”，并单独标记；新员工每一项材料都必须有文件。已上传但没填有效期的显示“有效期待补充”。银行卡只收正面照片，医保卡正反面可以之后补；上传限 PDF / PNG / JPEG，最大 20 MB。",
                                     "Nur migrierte Bestandsdaten dürfen „nur Eintrag, keine Datei“ sein und werden separat markiert; neue Beschäftigte brauchen zu jeder Unterlage eine Datei. Bankkarte nur Vorderseite, Krankenkarte beidseitig später. PDF/PNG/JPEG, max. 20 MB.")}
         <a href="#${slug("employee", "合规设置")}">${empT("改提前期", "Vorwarnzeit ändern")}</a></p>
-    </section>`;
+    </section>
+    ${empFutureFlowExample("docs", e, today)}`;
 }
 
 function empTabHistory(e) {
@@ -6386,7 +6569,7 @@ function employeeRulesPage() {
       <p class="small emp-rules-scope">参数按用途分组。保存时保留原有数值；证件提醒适用于护照、签证 / 居留许可、在读证明及适用的 Zusatzblatt。医保卡和银行卡不设置有效期提醒。</p>
       <div class="emp-rule emp-document-guide"><strong>证件和餐饮卫生提醒</strong><p>证件按填写的有效期进行关注和到期提醒，所有证件都必须填截止日期；过期只提示、不阻断，缺少有效期或材料继续列入待处理。</p><p>食品卫生：首次证明与后续培训记录分开核对；依法由雇主在开始工作后及此后每两年组织复训并留存记录。这里的证件日期是演示中录入的提醒日期，不自动认定证明失效。</p></div>
       ${groups.map(g => `<section class="emp-rule-group${g.later ? " is-later" : ""}">
-        <div class="emp-rule-group-heading"><h3>${empT(g.title, g.de)}${g.later ? ` <span class="pill gray">${empT("二、三期使用", "Phase 2/3")}</span>` : ""}</h3></div>
+        <div class="emp-rule-group-heading"><h3>${empT(g.title, g.de)}${g.later ? ` <span class="pill purple">${empT("二、三期使用", "Phase 2/3")}</span>` : ""}</h3></div>
         ${g.ref ? `<p class="small emp-rule-ref">${empT("这是参考值，以合同和税务师意见为准。", "Referenzwert; Vertrag und Steuerberatung gehen vor.")}</p>` : ""}
         <div class="emp-rules">${empRules().filter(r => g.ids.includes(r.id)).map(r => empRuleEditor(r, canEdit)).join("")}</div>
       </section>`).join("")}
@@ -6706,6 +6889,17 @@ function employeeInviteDetailPage() {
       </section>
     </div>
 
+    ${inv.pendingConfirm && inv.state !== "approved" ? `<section class="card emp-approve emp-confirm-special" data-id="${empEsc(e.id)}">
+      <div class="section-title"><div><h2>${empT("员工已确认，等老板特殊审批", "Bestätigt, Sonderfreigabe offen")}</h2>
+        <p>${empT(`${inv.pendingConfirm.mode === "veteran" ? "在岗老员工确认" : "公司代填确认"}时第二层没交齐：${empEsc((inv.pendingConfirm.labels || []).join("、"))}。这只是提示，没有另建待办；老板在这次确认上勾选特殊审批并写原因后才生效。`, `Bestätigung mit Lücken in Ebene 2: ${empEsc((inv.pendingConfirm.labels || []).join(", "))}. Wirksam erst nach Sonderfreigabe des Inhabers.`)}</p></div></div>
+      ${empCan("ownerOnly")
+        ? `<div class="field"><label><input type="checkbox" class="emp-confirm-special-check"> ${empT("特殊审批（第二层没交齐，仍然通过）", "Sonderfreigabe (Ebene 2 unvollständig)")}</label>
+            <input class="emp-special-reason emp-confirm-special-reason" placeholder="${empT("特殊审批原因（必填）", "Begründung (Pflicht)")}"></div>
+           <button class="primary-btn emp-confirm-special-btn" data-id="${empEsc(e.id)}">${empT("特殊审批并确认生效", "Mit Sonderfreigabe bestätigen")}</button>`
+        : `<p class="emp-disabled-reason">${empT("店长不能做特殊审批：请等老板处理。", "Filialleitung kann keine Sonderfreigabe erteilen.")}</p>
+           <button class="primary-btn emp-confirm-special-btn" data-id="${empEsc(e.id)}" disabled>${empT("特殊审批并确认生效", "Mit Sonderfreigabe bestätigen")}</button>`}
+    </section>` : ""}
+
     ${inv.state === "submitted" ? `<section class="card emp-approve" data-id="${empEsc(e.id)}">
       <div class="section-title"><div><h2>${empT("审核", "Prüfung")}</h2>
         <p>${empT("个人信息以员工为准、合同条件以公司为准；材料清单只提示缺什么，不挡审核；第二层没交齐时，通过需要老板做特殊审批（答复 ANS-1，覆盖 HR-ONB-20）。", "Persönliche Daten gelten nach Mitarbeiter, Vertragsbedingungen nach Betrieb; fehlende Unterlagen nur als Hinweis, bei Lücken in Ebene 1/2 Sonderfreigabe durch den Inhaber (ANS-1).")}</p></div>
@@ -6723,7 +6917,7 @@ function employeeInviteDetailPage() {
         ${empCan("ownerOnly")
           ? `<div class="field"><label>${empT("特殊审批原因（必填；会记录原因、审批人和时间）", "Begründung der Sonderfreigabe (Pflicht; mit Person und Zeit protokolliert)")}</label>
               <input class="emp-special-reason" data-emp-field="approve.specialReason" placeholder="${empT("例如：员工出国中，医保卡号下周补", "z. B.: Person im Ausland, Nummer folgt nächste Woche")}"></div>`
-          : `<p class="emp-disabled-reason">${empT("店长不能做特殊审批：请退回补充，或等老板处理（老板待办里已有“特殊审批待批”）。", "Filialleitung kann keine Sonderfreigabe erteilen: zurückgeben oder auf den Inhaber warten.")}</p>`}
+          : `<p class="emp-disabled-reason">${empT("店长不能做特殊审批：请退回补充，或等老板处理。", "Filialleitung kann keine Sonderfreigabe erteilen: zurückgeben oder auf den Inhaber warten.")}</p>`}
       </div>` : ""}
       <div class="field" style="margin-top:12px"><label>${empT("退回理由（退回时必填）", "Begründung (bei Rückgabe nötig)")}</label>
         <textarea class="emp-return-note" rows="2" placeholder="${empT("例如：健康证拍得看不清到期日，麻烦重拍一张。", "z. B.: Ablaufdatum der Belehrung ist unleserlich, bitte neu fotografieren.")}"></textarea></div>
@@ -8213,6 +8407,15 @@ function empBindAll() {
       location.hash = `${slug("employee", "员工资料")}?id=${encodeURIComponent(button.dataset.id)}`;
     });
   });
+  document.querySelectorAll(".emp-confirm-special-btn").forEach(button => {
+    button.addEventListener("click", () => {
+      const card = button.closest(".emp-confirm-special");
+      if (!card?.querySelector(".emp-confirm-special-check")?.checked) { empFlash(button, empT("请先勾选特殊审批", "Bitte Sonderfreigabe ankreuzen")); return; }
+      const res = empApproveConfirmation(button.dataset.id, { specialReason: card.querySelector(".emp-confirm-special-reason")?.value });
+      if (!res.ok) { empFlash(button, res.message || empT("审批失败", "Freigabe fehlgeschlagen")); return; }
+      app();
+    });
+  });
   document.querySelectorAll(".emp-return-btn").forEach(button => {
     button.addEventListener("click", () => {
       const note = button.closest(".emp-approve")?.querySelector(".emp-return-note");
@@ -8563,8 +8766,7 @@ function empTodoItems() {
      它们不属于“证件到期”，但都是老板/店长真正要动手的事（HR-TODO-20～39）。 */
   const flowMeta = {
     retention: { type: "离职资料保存期到期", risk: "普通", due: "尽快处理" },
-    managerChange: { type: "店长变更待老板确认", risk: "高风险", due: "尽快处理" },
-    specialPending: { type: "特殊审批待批（材料没交齐）", risk: "普通", due: "尽快处理" }
+    managerChange: { type: "店长变更待老板确认", risk: "高风险", due: "尽快处理" }
   };
   const flow = [];
   empRosterVisible(empScope()).forEach(emp => {

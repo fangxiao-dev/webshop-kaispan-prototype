@@ -172,6 +172,10 @@ d10.profile = { ...d10.profile, first: 'Alex', last: 'Chen', birthday: '1990-01-
 ctx.euMarkEdited(d10, ['first', 'last', 'birthday', 'nationalityClass']);
 d10.veteranConfirmedAt = '2026-11-06T11:00:00.000Z';
 ctx.euSyncInvite(d10);
+assert.notEqual(emp('e10').invite.state, 'approved', 'AM-05 选 A：第二层缺项时员工确认先挂起，等老板特殊审批');
+assert.ok(emp('e10').invite.pendingConfirm, '挂起记录缺项');
+ctx.hrSetView('owner');
+assert.equal(ctx.empApproveConfirmation('e10', { specialReason: '员工出国，下周补' }).ok, true);
 assert.equal(emp('e10').invite.state, 'approved');
 assert.equal(emp('e10').invite.fillMode, 'veteran');
 assert.equal(emp('e10').invite.archivedAt, d10.veteranConfirmedAt);

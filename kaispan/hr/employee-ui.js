@@ -107,13 +107,15 @@ function euStage(d){
  if(demo==='returned')return 'returned';
  if(demo==='contract'||demo==='contract-returned')return 'approved';
  if(inv.state==='returned')return 'returned';
+ if(inv.pendingConfirm&&inv.state!=='approved')return 'submitted';
  if(inv.state==='approved')return 'approved';
  if(euContractSent(d))return 'approved';
  if(d.materialSubmitted||inv.state==='submitted')return 'submitted';
  return 'fill';
 }
 /* ANS-2：员工上传签好的合同和问卷（两份）即开放工作台，不等老板核对归档；审核通过但还没回传时只有入职任务页。 */
-function euContractReturned(d){const inv=euInvite(d);return euContractArchived(d)||!!inv.contractSignedSubmittedAt||!!d?.contractSignedSubmittedAt;}
+/* AM-06 选 A：合同或问卷任一份被退回、或合同作废（该份状态回到“缺”）就关闭，重新签回两份齐备再开放。 */
+function euContractReturned(d){const inv=euInvite(d);if(euContractArchived(d))return true;if(!inv.contractSignedSubmittedAt&&!d?.contractSignedSubmittedAt)return false;return ['contract','questionnaire'].every(key=>['submitted','uploaded','approved'].includes(euContractStatus(d,key).state));}
 function euWorkspaceOpen(d){const stage=euStage(d);return stage==='archived'||(stage==='approved'&&euContractReturned(d));}
 
 /* 待确认关联要先于欢迎页和设密码出现；确认前只拿得到档案姓名（HR-ACCESS-43）。 */
@@ -236,21 +238,74 @@ function euLockedPage(d){
  <button type="button" class="ghost-btn eu-skip" style="width:100%;margin-top:12px">测试跳过，进入工作台（演示用，正式版没有）</button><p class="eu-note">审核通过后，员工上传签好的合同和问卷（两份）才开放工作台，之前只有入职任务页。</p></div>`;
 }
 
-function euComingSoonPage(tab){
- const map={home:['今日','打卡与今日班次'],schedule:['排班','班表与报可工作时间'],hours:['薪资','工时、工资单与差旅费']};
- const [title,what]=map[tab]||map.home;
- return `<span class="eu-step">${title}</span><h2>${title}</h2><section class="eu-coming-soon"><strong>即将开放</strong><p>${what}属于第二、三期功能，一期工作台只开放“任务”和“资料”。</p><small>一期员工端：指派给我的待办（人事事项和点钞记账委派）+ 我的资料。</small></section><p class="eu-note"></p>`;
-}
-
 function euWorkspace(d){
  const tabs=[['tasks','任务'],['docs','资料'],['home','今日'],['schedule','排班'],['hours','薪资']];
  const tab=tabs.some(([key])=>key===euSession.tab)?euSession.tab:'tasks';
- const nav=`<nav class="eu-nav">${tabs.map(([key,label])=>`<button data-tab="${key}" class="${tab===key?'active':''}">${label}</button>`).join('')}</nav>`;
+ const nav=`<nav class="eu-nav">${tabs.map(([key,label])=>key==='hours'?`<div class="eu-hours-nav-item"><button data-tab="${key}" class="${tab===key?'active':''}">${label}</button><details class="eu-contract-tip eu-hours-nav-tip"><summary aria-label="工时确认流程说明">!</summary><div role="note"><strong>月度工时确认</strong><p>员工当月最后一个班次结束后，工时确认事项进入员工待办。员工核对并确认后，在员工工时页面和老板端对应月份显示确认状态。</p><small>本机演示的自动生成待办流程需正式接入。</small></div></details></div>`:`<button data-tab="${key}" class="${tab===key?'active':''}">${label}</button>`).join('')}</nav>`;
  let body='';
  if(tab==='tasks')body=euTaskPanel(d);
  else if(tab==='docs')body=euDocsTab(d);
- else body=euComingSoonPage(tab);
+ else if(tab==='home')body=euHomeTab(d);
+ else if(tab==='schedule')body=euScheduleTab(d);
+ else body=euHoursTab(d);
  return euShell(d,`<main class="eu-body">${body}</main>${nav}`);
+}
+
+/* 二、三期页签（R4）。入口只在 euWorkspace 里，而 euRender 在工作台未开放时根本不进来：
+   审核没过、合同和问卷没签回之前，这三个页签和“任务”“资料”一样进不去。
+   期次小标签只提示这页不属于一期，不是灰掉，功能照常可用。 */
+function euPhaseTag(phase){return `<div class="eu-phase-row"><span class="eu-phase-tag">${euT(phase)}</span><small>${euT('功能照常可用；期次标签只说明它不属于一期。')}</small></div>`;}
+function euWeekDays(){const date=new Date(empToday()+'T12:00:00'),mon=new Date(date);mon.setDate(date.getDate()-((date.getDay()+6)%7));return Array.from({length:7},(_,i)=>{const x=new Date(mon);x.setDate(x.getDate()+i);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;});}
+/* 8.4：当天有已提交的差旅申报（目的城市）才改按城市核对定位；员工随手填的行程不算。 */
+function euTodayTrip(d){const e=euEmployee(d);return e&&typeof attTravelTrip==='function'?attTravelTrip(e.store,e.id,empToday()):null;}
+function euHomeTab(d){
+ const trip=euTodayTrip(d);
+ return `${euPhaseTag('二期')}<span class="eu-step">${euTF('你好，{name}',{name:empEsc(d.name)})}</span><h2>今天也一起把工作做好</h2><div class="eu-shift"><small>今日班次 · 演示排班</small><h3>10:00 — 18:00</h3><p>前厅 · Martin Biergarten</p><span>${d.punch?euT('已上班打卡')+' · '+empEsc(d.punch.time):euT('尚未上班打卡')}</span></div>${trip?`<div class="eu-trip-punch" role="note"><strong>${euTF('今天出差：按差旅申报城市 {city} 核对定位',{city:empEsc(trip.city)})}</strong><label>${euT('当前所在城市（演示；正式版读取手机定位）')}<input class="eu-punch-city" placeholder="${empEsc(trip.city)}" aria-label="${euT('当前所在城市')}"></label><small>${euTF('差旅申报 {start} 至 {end}，已提交才作数；没有申报的日子按门店定位。',{start:trip.startDate,end:trip.endDate})}</small></div>`:''}<div class="eu-punch-row"><button class="primary-btn eu-punch">${d.punch?euT('下班打卡'):euT('上班打卡')}</button><details class="eu-contract-tip eu-punch-tip"><summary aria-label="出差打卡地点说明">!</summary><div role="note"><strong>打卡身份与地点核对</strong><p>出差期间按已提交的差旅申报（目的城市）核对打卡定位；没有差旅申报的日子仍按门店定位。</p><p>防止代打卡：请开发者调研并设计身份核验方案，避免其他员工登录本人账号代为打卡；可评估设备绑定、身份识别等方式，并考虑设备更换、异常核验和人工补卡。</p><small>当前为需求说明；本机演示不读取真实定位，出差日用手填城市代替。</small></div></details></div><p class="eu-punch-feedback eu-note" role="status"></p><p class="eu-note">点击记录当前时间。演示不读取定位，也不影响已有员工考勤。</p>${euHomePending(d)}${d.messages.length?`<p class="eu-notice">${euT('最近操作')}：${empEsc(euT(d.messages[0]))}</p>`:''}`;
+}
+function euHomePending(d){
+ const cards=euExpiryNotices(d).map(x=>`<div class="eu-task"><strong>${empEsc(x.title)}</strong><p>${empEsc(x.message)}</p><small>同时提醒员工与老板</small><button class="ghost-btn" data-tab="docs">查看材料</button></div>`);cards.push(...euAssignedTasks().filter(task=>['todo','draft','returned'].includes(euTaskState(task,d).state)).map(task=>euTaskCard(task,d)));
+ if(euContractReleased(d)&&!d.contractSignedSubmittedAt&&!euInvite(d).contractSignedSubmittedAt)cards.push(`<div class="eu-task"><strong>劳动合同待签署</strong><p>资料已审核，店长已发送合同。请下载、签字并上传。</p><button class="ghost-btn" data-tab="docs">查看合同</button></div>`);
+ const missing=euProfileMissing(d);
+ if(missing.length&&!d.materialSubmitted&&d.specialSubmission?.state!=='pending')cards.push(`<div class="eu-task"><strong>入职材料 待补充</strong><p>${euTF('还有 {n} 项资料待补充。',{n:missing.length})}</p><button class="ghost-btn" data-tab="docs">查看资料</button></div>`);
+ const request=d.hoursConfirmationRequest||d.confirmationRequest;
+ const needsHours=request?.state==='pending'||d.hoursConfirmationRequested===true;
+ if(needsHours&&!d.confirmation)cards.push(`<div class="eu-task"><strong>确认本月工时</strong><p>查看记录，确认无误或向店长提出异议。</p><button class="ghost-btn" data-tab="hours">核对工时</button></div>`);
+ return cards.length?`<h3>${euT('等你处理')}</h3>${cards.join('')}`:'';
+}
+function euScheduleTab(d){
+ const week=euWeekDays();
+ return `${euPhaseTag('二期')}<span class="eu-step">我的排班</span><h2>排班与报班</h2><details class="eu-schedule-fold"><summary>本周工作安排 <small>${week[0].slice(5)} — ${week[6].slice(5)}</small></summary><p class="eu-note">演示班次 · 工时已扣除 30 分钟休息，实际以发布班表为准。</p>${euCompactWeek(week,d)}</details><details class="eu-schedule-fold" open><summary>申请换班 <small>自己找好接班人，店长批准后生效</small></summary>${euSwapSection(d)}</details><details class="eu-schedule-fold"><summary>报可工作时间 <small>逐天填写下周意向</small></summary>${euAvailabilityDeadline(d)}${euWeeklyAvailability(d,week)}</details>`;
+}
+function euHoursTab(d){return euPhaseTag('三期')+euMonthlyHours(d)+euTravelExpenses(d);}
+
+/* 8.28 换班最小演示（答复：员工自己找好接班人，店长批准后生效）。
+   班次优先取班表上已排给本人、今天起 14 天内的真实班次；一个都没有时才用接下来 3 个工作日的演示班次，
+   演示班次批准后直接在班表上给接班人加这个班。申请存 kaispanShiftSwapsV1（schedule.js）。 */
+function euSwapShifts(d){
+ const e=euEmployee(d);if(!e||typeof schSwapShifts!=='function')return {shifts:[],demo:false};
+ const real=schSwapShifts(e.store,e.id,empToday(),14);if(real.length)return {shifts:real,demo:false};
+ return {shifts:Array.from({length:10},(_,i)=>empShiftDate(empToday(),i)).filter(day=>![0,6].includes(new Date(day+'T12:00:00').getDay())).slice(0,3).map(day=>({id:'',date:day,start:'10:00',end:'18:00'})),demo:true};
+}
+function euSwapStateLabel(req){return req.state==='approved'?euTF('已批准，班表已换人（{by}）',{by:req.decidedBy||'店长'}):req.state==='rejected'?euTF('被驳回：{note}',{note:req.note||''}):euT('待店长批准');}
+function euSwapSection(d){
+ const e=euEmployee(d);
+ if(!e||typeof schSwapAll!=='function')return `<p class="eu-note">${euT('员工档案还没有关联，暂时不能申请换班。')}</p>`;
+ const {shifts,demo}=euSwapShifts(d),mine=schSwapAll().filter(r=>r.fromId===e.id),incoming=schSwapAll().filter(r=>r.toId===e.id&&r.state==='approved');
+ const rows=shifts.map(x=>{
+  const pending=mine.find(r=>r.state==='pending'&&r.date===x.date&&r.start===x.start);
+  const colleagues=schSwapColleagues(e.store,e.id,x.date);
+  return `<div class="eu-swap-shift"><div class="eu-swap-line"><strong>${empEsc(x.date.slice(5))} <small>${empEsc(x.start)}–${empEsc(x.end)}</small></strong>${pending?`<span class="pill orange">${empEsc(euSwapStateLabel(pending))}</span>`:''}</div>${pending?'':colleagues.length?`<details class="eu-swap-open"><summary class="ghost-btn">${euT('申请换班')}</summary><form class="eu-swap-form" data-date="${empEsc(x.date)}" data-start="${empEsc(x.start)}" data-end="${empEsc(x.end)}" data-shift="${empEsc(x.id)}"><label>${euT('接班同事')}<select name="to" required><option value="">${euT('请选择')}</option>${colleagues.map(c=>`<option value="${empEsc(c.id)}">${empEsc(c.name)}</option>`).join('')}</select></label><label>${euT('说明（选填）')}<input name="note" placeholder="${euT('例如：家里有事')}"></label><p class="eu-swap-feedback eu-note" role="status"></p><button class="primary-btn" type="submit">${euT('提交给店长')}</button></form></details>`:`<small class="eu-note">${euT('这天没有可以接班的同事。')}</small>`}</div>`;
+ }).join('');
+ const past=mine.filter(r=>r.state!=='pending');
+ return `<p class="eu-note">${euT('先自己找好愿意接班的同事，再提交；店长批准后班表才会换人，批准前班次仍是你的。')}${demo?' '+euT('当前班表上没有排给你的班次，下面是演示班次。'):''}</p>${rows||`<p class="eu-note">${euT('今天起 14 天内没有可换的班次。')}</p>`}${past.length?`<h3>${euT('换班记录')}</h3>${past.map(r=>`<p class="eu-swap-done"><span class="pill ${r.state==='approved'?'green':'orange'}">${empEsc(euSwapStateLabel(r))}</span> ${empEsc(r.date.slice(5))} ${empEsc(r.start)}–${empEsc(r.end)} → ${empEsc(empById(r.toId)?.name||r.toId)}</p>`).join('')}`:''}${incoming.length?`<h3>${euT('同事换给我的班')}</h3>${incoming.map(r=>`<p class="eu-swap-done">${empEsc(r.date.slice(5))} ${empEsc(r.start)}–${empEsc(r.end)} ← ${empEsc(empById(r.fromId)?.name||r.fromId)}</p>`).join('')}`:''}`;
+}
+function euBindSwap(){
+ document.querySelectorAll('.eu-swap-form').forEach(form=>form.addEventListener('submit',ev=>{ev.preventDefault();
+  const d=euData(),e=euEmployee(d),box=form.querySelector('.eu-swap-feedback');if(!e)return;
+  const res=schSwapRequest(e.store,e.id,{id:form.dataset.shift,date:form.dataset.date,start:form.dataset.start,end:form.dataset.end},form.elements.to.value,form.elements.note.value);
+  if(!res.ok){box.textContent=res.message;return;}
+  d.messages.unshift('换班申请已提交，等待店长批准');euSave(d);app();
+ }));
 }
 
 function euInvitation(){
@@ -514,9 +569,14 @@ function euSyncStaff(d,opts){
  }
  if(!d.materialSubmitted&&d.withdrawnAt&&next.invite?.state==='submitted'){next.invite.state='sent';next.invite.withdrawnAt=d.withdrawnAt;next.invite.lastSubmitActionAt=null;}
  /* 公司代填确认只认 employerCompleted===true 或明确的演示模式（HR-ONB-09/52）。 */
- if(d.confirmedCompanyProfileAt&&next.invite&&next.invite.employerCompleted===true){next.invite.state='approved';next.invite.fillMode='company';next.invite.confirmedCompanyProfileAt=d.confirmedCompanyProfileAt;next.invite.approvedAt=next.invite.approvedAt||d.confirmedCompanyProfileAt;}
+ const confirmGaps=(d.confirmedCompanyProfileAt||d.veteranConfirmedAt)&&next.invite?empConfirmGaps(next):[];
+ const confirmHeld=confirmGaps.length>0&&!next.invite?.specialApproval;
+ if(next.invite&&!confirmHeld&&next.invite.pendingConfirm)next.invite.pendingConfirm=null;
+ if(d.confirmedCompanyProfileAt&&next.invite&&next.invite.employerCompleted===true&&next.invite.state!=='approved'&&confirmHeld){next.invite.pendingConfirm=next.invite.pendingConfirm||{mode:'company',at:d.confirmedCompanyProfileAt,items:confirmGaps.map(x=>x.key),labels:confirmGaps.map(x=>empRaw(x.label))};}
+ else if(d.confirmedCompanyProfileAt&&next.invite&&next.invite.employerCompleted===true){next.invite.state='approved';next.invite.fillMode='company';next.invite.confirmedCompanyProfileAt=d.confirmedCompanyProfileAt;next.invite.approvedAt=next.invite.approvedAt||d.confirmedCompanyProfileAt;}
  /* 在岗老员工确认后直接归档：不审核、不发合同（HR-ACCESS-30、HR-ONB-52） */
- if(d.veteranConfirmedAt&&next.invite){next.invite.state='approved';next.invite.fillMode='veteran';next.invite.veteranConfirmedAt=d.veteranConfirmedAt;next.invite.approvedAt=next.invite.approvedAt||d.veteranConfirmedAt;next.invite.archivedAt=next.invite.archivedAt||d.veteranConfirmedAt;next.invite.archivedBy=next.invite.archivedBy||'员工确认';}
+ if(d.veteranConfirmedAt&&next.invite&&next.invite.state!=='approved'&&confirmHeld){next.invite.pendingConfirm=next.invite.pendingConfirm||{mode:'veteran',at:d.veteranConfirmedAt,items:confirmGaps.map(x=>x.key),labels:confirmGaps.map(x=>empRaw(x.label))};}
+ else if(d.veteranConfirmedAt&&next.invite){next.invite.state='approved';next.invite.fillMode='veteran';next.invite.veteranConfirmedAt=d.veteranConfirmedAt;next.invite.approvedAt=next.invite.approvedAt||d.veteranConfirmedAt;next.invite.archivedAt=next.invite.archivedAt||d.veteranConfirmedAt;next.invite.archivedBy=next.invite.archivedBy||'员工确认';}
  if(d.contractSignedSubmittedAt&&next.invite&&(!next.invite.contractSignedSubmittedAt||String(d.contractSignedSubmittedAt)>String(next.invite.contractSignedSubmittedAt)))next.invite.contractSignedSubmittedAt=d.contractSignedSubmittedAt;
  if(d.accountLinkConfirmedAt&&next.invite){
   /* 确认后统一清理兼容标记，入口判定和页面不能一个说已确认、一个还说待确认（HR-ACCESS-43）。 */
@@ -577,11 +637,14 @@ function euEmployeeInvitation(e,token){const linked=Object.entries(empRead(EU_KE
 
 
 /* 点钞记账委派：只进入员工自己的本机档案，不写入门店正式财务账。
-   一期员工端任务只含人事事项和点钞记账，HACCP 示例去掉（HR-TODO-60/61）。 */
+   一期员工端任务只含人事事项和点钞记账（HR-TODO-60/61）；HACCP 填表是后续流程，
+   放在任务页最下面，标“后续任务示例”，不进今日页和排班页的待办（R5）。 */
 function euAssignedTasks(){const today=empToday();return [
  {id:`cash-${today}`,kind:'cash',title:'闭店点钱与每日记账',category:'点钞记账',from:'Martin · 店长',due:'闭店后 · 22:30',instructions:'按面额清点现金，对照收银结算单，记录现金、银行卡收入及差额原因。提交后由店长核对。'}];}
+function euExampleTasks(){const today=empToday();return [
+ {id:`haccp-${today}`,kind:'haccp',example:true,title:'填写冷藏温度检查表',category:'HACCP',from:'Martin · 店长',due:'开店前 · 10:00',instructions:'检查冷藏设备，填写测量时间和实际温度。有异常请说明处理情况，再提交店长审核。'}];}
 function euTaskState(task,d){return d.assignedTasks?.[task.id]||{state:'todo',values:{}};}
-function euTaskCard(task,d){const saved=euTaskState(task,d),labels={todo:'待处理',draft:'草稿',submitted:'待审核',done:'已完成',returned:'退回修改'};return `<article class="eu-assignment"><div class="eu-assignment-top"><span class="pill blue">${task.category}</span><span class="pill ${saved.state==='submitted'?'blue':saved.state==='done'?'green':'orange'}">${labels[saved.state]||'待处理'}</span></div><h3>${task.title}</h3><p>${task.from} 委派<br>${task.due} · ${empToday()}</p><button class="ghost-btn eu-task-open" data-task="${task.id}">${saved.state==='submitted'?'查看已提交内容':saved.state==='draft'?'继续填写':'查看并处理'}</button></article>`;}
+function euTaskCard(task,d){const saved=euTaskState(task,d),labels={todo:'待处理',draft:'草稿',submitted:'待审核',done:'已完成',returned:'退回修改'};return `<article class="eu-assignment"><div class="eu-assignment-top"><span class="pill ${task.kind==='cash'?'blue':'purple'}">${task.category}</span>${task.example?`<span class="pill gray">${euT('后续任务示例')}</span>`:''}<span class="pill ${saved.state==='submitted'?'blue':saved.state==='done'?'green':'orange'}">${labels[saved.state]||'待处理'}</span></div><h3>${task.title}</h3><p>${task.from} 委派<br>${task.due} · ${empToday()}</p><button class="ghost-btn eu-task-open" data-task="${task.id}">${saved.state==='submitted'?'查看已提交内容':saved.state==='draft'?'继续填写':'查看并处理'}</button></article>`;}
 
 /* 指派给我的待办：人事事项 + 点钞记账委派（HR-TODO-60/61、7.x） */
 function euHrTodoItems(d){
@@ -611,14 +674,16 @@ function euContractTodoMeta(d){
  return '两份一起下载、签字、上传，两份都传才算签回';
 }
 function euTaskPanel(d){
- const tasks=euAssignedTasks(),task=tasks.find(x=>x.id===euSession.task),items=euHrTodoItems(d);
+ const tasks=euAssignedTasks(),examples=euExampleTasks(),task=[...tasks,...examples].find(x=>x.id===euSession.task),items=euHrTodoItems(d);
  if(task){
  const saved=euTaskState(task,d),v=saved.values||{},locked=['submitted','done'].includes(saved.state),disabled=locked?'disabled':'';
  const field=(key,label,type='number',required=true)=>`<label>${label}<input name="${key}" type="${type}" ${type==='number'?'step="0.01"':''} value="${empEsc(String(v[key]??''))}" ${required?'required':''} ${disabled}></label>`;
- const fields=`${field('date','记账日期','date')}<h3>按面额清点现金</h3><div class="eu-denominations">${[200,100,50,20,10,5,2,1,.5,.2,.1,.05,.02,.01].map(amount=>`<label>€${amount.toFixed(2)}<input type="number" min="0" step="1" name="count_${amount}" data-denom="${amount}" value="${v['count_'+amount]??0}" aria-label="${amount} 欧元数量" ${disabled}></label>`).join('')}</div><div class="eu-cash-total">清点现金 <strong class="eu-counted">€0.00</strong></div>${field('expected','结算单应有现金 €')}${field('opening','备用金 / 起始现金 €')}${field('cashRevenue','现金收入 €')}${field('cardRevenue','银行卡收入 €')}${field('expense','现金支出 €','number',false)}<label>结算单 / 票据编号<input name="receipt" value="${empEsc(v.receipt||'')}" ${disabled}></label><div class="eu-cash-total">与应有现金差额 <strong class="eu-cash-diff">€0.00</strong></div><label>差额原因 / 备注<textarea name="note" ${disabled}>${empEsc(v.note||'')}</textarea></label>`;
- return `<button class="ghost-btn eu-task-back">‹ 我的任务</button><span class="eu-step" style="display:block;margin-top:20px">${task.category}</span><h2>${task.title}</h2><p>${task.from} 委派 · ${task.due}</p><div class="eu-task"><strong>任务要求</strong><p>${task.instructions}</p></div>${locked?`<p class="eu-notice">${saved.state==='done'?'已完成':'已提交，等待店长审核'} · ${empEsc(saved.submittedAt||'')}</p>`:''}<form id="eu-assignment-form" data-task="${task.id}" data-kind="${task.kind}">${fields}<p class="eu-note">现金清点和应有金额分别记录，差额不为零时需说明原因。本机演示，不会写入正式门店账。</p>${locked?'<button class="ghost-btn eu-task-revise" type="button">补充 / 修改提交</button>':'<div class="eu-cols"><button type="button" class="ghost-btn eu-task-draft">保存草稿</button><button class="primary-btn" type="submit">提交任务</button></div>'}</form>${saved.history?.length?`<details class="eu-task"><summary>历史提交（${saved.history.length}）</summary>${saved.history.map(h=>`<p>${empEsc(h.at)} · 已保留上一版</p>`).join('')}</details>`:''}`;}
+ const haccpFields=`${field('date','检查日期','date')}${field('time','测量时间','time')}${field('device','设备 / 位置','text')}<div class="eu-cols">${field('temperature','实测温度 °C')}${field('reference','门店规定温度 / 范围','text')}</div><label>检查结果<select name="result" required ${disabled}><option value="">请选择</option>${[['normal','正常'],['abnormal','异常，已记录处理情况']].map(([key,label])=>`<option value="${key}" ${v.result===key?'selected':''}>${label}</option>`).join('')}</select></label><label>异常及处理记录<textarea name="action" ${disabled}>${empEsc(v.action||'')}</textarea></label>`;
+ const cashFields=`${field('date','记账日期','date')}<h3>按面额清点现金</h3><div class="eu-denominations">${[200,100,50,20,10,5,2,1,.5,.2,.1,.05,.02,.01].map(amount=>`<label>€${amount.toFixed(2)}<input type="number" min="0" step="1" name="count_${amount}" data-denom="${amount}" value="${v['count_'+amount]??0}" aria-label="${amount} 欧元数量" ${disabled}></label>`).join('')}</div><div class="eu-cash-total">清点现金 <strong class="eu-counted">€0.00</strong></div>${field('expected','结算单应有现金 €')}${field('opening','备用金 / 起始现金 €')}${field('cashRevenue','现金收入 €')}${field('cardRevenue','银行卡收入 €')}${field('expense','现金支出 €','number',false)}<label>结算单 / 票据编号<input name="receipt" value="${empEsc(v.receipt||'')}" ${disabled}></label><div class="eu-cash-total">与应有现金差额 <strong class="eu-cash-diff">€0.00</strong></div><label>差额原因 / 备注<textarea name="note" ${disabled}>${empEsc(v.note||'')}</textarea></label>`;
+ const fields=task.kind==='haccp'?haccpFields:cashFields;
+ return `<button class="ghost-btn eu-task-back">‹ 我的任务</button><span class="eu-step" style="display:block;margin-top:20px">${task.category}</span><h2>${task.title}</h2><p>${task.from} 委派 · ${task.due}</p>${task.example?`<p class="eu-notice">${euT('后续任务示例：这是后续流程的填表示意，一期不会真的派发，提交也只保存在本机。')}</p>`:''}<div class="eu-task"><strong>任务要求</strong><p>${task.instructions}</p></div>${locked?`<p class="eu-notice">${saved.state==='done'?'已完成':'已提交，等待店长审核'} · ${empEsc(saved.submittedAt||'')}</p>`:''}<form id="eu-assignment-form" data-task="${task.id}" data-kind="${task.kind}">${fields}<p class="eu-note">${task.kind==='haccp'?euT('温度范围按本门店要求填写；异常时必须记录处理情况。'):euT('现金清点和应有金额分别记录，差额不为零时需说明原因。')} ${euT('本机演示，不会写入正式门店账。')}</p>${locked?'<button class="ghost-btn eu-task-revise" type="button">补充 / 修改提交</button>':'<div class="eu-cols"><button type="button" class="ghost-btn eu-task-draft">保存草稿</button><button class="primary-btn" type="submit">提交任务</button></div>'}</form>${saved.history?.length?`<details class="eu-task"><summary>历史提交（${saved.history.length}）</summary>${saved.history.map(h=>`<p>${empEsc(h.at)} · 已保留上一版</p>`).join('')}</details>`:''}`;}
  const list=items.length?items.map(x=>`<article class="eu-assignment"><div class="eu-assignment-top"><span class="pill ${x.tone}">${x.pill}</span></div><h3>${empEsc(x.title)}</h3><p>${empEsc(x.meta)}</p><button class="ghost-btn" data-tab="${x.tab}">打开处理</button></article>`).join(''):'<p class="eu-note">目前没有等你处理的人事事项。</p>';
- return `<span class="eu-step">指派给我的待办</span><h2>我的任务</h2><p>这里只显示分配给你本人的事项：人事待办和点钞记账委派。</p><h3>人事待办</h3>${list}<h3>委派任务</h3>${tasks.map(t=>euTaskCard(t,d)).join('')}<p class="eu-note">点钞记账为演示委派，不代表门店真实待办；正式接入后只显示分配给本人的任务。</p>`;
+ return `<span class="eu-step">指派给我的待办</span><h2>我的任务</h2><p>这里只显示分配给你本人的事项：人事待办和点钞记账委派。</p><h3>人事待办</h3>${list}<h3>委派任务</h3>${tasks.map(t=>euTaskCard(t,d)).join('')}<p class="eu-note">点钞记账为演示委派，不代表门店真实待办；正式接入后只显示分配给本人的任务。</p><h3>后续任务示例</h3><p class="eu-note">HACCP 填表属于后续流程，先在这里展示填法；一期不会真的派发给你。</p>${examples.map(t=>euTaskCard(t,d)).join('')}`;
 }
 function euTaskBind(){
  const draw=()=>app();
@@ -629,7 +694,7 @@ function euTaskBind(){
  const cashTotal=()=>[...form.querySelectorAll('[data-denom]')].reduce((sum,input)=>sum+Number(input.dataset.denom)*Number(input.value||0),0);
  const update=()=>{if(kind!=='cash')return;form.querySelector('.eu-counted').textContent=`€${cashTotal().toFixed(2)}`;const diff=cashTotal()-Number(form.elements.expected.value||0);form.querySelector('.eu-cash-diff').textContent=`${diff>0?'+':''}€${diff.toFixed(2)}`;};
  if(kind==='cash'){form.addEventListener('input',update);update();}
- const save=(submit,button)=>{if(submit&&!form.reportValidity())return;const values=Object.fromEntries(new FormData(form));if(submit&&kind==='cash'&&Math.abs(cashTotal()-Number(values.expected))>.005&&!String(values.note||'').trim()){empFlash(button,euT('请填写现金差额原因'));return;}
+ const save=(submit,button)=>{if(submit&&!form.reportValidity())return;const values=Object.fromEntries(new FormData(form));if(submit&&kind==='haccp'&&values.result==='abnormal'&&!String(values.action||'').trim()){empFlash(button,euT('请填写异常处理情况'));return;}if(submit&&kind==='cash'&&Math.abs(cashTotal()-Number(values.expected))>.005&&!String(values.note||'').trim()){empFlash(button,euT('请填写现金差额原因'));return;}
  const d=euData(),old=d.assignedTasks?.[taskId]||{};const record={...old,values,state:submit?'submitted':'draft',updatedAt:empNow()};if(kind==='cash')record.counted=Math.round(cashTotal()*100)/100;if(submit){record.submittedAt=empNow();d.messages.unshift('任务已提交，等待审核');}d.assignedTasks={...(d.assignedTasks||{}),[taskId]:record};euSave(d);draw();};
  form.addEventListener('submit',ev=>{ev.preventDefault();save(true,ev.submitter);});
  form.querySelector('.eu-task-draft')?.addEventListener('click',ev=>save(false,ev.currentTarget));
@@ -654,27 +719,68 @@ function euHoursModel(d,month){
  return {...model,example,work,leave,total:work+leave};
 }
 const EU_TRAVEL_KEY='kaispanEmployeeTravelExpensesV1';
+/* 9.9：差旅由员工填金额、传票据，老板审核；系统不自己算补贴。
+   提交走 pay.js 的 payTravelSubmit（金额 >0、至少一张票据），状态读 run.travelClaims[员工].state。
+   提交成功后在这条申报上补记目的城市和起止日期（city / startDate / endDate / recordId），
+   8.4 出差打卡只认这些“已提交的申报”（attend.js attTravelTrip）。 */
+function euTravelClaim(d,rec){
+ const e=euEmployee(d);if(!e||!rec.claimMonth||typeof payGet!=='function')return null;
+ const claim=payTravelClaim(payGet(e.store,rec.claimMonth),e.id);
+ return claim&&claim.recordId===rec.id?claim:null;
+}
+function euTravelStatus(d,rec){
+ if(rec.status!=='submitted')return {key:'draft',label:euT('草稿')};
+ const claim=euTravelClaim(d,rec);
+ if(!claim)return {key:'replaced',label:euT('已被新的申报替代')};
+ if(claim.state==='approved')return {key:'approved',label:euTF('老板已批准 €{amount}',{amount:Number(claim.approved||0).toFixed(2)})};
+ if(claim.state==='returned')return {key:'returned',label:euTF('老板退回：{note}',{note:claim.note||''})};
+ return {key:'submitted',label:euT('待老板审核')};
+}
+function euTravelSubmitRecord(d,rec){
+ const e=euEmployee(d);
+ if(!e||typeof payTravelSubmit!=='function')return euT('员工档案还没有关联，不能提交差旅申报。');
+ if(!rec.destination||!String(rec.destination).trim()||!rec.startDate||!rec.endDate)return euT('请填写出发和返回日期、事由、地点及报销金额。');
+ const month=rec.startDate.slice(0,7),old=payTravelClaim(payGet(e.store,month),e.id);
+ if(old&&old.state!=='returned')return euT('这个月已经有一份差旅申报（待审核或已批准），不能重复提交。');
+ const res=payTravelSubmit(e.store,month,e.id,{amount:Number(rec.amount),receipts:rec.receipts||[]});
+ if(!res.ok)return euT(res.message);
+ const run=payGet(e.store,month);
+ run.travelClaims[e.id]={...run.travelClaims[e.id],recordId:rec.id,city:String(rec.destination).trim(),startDate:rec.startDate,endDate:rec.endDate,purpose:rec.purpose||''};
+ paySave(run);
+ rec.status='submitted';rec.claimMonth=month;
+ return '';
+}
 function euTravelExpenses(d){
  const all=empRead(EU_TRAVEL_KEY,{}),records=Array.isArray(all[euSession.key])?all[euSession.key]:[];
- return `<section class="eu-travel-expenses"><div class="eu-travel-title"><div><span class="eu-step">REISEKOSTEN</span><div class="eu-travel-heading-line"><h2>差旅费</h2><details class="eu-contract-tip"><summary aria-label="差旅打卡核对说明">!</summary><div role="note"><strong>差旅与打卡</strong><p>出差记录应与员工的上班打卡日期、时间和地点相互核对。员工填写出差目的城市后，出差期间的打卡地点按该城市限制，并在打卡时提示员工。</p><small>本机演示尚未读取定位或实施城市限制，正式系统需接入定位及核对流程。</small></div></details></div></div><span class="eu-travel-count">${records.length} 条记录</span></div><p>出差后填写行程和费用，附上凭证并提交店长审核。</p>
- <details class="eu-travel-form-fold" ${euSession.travelOpen?'open':''}><summary>＋ 填写差旅费</summary><form id="eu-travel-form" novalidate><div class="eu-cols"><label>出发日期 *<input type="date" name="startDate"></label><label>返回日期 *<input type="date" name="endDate"></label></div><label>出差事由 *<input name="purpose" placeholder="例如：跨店支援、采购"></label><div class="eu-cols"><label>出发地 *<input name="origin" placeholder="城市或地址"></label><label>目的地 *<input name="destination" placeholder="城市或地址"></label></div><div class="eu-cols"><label>交通方式<select name="transport"><option>火车 / 公共交通</option><option>私人汽车</option><option>公司车辆</option><option>飞机</option><option>其他</option></select></label><label>行驶公里数<input type="number" name="kilometers" min="0" step="0.1" placeholder="选填"></label></div><div class="eu-cols"><label>出发时间<input type="time" name="startTime"></label><label>返回时间<input type="time" name="endTime"></label></div><div class="eu-cols"><label>费用类型<select name="category"><option>交通</option><option>住宿</option><option>餐饮</option><option>其他</option></select></label><label>申请报销金额 € *<input type="number" name="amount" min="0.01" step="0.01" placeholder="0.00"></label></div><label>费用说明<textarea name="note" rows="2" placeholder="例如：票价、住宿或其他费用"></textarea></label><label>凭证照片或 PDF<input type="file" name="receipt" accept="image/*,application/pdf"></label><p class="eu-note">凭证可选，最大 1 MB。金额先由员工填写，里程及餐费是否报销由店长核对；此处不自动计算税额或补贴。</p><p class="eu-travel-error" role="status"></p><div class="eu-travel-actions"><button type="submit" name="action" value="draft" class="ghost-btn">保存草稿</button><button type="submit" name="action" value="submit" class="primary-btn">提交审核</button></div></form></details>
- <div class="eu-travel-records"><h3>差旅费记录</h3>${records.length?records.map(r=>`<article class="eu-travel-record"><div class="eu-travel-record-head"><strong>${empEsc(r.purpose||'未填写事由')}</strong><span class="eu-travel-status ${r.status==='submitted'?'is-submitted':''}">${r.status==='submitted'?'待审核 · 演示':'草稿'}</span></div><p>${empEsc(r.startDate||'未填日期')}${r.endDate&&r.endDate!==r.startDate?' 至 '+empEsc(r.endDate):''} · ${empEsc(r.origin||'出发地')} → ${empEsc(r.destination||'目的地')}</p><p>${empEsc(r.category||'费用')} · €${(Number(r.amount)||0).toFixed(2)}${r.kilometers?' · '+empEsc(r.kilometers)+' km':''}</p>${r.receiptData?`<a href="${empEsc(r.receiptData)}" download="${empEsc(r.receiptName)}">查看凭证</a>`:''}${r.status==='draft'?`<button type="button" class="eu-travel-delete" data-id="${empEsc(r.id)}">删除草稿</button>`:''}</article>`).join(''):'<p class="eu-travel-empty">暂无差旅费记录</p>'}</div><p class="eu-note">本机演示：记录与凭证保存在此浏览器；提交只模拟待审核，不会发送通知或自动进入工资。</p></section>`;
+ return `<section class="eu-travel-expenses"><div class="eu-travel-title"><div><span class="eu-step">REISEKOSTEN</span><div class="eu-travel-heading-line"><h2>差旅费</h2><details class="eu-contract-tip"><summary aria-label="差旅打卡核对说明">!</summary><div role="note"><strong>差旅与打卡</strong><p>出差记录应与员工的上班打卡日期、时间和地点相互核对。差旅申报提交后，出差期间的打卡定位按申报的目的城市核对，并在打卡卡片上提示员工；没有申报的日子仍按门店定位。</p><small>本机演示用手填城市代替手机定位，正式系统需接入定位及核对流程。</small></div></details></div></div><span class="eu-travel-count">${records.length} 条记录</span></div><p>出差后填写行程和费用，附上票据并提交老板审核。</p>
+ ${euEmployee(d)?.uiDemo?`<p class="eu-note eu-travel-demo-note">${euT('这是未入职的演示员工，提交后不会进老板工资表。要看老板审核差旅，请从员工档案打开某位在职员工的“查看员工端 UI”。')}</p>`:''}<details class="eu-travel-form-fold" ${euSession.travelOpen?'open':''}><summary>＋ 填写差旅费</summary><form id="eu-travel-form" novalidate><div class="eu-cols"><label>出发日期 *<input type="date" name="startDate"></label><label>返回日期 *<input type="date" name="endDate"></label></div><label>出差事由 *<input name="purpose" placeholder="例如：跨店支援、采购"></label><div class="eu-cols"><label>出发地 *<input name="origin" placeholder="城市或地址"></label><label>目的城市 *<input name="destination" placeholder="例如：Hamburg"></label></div><div class="eu-cols"><label>交通方式<select name="transport"><option>火车 / 公共交通</option><option>私人汽车</option><option>公司车辆</option><option>飞机</option><option>其他</option></select></label><label>行驶公里数<input type="number" name="kilometers" min="0" step="0.1" placeholder="选填"></label></div><div class="eu-cols"><label>出发时间<input type="time" name="startTime"></label><label>返回时间<input type="time" name="endTime"></label></div><div class="eu-cols"><label>费用类型<select name="category"><option>交通</option><option>住宿</option><option>餐饮</option><option>其他</option></select></label><label>申请报销金额 € *<input type="number" name="amount" min="0.01" step="0.01" placeholder="0.00"></label></div><label>费用说明<textarea name="note" rows="2" placeholder="例如：票价、住宿或其他费用"></textarea></label><label>票据（照片或 PDF，提交时至少一张） *<input type="file" name="receipt" accept="image/*,application/pdf" multiple></label><p class="eu-note">每张票据最大 1 MB，最多 3 张。金额先由员工填写，里程及餐费是否报销由老板核对；此处不自动计算税额或补贴。</p><p class="eu-travel-error" role="status"></p><div class="eu-travel-actions"><button type="submit" name="action" value="draft" class="ghost-btn">保存草稿</button><button type="submit" name="action" value="submit" class="primary-btn">提交老板审核</button></div></form></details>
+ <div class="eu-travel-records"><h3>差旅费记录</h3>${records.length?records.map(r=>{const st=euTravelStatus(d,r);return `<article class="eu-travel-record"><div class="eu-travel-record-head"><strong>${empEsc(r.purpose||'未填写事由')}</strong><span class="eu-travel-status is-${st.key}">${empEsc(st.label)}</span></div><p>${empEsc(r.startDate||'未填日期')}${r.endDate&&r.endDate!==r.startDate?' 至 '+empEsc(r.endDate):''} · ${empEsc(r.origin||'出发地')} → ${empEsc(r.destination||'目的地')}</p><p>${empEsc(r.category||'费用')} · €${(Number(r.amount)||0).toFixed(2)}${r.kilometers?' · '+empEsc(r.kilometers)+' km':''}</p>${(r.receiptFiles||[]).map(f=>`<a href="${empEsc(f.data)}" download="${empEsc(f.name)}">查看票据 ${empEsc(f.name)}</a>`).join(' ')}${st.key==='draft'?`<button type="button" class="eu-travel-delete" data-id="${empEsc(r.id)}">删除草稿</button><button type="button" class="ghost-btn eu-travel-send" data-id="${empEsc(r.id)}">提交老板审核</button>`:''}${st.key==='returned'?`<button type="button" class="ghost-btn eu-travel-send" data-id="${empEsc(r.id)}">重新提交</button>`:''}</article>`;}).join(''):'<p class="eu-travel-empty">暂无差旅费记录</p>'}</div><p class="eu-note">本机演示：记录与票据保存在此浏览器；提交后进入老板审核，只有老板批准的金额才进入工资，系统不会自动计算。</p></section>`;
 }
 function euBindTravelExpenses(){
- const form=document.querySelector('#eu-travel-form');if(!form)return;
+ const form=document.querySelector('#eu-travel-form');
  const key=EU_TRAVEL_KEY, identity=euSession.key;
  const write=records=>{const all=empRead(key,{});all[identity]=records;localStorage.setItem(key,JSON.stringify(all));};
- form.addEventListener('submit',async ev=>{ev.preventDefault();const f=new FormData(form),action=ev.submitter?.value||'submit',error=form.querySelector('.eu-travel-error');const values=Object.fromEntries([...f.entries()].filter(([k])=>k!=='receipt'));const file=form.querySelector('[name=receipt]').files[0];
-  if(action==='submit'&&(!values.startDate||!values.endDate||!values.purpose.trim()||!values.origin.trim()||!values.destination.trim()||!(Number(values.amount)>0))){error.textContent='请填写出发和返回日期、事由、地点及报销金额。';return;}
-  if(values.startDate&&values.endDate&&values.endDate<values.startDate){error.textContent='返回日期不能早于出发日期。';return;}
-  if(file&&(!file.type.startsWith('image/')&&file.type!=='application/pdf')){error.textContent='凭证请选择照片或 PDF。';return;}
-  if(file&&file.size>1024*1024){error.textContent='凭证不能超过 1 MB。';return;}
-  let receiptData='';if(file){try{receiptData=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});}catch{error.textContent='凭证读取失败，请重试。';return;}}
-  const records=empRead(key,{})[identity]||[];records.unshift({...values,id:Date.now().toString(36)+Math.random().toString(36).slice(2),status:action==='submit'?'submitted':'draft',receiptName:file?.name||'',receiptData,createdAt:empNow()});
-  try{write(records);}catch{error.textContent='本机空间不足，未保存。请缩小凭证后重试。';return;}
-  euSession.travelOpen=false;app();document.querySelector('.eu-travel-expenses')?.scrollIntoView({block:'start'});
+ const readFile=file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});
+ const finish=()=>{euSession.travelOpen=false;app();document.querySelector('.eu-travel-expenses')?.scrollIntoView({block:'start'});};
+ form?.addEventListener('submit',async ev=>{ev.preventDefault();const f=new FormData(form),action=ev.submitter?.value||'submit',error=form.querySelector('.eu-travel-error');const values=Object.fromEntries([...f.entries()].filter(([k])=>k!=='receipt'));const files=[...form.querySelector('[name=receipt]').files];
+  if(action==='submit'&&(!values.startDate||!values.endDate||!values.purpose.trim()||!values.origin.trim()||!values.destination.trim()||!(Number(values.amount)>0))){error.textContent=euT('请填写出发和返回日期、事由、地点及报销金额。');return;}
+  if(action==='submit'&&!files.length){error.textContent=euT('请上传票据');return;}
+  if(values.startDate&&values.endDate&&values.endDate<values.startDate){error.textContent=euT('返回日期不能早于出发日期。');return;}
+  if(files.length>3){error.textContent=euT('票据最多 3 张。');return;}
+  if(files.some(file=>!file.type.startsWith('image/')&&file.type!=='application/pdf')){error.textContent=euT('凭证请选择照片或 PDF。');return;}
+  if(files.some(file=>file.size>1024*1024)){error.textContent=euT('凭证不能超过 1 MB。');return;}
+  let receiptFiles=[];try{receiptFiles=await Promise.all(files.map(async file=>({name:file.name,data:await readFile(file)})));}catch{error.textContent=euT('凭证读取失败，请重试。');return;}
+  const rec={...values,id:Date.now().toString(36)+Math.random().toString(36).slice(2),status:'draft',receipts:files.map(file=>file.name),receiptFiles,createdAt:empNow()};
+  if(action==='submit'){const fail=euTravelSubmitRecord(euData(),rec);if(fail){error.textContent=fail;return;}}
+  const records=empRead(key,{})[identity]||[];records.unshift(rec);
+  try{write(records);}catch{error.textContent=euT('本机空间不足，未保存。请缩小凭证后重试。');return;}
+  finish();
  });
- document.querySelectorAll('.eu-travel-delete').forEach(button=>button.addEventListener('click',()=>{const records=empRead(key,{})[identity]||[];try{write(records.filter(r=>!(r.id===button.dataset.id&&r.status==='draft')));app();document.querySelector('.eu-travel-expenses')?.scrollIntoView({block:'start'});}catch{form.querySelector('.eu-travel-error').textContent='删除未保存，请重试。';}}));
+ document.querySelectorAll('.eu-travel-send').forEach(button=>button.addEventListener('click',()=>{const records=empRead(key,{})[identity]||[],rec=records.find(r=>r.id===button.dataset.id);if(!rec)return;
+  if(!(rec.receipts||[]).length){empFlash(button,euT('请上传票据'));return;}
+  const fail=euTravelSubmitRecord(euData(),rec);if(fail){empFlash(button,fail);return;}
+  try{write(records);finish();}catch{empFlash(button,euT('本机空间不足，未保存。请缩小凭证后重试。'));}}));
+ document.querySelectorAll('.eu-travel-delete').forEach(button=>button.addEventListener('click',()=>{const records=empRead(key,{})[identity]||[];try{write(records.filter(r=>!(r.id===button.dataset.id&&r.status==='draft')));app();document.querySelector('.eu-travel-expenses')?.scrollIntoView({block:'start'});}catch{empFlash(button,euT('删除未保存，请重试。'));}}));
 }
 function euMonthlyHours(d){
  const month=euSession.hoursMonth||empToday().slice(0,7),model=euHoursModel(d,month),result=d.monthConfirmations?.[month]||(month<empToday().slice(0,7)?{state:'confirmed',demo:true}:null),confirmed=result?.state==='confirmed',offset=(new Date(month+'-01T12:00:00').getDay()+6)%7;
@@ -1013,7 +1119,7 @@ function euBind(){
  document.querySelectorAll('.eu-delete').forEach(b=>b.onclick=()=>{if(!b.dataset.doc)return;const d=euData();d.docHistory=[{key:b.dataset.doc,file:d.docs[b.dataset.doc],at:empNow()},...(d.docHistory||[])];delete d.docs[b.dataset.doc];d.materialSubmitted=null;euSave(d);rerender();});
  /* 提交只校验第一层（HR-ONB-17/26） */
  document.querySelector('.eu-material-submit')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation');if(euInviteExpiredForSubmit(d)){if(box){box.textContent=euT('邀请链接已过期，请联系店长重新发送邀请。');box.scrollIntoView({block:'center'});}return;}if(!euNationalityClass(d)){if(box){box.textContent=euT('请先回答国籍类别和是否学生。');box.scrollIntoView({block:'center'});}return;}const at=empNow();d.materialSubmitted=at;d.submitActionAt=at;d.submitted=euSubmissionSnapshot(d);d.returnedAt=null;d.messages.unshift('资料已提交，等待审核');euSave(d);euSession.step='materials';rerender();});
- document.querySelector('.eu-company-confirm')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),mode=euFillMode(d),missing=mode==='veteran'?[]:euLayer1Missing(d);if(missing.length){if(box){box.textContent=euTF('还缺：{items}',{items:missing.map(x=>euT(x)).join('、')});box.scrollIntoView({block:'center'});}return;}if(mode==='veteran')d.veteranConfirmedAt=empNow();else{if(euDemo()==='company')d.demoCompanyConfirmedAt=empNow();else d.confirmedCompanyProfileAt=empNow();}d.messages.unshift(mode==='veteran'?'资料已确认，员工端已开通':'资料已确认，等待公司发送合同');euSave(d,{archive:mode!=='company'||!euDemo()});euSession.step='materials';euSession.tab='tasks';rerender();});
+ document.querySelector('.eu-company-confirm')?.addEventListener('click',()=>{const d=euData(),mode=euFillMode(d),missing=mode==='veteran'?[]:euLayer1Missing(d);if(mode==='veteran')d.veteranConfirmedAt=empNow();else{if(euDemo()==='company')d.demoCompanyConfirmedAt=empNow();else d.confirmedCompanyProfileAt=empNow();}const hint=missing.length?euTF('（第一层还缺，仅提示：{items}）',{items:missing.map(x=>euT(x)).join('、')}):'';d.messages.unshift((mode==='veteran'?'资料已确认，员工端已开通':'资料已确认，等待公司发送合同')+hint);euSave(d,{archive:mode!=='company'||!euDemo()});if(euInvite(d).pendingConfirm){d.messages.unshift('第二层材料没交齐：已确认，等老板特殊审批后才生效');euSave(d);}euSession.step='materials';euSession.tab='tasks';rerender();});
  document.querySelector('.eu-withdraw')?.addEventListener('click',()=>{const d=euData();d.materialSubmitted=null;d.submitActionAt=null;d.withdrawnAt=empNow();d.messages.unshift('已撤回提交，可以继续修改');euSave(d);euSession.step='materials';rerender();});
  /* 合同与问卷：两份一起下载、签字、上传；被退回只重传那一份（HR-ONB-36/38） */
  document.querySelector('.eu-contract-signed-submit')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),need=[];['contract','questionnaire'].forEach(key=>{const status=euContractStatus(d,key);if(status.state==='approved')return;const doc=d.docs?.[key];/* 提交前再判一次：必须是当前发送的文件版本，旧发送/旧退回件都不算（HR-ONB-37/53） */if(status.stale||!doc||!euContractFileCurrent(d,key,doc)){need.push(key);return;}if(status.state==='returned'&&!euContractFreshUpload(d,key,status))need.push(key);});if(need.length){if(box){box.textContent=euTF('请先上传：{items}',{items:need.map(k=>euT(k==='contract'?'已签署劳动合同':'已填写并签署的个人调查问卷')).join('、')});box.scrollIntoView({block:'center'});}return;}d.contractSignedSubmittedAt=empNow();d.messages.unshift('签署文件已提交，等待店长核对');euSave(d);euSyncDocs(d,['contract','questionnaire']);rerender();});
@@ -1066,6 +1172,22 @@ function euBind(){
   d.messages.unshift('补交材料已交回，等待店长核对');euSave(d);euPublishPortal(d,{supplementReturnedAt:d.supplementReturnedAt,supplementSubmission:d.supplementSubmission});rerender();
  });
  document.querySelector('.eu-demo-supplement')?.addEventListener('click',()=>{const d=euData();d.supplementRequest={state:'open',at:empNow(),note:'演示：请补交护照照片和健康证首次证明',items:[{key:'passport',label:'护照 / 身份证'},{key:'hygiene',label:'食品卫生指导证明（健康证）'}]};d.supplementReturnedAt=null;d.supplementSubmission=null;euSave(d);rerender();});
+ /* 今日页打卡（R4 接回）。当天有已提交的差旅申报时按申报城市核对（8.4），否则照旧（演示不读取定位）。 */
+ document.querySelector('.eu-punch')?.addEventListener('click',()=>{const d=euData(),e=euEmployee(d),now=new Date(),time=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`,box=document.querySelector('.eu-punch-feedback'),trip=euTodayTrip(d);
+  let city='';
+  if(trip){city=(document.querySelector('.eu-punch-city')?.value||'').trim();const judge=attTripGeoJudge(e.store,e.id,empToday(),{city});
+   if(judge.ok!==true){if(box)box.textContent=judge.why==='wrongcity'?euTF('今天出差：定位应在 {city}，你填的是 {given}。',{city:trip.city,given:city}):euTF('今天出差：请先填写当前所在城市（应为 {city}）。',{city:trip.city});return;}}
+  if(!d.punch){d.punch={date:empToday(),time,at:Date.now(),...(trip?{city:trip.city}:{})};d.messages.unshift('上班打卡成功 '+time);}else{const hours=Math.max(0,(Date.now()-d.punch.at)/3600000);d.hours.unshift({date:d.punch.date,start:d.punch.time,end:time,hours:Math.round(hours*100)/100,source:'punch'});d.punch=null;d.messages.unshift('下班打卡成功 '+time);}euSave(d);rerender();});
+ const bind=(id,fn)=>document.querySelector(id)?.addEventListener('submit',ev=>{ev.preventDefault();fn(new FormData(ev.currentTarget),ev.submitter);});
+ euBindWeeklyAvailability();
+ euBindTravelExpenses();
+ euBindSwap();
+ document.querySelector('.eu-hours-month')?.addEventListener('change',ev=>{if(/^\d{4}-\d{2}$/.test(ev.target.value)){euSession.hoursMonth=ev.target.value;app();}});
+ document.querySelector('.eu-download-payslip')?.addEventListener('click',()=>euDownloadPayslip(euData(),euSession.hoursMonth||empToday().slice(0,7)));
+ document.querySelector('.eu-month-total')?.addEventListener('click',()=>document.querySelector('#eu-hours-calendar').showModal());
+ document.querySelector('.eu-calendar-close')?.addEventListener('click',()=>document.querySelector('#eu-hours-calendar').close());
+ document.querySelector('.eu-confirm-hours')?.addEventListener('click',()=>{const d=euData(),month=euSession.hoursMonth||empToday().slice(0,7);d.monthConfirmations={...d.monthConfirmations,[month]:{state:'confirmed',at:empNow()}};d.confirmation='本人已确认工时 · '+month;euSave(d);rerender();});
+ bind('#eu-dispute',f=>{const d=euData(),month=euSession.hoursMonth||empToday().slice(0,7),message=String(f.get('message')||'').trim();if(!message)return;d.monthConfirmations={...d.monthConfirmations,[month]:{state:'disputed',message,at:empNow()}};d.confirmation='未确认 · 已提出异议：'+message;d.messages.unshift(d.confirmation);euSave(d);rerender();});
 }
 
 function euAvailabilityDeadline(d){const store=d.invitation?.store||d.contractSummary?.store||'Martin Biergarten',deadline=empRead('kaispanScheduleDeadlinesV1',{})[store]?.availability;return deadline?`<p class="eu-note">报班截止：${empEsc(deadline.replace('T',' '))}</p>`:'';}

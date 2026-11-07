@@ -1192,6 +1192,154 @@ function schShell(active, inner) {
     ${inner}`;
 }
 
+/* ============================================================ 换班申请 ====
+   答复 8.28（推荐）：员工自己找好接班人，店长批准后生效。
+   最小演示：员工端排班页某个班次「申请换班」→ 选接班同事 → 提交；
+   这里（老板 / 店长的排班页）出现待批卡，批准后班表上这个班换人，驳回要写理由。
+   不改排班计算：接班人只过一遍现有的硬拦校验（证件过期、未入职等），警告级的不挡。
+   批准后班表保持已发布 —— 这是店长点头的调整，不该让整张表退回草稿、员工看到空表。
+   数据：localStorage 键 kaispanShiftSwapsV1，数组；
+   { id, store, fromId, toId, date, start, end, shiftId, demo, state: pending|approved|rejected,
+     note, at, decidedAt, decidedBy }。 */
+const SCH_SWAP_KEY = "kaispanShiftSwapsV1";
+
+function schSwapAll() {
+  const list = empRead(SCH_SWAP_KEY, null);
+  return Array.isArray(list) ? list : [];
+}
+
+function schSwapSave(list) {
+  empWrite(SCH_SWAP_KEY, list);
+  return list;
+}
+
+function schSwapOpen(store) {
+  return schSwapAll().filter(r => r.state === "pending" && (!store || r.store === store));
+}
+
+function schSwapOf(empId) {
+  return schSwapAll().filter(r => r.fromId === empId || r.toId === empId);
+}
+
+/* 员工自己名下、今天起 days 天内的真实班次（只看班表上排过的周）。 */
+function schSwapShifts(store, empId, from, days) {
+  const start = from || empToday();
+  const last = empShiftDate(start, (days || 14) - 1);
+  const out = [];
+  const weeks = new Set();
+  for (let i = 0; i < (days || 14); i += 1) weeks.add(schWeekOf(empShiftDate(start, i)));
+  weeks.forEach(week => {
+    if (!schRosterExists(store, week)) return;
+    schRoster(store, week).shifts
+      .filter(x => x.empId === empId && x.date >= start && x.date <= last)
+      .forEach(x => out.push({ id: x.id, date: x.date, start: x.start, end: x.end }));
+  });
+  return out.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+}
+
+/* 可以接这个班的同事：同店在岗、那天没有别的班、那天已在职。 */
+function schSwapColleagues(store, fromId, date) {
+  const roster = schRoster(store, schWeekOf(date));
+  return empStaff(store).filter(e => e.id !== fromId && !schEmployedIssue(e, date)
+    && !schShiftsOf(roster, e.id, date).length);
+}
+
+function schSwapRequest(store, fromId, shift, toId, note) {
+  const from = empById(fromId);
+  const to = empById(toId);
+  if (!from || !shift || !shift.date || !shift.start || !shift.end) return { ok: false, message: empT("找不到这个班次", "Schicht nicht gefunden") };
+  if (shift.date < empToday()) return { ok: false, message: empT("过去的班次不能换", "Vergangene Schichten können nicht getauscht werden") };
+  if (!to || !schSwapColleagues(store, fromId, shift.date).some(e => e.id === toId)) {
+    return { ok: false, message: empT("请选一位这天有空的同事做接班人", "Bitte eine Kollegin / einen Kollegen wählen, der an dem Tag frei ist") };
+  }
+  const demo = !shift.id;
+  if (!demo && !schRoster(store, schWeekOf(shift.date)).shifts.some(x => x.id === shift.id && x.empId === fromId)) {
+    return { ok: false, message: empT("班表上已经没有这个班次", "Die Schicht steht nicht mehr im Dienstplan") };
+  }
+  const dup = schSwapAll().some(r => r.state === "pending" && r.fromId === fromId && r.date === shift.date && r.start === shift.start);
+  if (dup) return { ok: false, message: empT("这个班已经有一张待批的换班申请", "Für diese Schicht liegt schon ein Tauschantrag vor") };
+  const req = { id: `swap${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, store, fromId, toId,
+                date: shift.date, start: shift.start, end: shift.end, shiftId: shift.id || null, demo,
+                state: "pending", note: String(note || "").trim(), at: empNow(), decidedAt: null, decidedBy: "" };
+  schSwapSave([req, ...schSwapAll()]);
+  return { ok: true, req };
+}
+
+function schSwapDecide(id, decision, note) {
+  const list = schSwapAll();
+  const req = list.find(r => r.id === id);
+  if (!req || req.state !== "pending") return { ok: false, message: empT("这张换班申请已处理", "Antrag ist bereits bearbeitet") };
+  const by = typeof hrActorLabel === "function" ? hrActorLabel() : "店长";
+  const reason = String(note || "").trim();
+  if (decision !== "approved") {
+    if (!reason) return { ok: false, message: empT("驳回要写理由", "Bitte eine Begründung angeben") };
+    schSwapSave(list.map(r => (r.id === id ? { ...r, state: "rejected", note: reason, decidedAt: empNow(), decidedBy: by } : r)));
+    return { ok: true };
+  }
+  const roster = schRoster(req.store, schWeekOf(req.date));
+  const target = roster.shifts.find(x => (req.shiftId ? x.id === req.shiftId : x.empId === req.fromId && x.date === req.date && x.start === req.start && x.end === req.end));
+  if (!req.demo && (!target || target.empId !== req.fromId)) {
+    return { ok: false, message: empT("班表上已经没有这个班次，请驳回", "Die Schicht steht nicht mehr im Dienstplan — bitte ablehnen") };
+  }
+  const to = empById(req.toId);
+  if (!to) return { ok: false, message: empT("接班人档案不存在", "Person nicht gefunden") };
+  const probe = { id: target ? target.id : "swap-tmp", empId: to.id, date: req.date, role: to.role, start: req.start, end: req.end, src: "swap" };
+  const base = JSON.parse(JSON.stringify(roster));
+  if (target) base.shifts = base.shifts.filter(x => x.id !== target.id);
+  const blocked = schTryAdd(base, probe).find(i => i.level === "block");
+  if (blocked) return { ok: false, message: empT("接班人排不进去：", "Nicht einplanbar: ") + empText(blocked.detail) };
+  const next = JSON.parse(JSON.stringify(roster));
+  if (target) {
+    const shift = next.shifts.find(x => x.id === target.id);
+    shift.empId = to.id;
+    shift.role = to.role;
+    shift.swappedFrom = req.fromId;
+  } else {
+    next.shifts.push({ ...probe, id: schShiftId(next), swappedFrom: req.fromId });
+  }
+  next.rev = (next.rev || 0) + 1;
+  next.log = next.log || [];
+  next.log.unshift({ at: empNow().slice(0, 16), what: {
+    zh: `换班：${empById(req.fromId)?.name || req.fromId} → ${to.name}（${req.date} ${req.start}–${req.end}，${by}批准）`,
+    de: `Schichttausch: ${empById(req.fromId)?.name || req.fromId} → ${to.name} (${req.date} ${req.start}–${req.end}, ${by})` }, note: reason });
+  schSaveRoster(next);
+  schSwapSave(list.map(r => (r.id === id ? { ...r, state: "approved", note: reason || r.note, decidedAt: empNow(), decidedBy: by } : r)));
+  return { ok: true };
+}
+
+function schSwapCard(store) {
+  const open = schSwapOpen(store);
+  const done = schSwapAll().filter(r => r.store === store && r.state !== "pending").slice(0, 3);
+  if (!open.length && !done.length) return "";
+  const name = id => empEsc(empById(id)?.name || id);
+  return `<section class="card sch-swap-card">
+    <div class="section-title"><div><h2>${empT("换班申请", "Tauschanträge")}</h2>
+      <p>${empT("员工自己找好接班人，你批准后班表上才会换人。", "Die Mitarbeitenden suchen selbst Ersatz; erst mit Ihrer Freigabe wird der Plan geändert.")}</p></div>
+      <span class="wl-count${open.length ? "" : " is-plain"}">${open.length ? empT(`${open.length} 张待批`, `${open.length} offen`) : empT("没有待批", "Nichts offen")}</span></div>
+    ${open.map(r => `<article class="sch-swap-row" data-swap="${empEsc(r.id)}">
+      <div><strong>${name(r.fromId)} → ${name(r.toId)}</strong>
+        <small>${empEsc(r.date)} · ${empEsc(r.start)}–${empEsc(r.end)}${r.note ? ` · ${empEsc(r.note)}` : ""}</small></div>
+      <div class="sch-swap-acts">
+        <input class="sch-swap-note" placeholder="${empT("驳回理由（驳回时必填）", "Begründung (bei Ablehnung Pflicht)")}">
+        <button class="ghost-btn sch-swap-reject" data-id="${empEsc(r.id)}">${empT("驳回", "Ablehnen")}</button>
+        <button class="primary-btn sch-swap-approve" data-id="${empEsc(r.id)}">${empT("批准", "Genehmigen")}</button>
+      </div></article>`).join("")}
+    ${done.map(r => `<p class="sch-swap-done"><span class="pill ${r.state === "approved" ? "green" : "orange"}">${
+      r.state === "approved" ? empT("已批准", "Genehmigt") : empT("已驳回", "Abgelehnt")}</span> ${name(r.fromId)} → ${name(r.toId)} · ${
+      empEsc(r.date)} ${empEsc(r.start)}–${empEsc(r.end)}${r.state === "rejected" && r.note ? ` · ${empEsc(r.note)}` : ""}</p>`).join("")}
+  </section>`;
+}
+
+function schSwapBind() {
+  document.querySelectorAll(".sch-swap-approve, .sch-swap-reject").forEach(b => b.addEventListener("click", () => {
+    const row = b.closest(".sch-swap-row");
+    const approve = b.classList.contains("sch-swap-approve");
+    const res = schSwapDecide(b.dataset.id, approve ? "approved" : "rejected", row?.querySelector(".sch-swap-note")?.value || "");
+    if (!res.ok) { empFlash(b, res.message); return; }
+    app();
+  }));
+}
+
 function employeeSchedulePage() {
   const store = schStore();
   const view = schView();
@@ -1242,6 +1390,8 @@ function employeeSchedulePage() {
     </section>
 
     ${schPublishPanel(roster, sum)}
+
+    ${schSwapCard(store)}
 
     <section class="card sch-grid-card">
       <div class="section-title">
@@ -1633,6 +1783,7 @@ function schDownload(name, text, type) {
 function schBindAll() {
   const store = schStore();
   const week = schWeekParam();
+  schSwapBind();
 
   /* 从下面的冲突卡点进来时，要编辑的格子在屏幕上方看不见 —— 跳过去。
      本来就在视野里的（在格子里点开的）不动，免得页面无缘无故弹一下。 */

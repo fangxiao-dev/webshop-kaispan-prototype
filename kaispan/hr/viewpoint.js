@@ -32,10 +32,11 @@ function hrIsOwner() {
 }
 
 /* 答复 ANS-4（覆盖 HR-ACCESS-05/06）：店长默认可以 ①发邀请 ②审核入职资料（含看敏感资料）⑧改证件提醒天数；
-   其余默认都不可以，老板可在权限页对单个店长单独授予：导出名单（普通列）、发合同、提案改工资/合同条件、提案办离职。
-   导出含敏感列的名单永远只有老板。 */
+   其余默认都不可以，老板可在权限页对单个店长单独授予：发合同、提案改工资/合同条件、提案办离职、导出敏感列。
+   AM-13：“导出名单（不含敏感列）”是独立开关，店长默认开启，老板可关；“导出敏感列”默认关，老板可单独授给店长，
+   且要同时有“导出名单”和“查看敏感资料”。 */
 function hrMgrPerm() {
-  return { invite: true, sensitive: true, docWarn: true, export: false, finance: false, sendContract: false, editTerms: false, offboard: false, ...hrViewRead(HR_MGR_PERM_KEY, {}) };
+  return { invite: true, sensitive: true, docWarn: true, export: true, exportSensitive: false, finance: false, sendContract: false, editTerms: false, offboard: false, ...hrViewRead(HR_MGR_PERM_KEY, {}) };
 }
 
 function hrSetMgrPerm(patch) {
@@ -47,8 +48,8 @@ const HR_CAN_RULES = {
   invite: { owner: true, manager: () => hrMgrPerm().invite, reason: "老板已对你关闭「发邀请」权限；店长默认可以发邀请（答复 ANS-4）" },
   sensitive: { owner: true, manager: () => hrMgrPerm().sensitive, reason: "需要「查看敏感资料」权限，老板已对你关闭（HR-ACCESS-55）" },
   docWarn: { owner: true, manager: () => hrMgrPerm().docWarn, reason: "老板已对你关闭「改证件提醒天数」权限（全公司一套，改动会留审计）" },
-  export: { owner: true, manager: () => hrMgrPerm().export, reason: "导出名单是单独的权限，店长默认没有，需要老板在权限页给你打开（答复 B75）" },
-  exportSensitive: { owner: true, manager: () => false, reason: "含出生日期、税号、社保号、IBAN 的名单只有老板能导出（答复 ANS-4 ⑦）" },
+  export: { owner: true, manager: () => hrMgrPerm().export, reason: "老板已对你关闭「导出名单」权限；店长默认可以导出不含敏感列的名单（答复 B75、AM-13）" },
+  exportSensitive: { owner: true, manager: () => { const perm = hrMgrPerm(); return !!(perm.exportSensitive && perm.export && perm.sensitive); }, reason: "含出生日期、税号、社保号、IBAN 的名单默认只有老板能导出，需要老板单独授予「导出敏感列」（答复 ANS-4 ⑦、AM-13）" },
   finance: { owner: true, manager: () => hrMgrPerm().finance, reason: "实发工资、工资单和银行账号只有老板和老板单独授权的财务人员能看、能做；店长默认没有（答复 R6-29）" },
   sendContract: { owner: true, manager: () => hrMgrPerm().sendContract, reason: "发合同默认只有老板，店长需要老板单独授予（答复 ANS-4 ③）" },
   editTerms: { owner: true, manager: () => hrMgrPerm().editTerms, reason: "改工资和合同条件默认只有老板；老板单独授予后，店长的改动仍是提案，需老板确认（答复 ANS-4 ⑤）" },
@@ -85,13 +86,14 @@ function hrViewSwitch() {
       <label><input type="checkbox" data-hr-perm="invite" ${perm.invite ? "checked" : ""}> 发邀请</label>
       <label><input type="checkbox" data-hr-perm="sensitive" ${perm.sensitive ? "checked" : ""}> 审核入职资料 / 查看敏感资料</label>
       <label><input type="checkbox" data-hr-perm="docWarn" ${perm.docWarn ? "checked" : ""}> 改证件提醒天数（留审计）</label>
-      <b>默认关闭 · 老板单独授予</b>
       <label><input type="checkbox" data-hr-perm="export" ${perm.export ? "checked" : ""}> 导出名单（不含敏感列）</label>
+      <b>默认关闭 · 老板单独授予</b>
+      <label><input type="checkbox" data-hr-perm="exportSensitive" ${perm.exportSensitive ? "checked" : ""}> 导出敏感列（出生日期、税号、社保号、IBAN）</label>
       <label><input type="checkbox" data-hr-perm="finance" ${perm.finance ? "checked" : ""}> 工资财务（实发工资、工资单、银行账号）</label>
       <label><input type="checkbox" data-hr-perm="sendContract" ${perm.sendContract ? "checked" : ""}> 发合同</label>
       <label><input type="checkbox" data-hr-perm="editTerms" ${perm.editTerms ? "checked" : ""}> 提案改工资 / 合同条件</label>
       <label><input type="checkbox" data-hr-perm="offboard" ${perm.offboard ? "checked" : ""}> 提案办离职</label>
-      <small>含敏感列的名单导出、批暂缺（一期不做）永远只有老板。演示用：正式版在「成员与权限」页由老板设置。</small></div></details>` : ""}
+      <small>特殊审批永远只有老板，不能下放。演示用：正式版在「成员与权限」页由老板设置。</small></div></details>` : ""}
   </div>`;
 }
 

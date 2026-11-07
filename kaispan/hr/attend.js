@@ -112,6 +112,60 @@ function attGeoJudge(store, pos) {
   return { ...base, dist, ok: dist <= attRadius(), why: null };
 }
 
+/* 答复 8.4：出差时打卡定位按 Reisekosten 申报的目的城市核对。
+   只认差旅申报（pay.js 的 run.travelClaims，状态 submitted / approved、带 city 和起止日期）。
+   员工随手填的行程、被退回的申报都不算许可；没有申报的日子仍按门店坐标。 */
+const ATT_CITY_SITES = {
+  berlin: { lat: 52.52, lng: 13.405 }, hamburg: { lat: 53.5511, lng: 9.9937 },
+  munchen: { lat: 48.1374, lng: 11.5755 }, koln: { lat: 50.9375, lng: 6.9603 },
+  frankfurt: { lat: 50.1109, lng: 8.6821 }, stuttgart: { lat: 48.7758, lng: 9.1829 },
+  dusseldorf: { lat: 51.2277, lng: 6.7735 }, leipzig: { lat: 51.3397, lng: 12.3731 },
+  nurnberg: { lat: 49.4521, lng: 11.0767 }
+};
+const ATT_CITY_ALIAS = {
+  muenchen: "munchen", munich: "munchen", "慕尼黑": "munchen", koeln: "koln", cologne: "koln", "科隆": "koln",
+  nuernberg: "nurnberg", nuremberg: "nurnberg", "纽伦堡": "nurnberg", duesseldorf: "dusseldorf", "杜塞尔多夫": "dusseldorf",
+  "柏林": "berlin", "汉堡": "hamburg", "法兰克福": "frankfurt", "斯图加特": "stuttgart", "莱比锡": "leipzig"
+};
+
+function attCityKey(name) {
+  const plain = String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ß/g, "ss").trim().toLowerCase();
+  return ATT_CITY_ALIAS[plain] || plain;
+}
+
+function attCityAt(pos) {
+  let best = "";
+  let bestDist = 30000;
+  Object.entries(ATT_CITY_SITES).forEach(([key, site]) => {
+    const dist = attDistance(site, pos);
+    if (dist != null && dist <= bestDist) { best = key; bestDist = dist; }
+  });
+  return best;
+}
+
+function attTravelTrip(store, empId, date) {
+  if (typeof payAll !== "function" || !empId || !date) return null;
+  const claim = Object.values(payAll() || {})
+    .filter(run => run && run.store === store)
+    .map(run => run.travelClaims && run.travelClaims[empId])
+    .find(c => c && ["submitted", "approved"].includes(c.state) && c.city && c.startDate && c.endDate
+      && c.startDate <= date && date <= c.endDate);
+  return claim ? { city: claim.city, startDate: claim.startDate, endDate: claim.endDate, state: claim.state } : null;
+}
+
+/* 当天没有已申报的行程返回 null（调用方回到门店定位）；有就按城市判：
+   pos.city 与申报城市同名，或 pos 坐标落在该城市 30 km 内才算 ok:true。 */
+function attTripGeoJudge(store, empId, date, pos) {
+  const trip = attTravelTrip(store, empId, date);
+  if (!trip) return null;
+  const want = attCityKey(trip.city);
+  const given = pos && pos.city ? attCityKey(pos.city) : pos && typeof pos.lat === "number" ? attCityAt(pos) : "";
+  const base = { lat: pos && typeof pos.lat === "number" ? pos.lat : null, lng: pos && typeof pos.lng === "number" ? pos.lng : null,
+                 acc: null, dist: null, trip: true, city: trip.city };
+  if (!given) return { ...base, ok: null, why: "nocity" };
+  return { ...base, ok: given === want, why: given === want ? null : "wrongcity" };
+}
+
 function attByStore(store, date) {
   return attAll().filter(r => (!store || r.store === store) && (!date || r.date === date));
 }
@@ -276,8 +330,11 @@ function attIssues(rec, shift, today, store) {
   if (!rec || (!rec.in && !rec.out)) {
     const tries = rec && rec.attempts ? rec.attempts.length : 0;
     if (tries) {
-      const far = rec.attempts[rec.attempts.length - 1].dist;
-      add("farblock", "bad", `打卡被拦下 ${tries} 次：最近一次离门店 ${far} 米，超出允许的 ${attRadius()} 米`,
+      const last = rec.attempts[rec.attempts.length - 1];
+      const far = last.dist;
+      if (far == null) add("farblock", "bad", `打卡被拦下 ${tries} 次：今天出差，应在差旅申报的城市 ${last.city || ""} 打卡`,
+          `${tries} Erfassungsversuche abgewiesen: Dienstreise, Standort muss in ${last.city || ""} liegen`);
+      else add("farblock", "bad", `打卡被拦下 ${tries} 次：最近一次离门店 ${far} 米，超出允许的 ${attRadius()} 米`,
           `${tries} Erfassungsversuche abgewiesen, zuletzt ${far} m von der Filiale`);
     }
     if (rec && rec.helpAsk) {
@@ -295,9 +352,11 @@ function attIssues(rec, shift, today, store) {
   if (!shift) add("unplanned", "bad", "这天没有排班，但打了卡", "Erfasst ohne geplante Schicht");
   if (rec.helpAsk) add("helpask", "bad", "员工说自己在店里但打不上卡，等你补签", "Mitarbeiter bittet um Nacherfassung");
   if ((rec.attempts || []).length) {
-    const far = rec.attempts[rec.attempts.length - 1].dist;
-    add("farblock", "note", `另有 ${rec.attempts.length} 次打卡被拦下（最近一次 ${far} 米）`,
-        `${rec.attempts.length} Versuche abgewiesen (zuletzt ${far} m)`);
+    const last = rec.attempts[rec.attempts.length - 1];
+    const farZh = last.dist == null ? `城市不符，申报城市 ${last.city || ""}` : `${last.dist} 米`;
+    const farDe = last.dist == null ? `falsche Stadt (${last.city || ""})` : `${last.dist} m`;
+    add("farblock", "note", `另有 ${rec.attempts.length} 次打卡被拦下（最近一次 ${farZh}）`,
+        `${rec.attempts.length} Versuche abgewiesen (zuletzt ${farDe})`);
   }
 
   if (rec.in && !rec.out) {
@@ -466,6 +525,26 @@ function attAdjust(store, empId, month) {
   return attRangeAdjust(store, empId, first, empShiftDate(`${hrsMonthAddRaw(month, 1)}-01`, -1));
 }
 
+/* 答复 8.6（推荐）：没排班但打了卡（临时顶班），店长“照打卡记”之后还要老板批准才计入工资。
+   批准前、驳回后都是 0 小时；没有 cover 记录的旧数据同样不计，避免绕过老板。 */
+function attCoverPaid(rec) {
+  return !!(rec && rec.cover && rec.cover.state === "approved");
+}
+
+function attCoverDecide(recId, state, note) {
+  if (typeof hrIsOwner === "function" && !hrIsOwner()) {
+    return { ok: false, code: "owner-only", message: "临时顶班要老板批准才计入工资；店长不能批准或驳回" };
+  }
+  const rec = attById(recId);
+  if (!rec || !rec.cover || rec.cover.state !== "pending") return { ok: false, code: "not-pending", message: "这条顶班记录当前不在待老板审批状态" };
+  const next = JSON.parse(JSON.stringify(rec));
+  next.cover = { ...next.cover, state: state === "approved" ? "approved" : "rejected", note: note || "", decidedAt: empNow(), decidedBy: "老板" };
+  attWrite(next, { at: empNow(), by: empT("老板", "Inhaber"),
+    what: state === "approved" ? { zh: "老板批准临时顶班，计入工资", de: "Inhaber genehmigt Aushilfsschicht — wird vergütet" }
+                              : { zh: `老板驳回临时顶班，不计工资${note ? `：${note}` : ""}`, de: "Inhaber lehnt Aushilfsschicht ab — nicht vergütet" } });
+  return { ok: true, rec: next };
+}
+
 /* 任意区间的考勤调整。工时页面日 / 周 / 月三个视图算的是同一条链，只是区间不同。 */
 function attRangeAdjust(store, empId, from, to) {
   const t = empToday();
@@ -476,6 +555,7 @@ function attRangeAdjust(store, empId, from, to) {
       if (typeof lvOn === "function" && lvOn(store, empId, rec.date)) return sum;
       const shift = attShiftById(store, empId, rec.date, rec.shiftId);
       if (!attSettled(rec, shift, t, store)) return sum;
+      if (!shift && !attCoverPaid(rec)) return sum;
       return sum + attPayableNet(rec, shift) - attPlannedNet(shift);
     }, 0);
 }
@@ -524,7 +604,8 @@ function attPunch(store, empId, date, kind, opts) {
   const at = o.at || schHHMM(attNowMin());
   const src = o.src === "manager" ? "manager" : "self";
   const by = o.by || (src === "manager" ? empT("店长", "Leitung") : empById(empId)?.name || "");
-  const geo = src === "manager" ? null : attGeoJudge(store, o.pos || null);
+  const tripGeo = src === "manager" ? null : attTripGeoJudge(store, empId, date, o.pos || null);
+  const geo = src === "manager" ? null : (tripGeo || attGeoJudge(store, o.pos || null));
   const mine = attAll().filter(r => r.store === store && r.empId === empId && r.date === date);
 
   /* 超出允许范围就不让打卡（Mingrong 2026-09-03 拍板）。
@@ -534,6 +615,7 @@ function attPunch(store, empId, date, kind, opts) {
      店长那边会看到「他在 449 米外试了两次」。 */
   if (geo && geo.ok === false) {
     const rec = attNoteAttempt(store, empId, date, kind, at, geo, by, mine);
+    if (geo.trip) return { ok: false, code: "wrongcity", city: geo.city, rec };
     return { ok: false, code: "far", dist: geo.dist, radius: attRadius(), rec };
   }
 
@@ -583,8 +665,10 @@ function attNoteAttempt(store, empId, date, kind, at, geo, by, mine) {
     ? ((mine || []).filter(r => r.in && !r.out)[0] || {}).shiftId || attGuessShift(store, empId, date, at, mine)?.id || null
     : attGuessShift(store, empId, date, at, mine)?.id || null;
   const rec = attEnsure(store, empId, date, shift);
-  rec.attempts = [...(rec.attempts || []), { at, ts: empNow(), kind, dist: geo.dist }].slice(-10);
-  attWrite(rec, { at: empNow(), by, what: {
+  rec.attempts = [...(rec.attempts || []), { at, ts: empNow(), kind, dist: geo.dist, city: geo.trip ? geo.city : undefined }].slice(-10);
+  attWrite(rec, { at: empNow(), by, what: geo.trip ? {
+    zh: `${kind === "out" ? "下班" : "上班"}打卡被拦下：今天出差，应在差旅申报的城市 ${geo.city} 打卡`,
+    de: `Erfassung abgewiesen: Dienstreise — Standort muss in ${geo.city} liegen` } : {
     zh: `${kind === "out" ? "下班" : "上班"}打卡被拦下：离门店 ${geo.dist} 米，超出允许的 ${attRadius()} 米`,
     de: `Erfassung abgewiesen: ${geo.dist} m von der Filiale, zulässig sind ${attRadius()} m` } });
   return rec;
@@ -637,6 +721,13 @@ function attDecide(store, empId, date, shiftId, kind, opts) {
   }[kind] || { zh: "处理", de: "Bearbeitet" };
   const why = rec.decision.why ? empT(`：${rec.decision.why}`, `: ${rec.decision.why}`) : "";
   attWrite(rec, { at: rec.decision.at, by, what: { zh: label.zh + why, de: label.de + why } });
+  if (!shift && (kind === "ok" || kind === "fix")) {
+    rec.cover = { state: "pending", by, at: rec.decision.at };
+    attWrite(rec, { at: rec.decision.at, by, what: { zh: "没排班的顶班，已提交老板审批，批准前不计工资", de: "Aushilfsschicht ohne Plan — zur Freigabe beim Inhaber, bis dahin nicht vergütet" } });
+  } else if (rec.cover) {
+    rec.cover = null;
+    attWrite(rec);
+  }
   attSyncFixOt(rec, shift, by);
   return rec;
 }
@@ -687,7 +778,7 @@ function attSyncFixOt(rec, shift, by) {
     if (rec.otId) { rec.otId = null; rec.otSource = null; log("补签不再超出班表", "Nicht mehr über Plan"); }
     return rec;
   }
-  const list = hrsAddOt(rec.store, rec.empId, rec.date, hours, reason);
+  const list = hrsAddOt(rec.store, rec.empId, rec.date, hours, reason, undefined, "fix");
   rec.otId = Array.isArray(list) && list[0] ? list[0].id : null;
   rec.otSource = "fix";
   log(`补签超出班表 ${schH(hours)}，已提交老板审批`, `${schH(hours)} über Plan — zur Freigabe beim Inhaber eingereicht`);
@@ -700,6 +791,7 @@ function attUndoDecision(recId, by) {
   if (!rec || !rec.decision) return null;
   const next = JSON.parse(JSON.stringify(rec));
   next.decision = null;
+  next.cover = null;
   const linked = attLinkedOt(next);
   /* 只撤回自动补签生成的加班单；手动“转加班申请”建的单（otSource=manual）是独立的审批，不跟决议一起撤 */
   if (linked && !linked.revoked && next.otSource !== "manual" && typeof hrsRevokeOt === "function") {
@@ -926,8 +1018,9 @@ function attDayLabel(date) {
 function attGeoCell(rec) {
   const geo = rec && rec.in && rec.in.geo;
   if (rec && !rec.in && (rec.attempts || []).length) {
-    const far = rec.attempts[rec.attempts.length - 1].dist;
-    return `<span class="att-geo is-far">${far} m<small>${empT("被拦下", "abgewiesen")}</small></span>`;
+    const last = rec.attempts[rec.attempts.length - 1];
+    const far = last.dist == null ? empEsc(last.city || "—") : `${last.dist} m`;
+    return `<span class="att-geo is-far">${far}<small>${empT("被拦下", "abgewiesen")}</small></span>`;
   }
   if (!rec || !rec.in) return `<span class="att-dim">—</span>`;
   if (!geo || geo.ok == null) {
@@ -935,6 +1028,7 @@ function attGeoCell(rec) {
       ? empT("这家店还没设打卡位置", "Kein Filialstandort hinterlegt")
       : empT("手机没给定位", "Kein Standort vom Gerät")}">${empT("判不了", "Nicht prüfbar")}</span>`;
   }
+  if (geo.trip) return `<span class="att-geo ${geo.ok ? "is-ok" : "is-far"}">${empEsc(geo.city)}<small>${empT("出差", "Dienstreise")}</small></span>`;
   return geo.ok
     ? `<span class="att-geo is-ok">${geo.dist} m</span>`
     : `<span class="att-geo is-far">${geo.dist} m</span>`;
@@ -1280,6 +1374,19 @@ function attFixPanel(row) {
       ${d ? `<button class="ghost-btn att-undo" data-rec="${rec.id}">${empT("撤销处理", "Bearbeitung zurücknehmen")}</button>` : ""}
     </div>
 
+    ${rec && rec.cover ? (() => {
+      const c = rec.cover;
+      const locked = !hrIsOwner();
+      return `<div class="att-cover is-${c.state}"><p>${c.state === "pending"
+        ? empT("临时顶班：店长已确认，等老板批准。批准前不计工资。", "Aushilfsschicht: bestätigt, wartet auf Freigabe des Inhabers — bis dahin nicht vergütet.")
+        : c.state === "approved" ? empT("临时顶班：老板已批准，计入工资。", "Aushilfsschicht: vom Inhaber genehmigt, wird vergütet.")
+        : empT(`临时顶班：老板已驳回，不计工资${c.note ? `（${empEsc(c.note)}）` : ""}。`, "Aushilfsschicht: abgelehnt, nicht vergütet.")}</p>
+        ${c.state === "pending" ? `<div class="button-row">
+          <button class="ghost-btn att-cover-no" data-rec="${rec.id}"${locked ? ` disabled title="${empEsc("只有老板能批准或驳回临时顶班")}"` : ""}>${empT("驳回", "Ablehnen")}</button>
+          <button class="primary-btn att-cover-ok" data-rec="${rec.id}"${locked ? ` disabled title="${empEsc("只有老板能批准或驳回临时顶班")}"` : ""}>${empT("批准计薪", "Genehmigen")}</button>
+          ${locked ? `<span class="att-fix-cap">${empT("只有老板能批准或驳回", "Nur der Inhaber")}</span>` : ""}</div>` : ""}</div>`;
+    })() : ""}
+
     ${rec && rec.otId ? `<p class="att-fix-ot">${empT("超出部分已提交加班审批，批准前不进工资。",
       "Mehrstunden eingereicht; sie zählen erst nach Freigabe.")} <a href="#${slug("employee", "排班管理")}?v=month&m=${row.date.slice(0, 7)}">${
       empT("去月度结算审批 →", "Zur Freigabe →")}</a></p>` : ""}
@@ -1342,6 +1449,13 @@ function attBindAll() {
     }
     attDecide(store, emp, date, shift || null, kind, { why, start, end });
     attGo(attHref({ d: date, fix: null }));
+  }));
+
+  document.querySelectorAll(".att-cover-ok, .att-cover-no").forEach(b => b.addEventListener("click", () => {
+    const ok = b.classList.contains("att-cover-ok");
+    const res = attCoverDecide(b.dataset.rec, ok ? "approved" : "rejected", ok ? "" : (window.prompt ? window.prompt("驳回理由（可空）") || "" : ""));
+    if (!res.ok) { empFlash(b, res.message); return; }
+    app();
   }));
 
   /* 病假不是考勤的一种决议，是一条休假记录 —— 记完这一天就归休假管了，

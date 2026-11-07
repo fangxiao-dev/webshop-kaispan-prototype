@@ -98,7 +98,7 @@ assert.ok(ctx.empPushBlockReason(pendingPush, '2026-11-06').includes('不在岗'
 /* 首页：数人、占位卡、无排班工资假数据（HR-TODO-50/51/53） */
 const home = ctx.employeeHomePage();
 assert.ok(home.includes('人待处理'));
-assert.ok(home.includes('即将开放'));
+assert.ok(home.includes('排班与考勤') && home.includes('工资与发薪'), '二三期模块卡不再关掉；本测试没加载模块文件，所以是“未加载”占位');
 assert.ok(!home.includes('本月计薪工时') && !home.includes('本周人工成本'), '不再显示假数据');
 assert.ok(home.includes('税务师权限'));
 
@@ -138,7 +138,7 @@ assert.ok(rulesPage.includes('其他资料保存年限'));
 assert.ok(rulesPage.includes('法定最长试用期'));
 assert.ok(rulesPage.includes('只读'));
 assert.ok(rulesPage.includes('已确认答复'), '答复 83/83 后，待老板确认清单改为已确认答复汇总');
-assert.ok(!rulesPage.includes('待老板确认'), '页面上不再有待老板确认黄标');
+assert.deepEqual([...rulesPage.matchAll(/data-boss-code="([^"]+)"/g)].map(m => m[1]).sort(), ['1.2', '8.15', '9.1'], '只有答复有歧义的 1.2、8.15、9.1 带待老板确认黄标');
 assert.ok(rulesPage.includes('二、三期使用'));
 
 /* 参数默认值、范围和 0 值规则（HR-CONTRACT-19/20/39～47） */

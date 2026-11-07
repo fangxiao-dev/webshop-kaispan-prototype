@@ -1,5 +1,6 @@
 /* ==========================================================================
-   KaiSpan · 休假（年假 / 病假 / 无薪假；答复 R5-29：特殊假不做，R5-25：半天假不做）
+   KaiSpan · 休假（年假 / 病假 / 无薪假；答复 R5-29：特殊假不做。R5-25（8.15）只答“不做”，
+   是只不做半天假，还是按班表扣年假也不做，待老板确认；现在按班表扣、没有半天假入口，只是演示）
    --------------------------------------------------------------------------
    在 attend.js 之后、hours.js 之前以 defer 加载，前缀 lv。
 
@@ -554,6 +555,11 @@ function lvRangeLabel(x) {
   return x.from === x.to ? empFormatDate(x.from) : `${empFormatDate(x.from)} – ${empFormatDate(x.to)}`;
 }
 
+/* 答复有歧义的题挂“待老板确认”黄标（hr-answers.js）；单测不加载时不显示。 */
+function lvBossMark(code) {
+  return typeof hrBossMark === "function" ? hrBossMark(code) : "";
+}
+
 function lvView(store) {
   const month = lvMonth();
   const year = month.slice(0, 4);
@@ -597,7 +603,7 @@ function lvView(store) {
 
     <p class="lv-note">${empT(
       `年假额度来自合同上的 Urlaubstage，入职和离职当年按整月 1/12 折算后向上取到半天 —— §5 Abs. 2 BUrlG 规定满半天的进位到整天，具体取整方式请按合同或行业协议核实。休假天数按班表数：排到的日子数实际排班，没排到的按这个人最近 13 周的每周上班天数折算。有薪假进计薪工时的口径是：已排班的日子照那天排的小时数付，没排班的按最近 13 周日均（§11 BUrlG）。`,
-      `Der Urlaubsanspruch stammt aus den Vertrags-Urlaubstagen; im Ein- und Austrittsjahr anteilig nach vollen Monaten (1/12), aufgerundet auf halbe Tage — nach §5 Abs. 2 BUrlG sind mindestens halbe Tage aufzurunden, die genaue Rundung bitte nach Vertrag oder Tarif prüfen. Urlaubstage werden nach Dienstplan gezählt; für ungeplante Zeiträume nach den Arbeitstagen der letzten 13 Wochen. Bezahlte Abwesenheit fließt mit den geplanten Stunden bzw. dem 13-Wochen-Schnitt (§11 BUrlG) in die Abrechnung.`)}</p>`;
+      `Der Urlaubsanspruch stammt aus den Vertrags-Urlaubstagen; im Ein- und Austrittsjahr anteilig nach vollen Monaten (1/12), aufgerundet auf halbe Tage — nach §5 Abs. 2 BUrlG sind mindestens halbe Tage aufzurunden, die genaue Rundung bitte nach Vertrag oder Tarif prüfen. Urlaubstage werden nach Dienstplan gezählt; für ungeplante Zeiträume nach den Arbeitstagen der letzten 13 Wochen. Bezahlte Abwesenheit fließt mit den geplanten Stunden bzw. dem 13-Wochen-Schnitt (§11 BUrlG) in die Abrechnung.`)}${lvBossMark("8.15")}</p>`;
 }
 
 /* --------------------------------------------------- AU 与 6 周上限 ----- */
@@ -827,7 +833,7 @@ function lvAddPanel(store, staff) {
       <label>${empT("员工", "Mitarbeiter")}<select class="lv-add-emp">${staff.map(e =>
         `<option value="${e.id}">${empEsc(e.name)}</option>`).join("")}</select></label>
       <label>${empT("类型", "Art")}<select class="lv-add-type">${LV_TYPES.map(x =>
-        `<option value="${x.id}">${empText(x.name)}</option>`).join("")}</select></label>
+        `<option value="${x.id}">${empText(x.name)}</option>`).join("")}<option value="sonder" disabled class="lv-type-off">${empT("特殊假（本项目不做）", "Sonderurlaub (nicht im Projekt)")}</option></select></label>
       <label>${empT("从", "Von")}<input type="date" class="lv-add-from" value="${t}"></label>
       <label>${empT("到", "Bis")}<input type="date" class="lv-add-to" value="${t}"></label>
       <label class="lv-add-why">${empT("理由", "Grund")}<input class="lv-add-reason" placeholder="${

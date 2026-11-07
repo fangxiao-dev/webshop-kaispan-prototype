@@ -14,7 +14,6 @@ const HR_TODO_TYPE_LIST = [
  {code:'HR-TODO-27',key:'hr.newhire_pending',name:'新人上工前清单',category:'入职',risk:'中',audience:'老板',target:'docs',open:'入职状态已通过及之后，上工前清单未办完（在岗老员工开通的不开）；截止日是入职日期，当天仍未办完标逾期',close:'清单全部完成、录入离职或入职被取消',to:'管理端',mode:'业务事实自动关闭'},
  {code:'HR-TODO-28',key:'hr.update_request_pending',name:'补件待员工处理',category:'材料',risk:'中',audience:'员工',target:'docs',open:'店长推送补件，且员工有可用账号',close:'员工交回，或推送被撤销',to:'员工本人',mode:'业务事实关闭'},
  {code:'HR-TODO-29',key:'hr.update_request_review',name:'补件 / 资料更新待核对',category:'材料',risk:'中',audience:'老板',target:'docs',open:'员工交回补件，或入职后提交资料更新',close:'店长采纳（写入档案）或退回（必填原因）',to:'本店店长；改银行卡时老板同时知情',mode:'业务事实关闭'},
- {code:'HR-TODO-30',key:'hr.special_approval_pending',name:'特殊审批待批（材料没交齐）',category:'审批',risk:'中',audience:'老板',target:'review',open:'员工提交的资料里第二层材料没交齐（答复 ANS-1：只提示，不挡员工提交）',close:'老板特殊审批通过（必须写原因，记录审批人和时间）或退回补充',to:'老板；店长不能做特殊审批',mode:'业务事实关闭'},
  {code:'HR-TODO-32',key:'hr.onboarding_stalled',name:'入职流程停滞',category:'入职',risk:'中',audience:'老板',target:'review',open:'邀请未提交、退回未重提、合同未签回、提交未审核，各自超过对应天数（默认各 3 天）',close:'流程状态前进，或邀请撤销 / 入职取消',to:'本店店长',mode:'业务事实自动关闭'},
  {code:'HR-TODO-33',key:'hr.probation_ending',name:'试用期即将结束',category:'合同',risk:'中',audience:'老板',target:'contract',open:'在试用期且距结束日 ≤ 30 天；待入职的人不触发',close:'结束日一过自动关闭，或结束日被改晚到提醒窗口之外、清空、录入离职',to:'管理端；要解约则办离职',mode:'日期推进自动关闭'},
  {code:'HR-TODO-34',key:'hr.fixed_term_ending',name:'定期合同即将到期 / 已到期',category:'合同',risk:'高',audience:'老板',target:'contract',open:'合同条件有定期合同到期日，且进入提醒窗口',close:'续签（改晚到期日）、转不定期（清空）或办离职',to:'管理端可见，处理由老板确认',mode:'业务事实关闭，到期不自动消失'},
@@ -24,21 +23,35 @@ const HR_TODO_TYPE_LIST = [
  {code:'HR-TODO-39',key:'hr.manager_change_confirm',name:'请确认店长提交的变更',category:'变更',risk:'中',audience:'老板',target:'contract',open:'店长提交薪资、合同条件变更或离职办理',close:'老板确认（写入合同版本或离职记录）或驳回',to:'老板',mode:'业务事实关闭'}
 ];
 
-/* 二、三期或后续阶段的事项：本页只做灰行示意，不当作一期内容（HR-TODO-61 ★7.x）。 */
-const HR_TODO_LATER_LIST = [
- {module:'排班',items:'新班表已发布、班次时间变更、提交下周可工作时间',why:'排班管理二期开放，现在归排班模块自己的提醒'},
- {module:'考勤',items:'漏打卡 / 打卡异常、补交工时等待审核',why:'打卡与考勤二、三期开放'},
- {module:'工时',items:'本月工时需要确认、员工对工时提出异议、工时账户存取建议',why:'工时结算二、三期开放'},
- {module:'休假',items:'年假申请等待审批、休假结果与病假材料待补',why:'休假二、三期开放'},
- {module:'薪资',items:'工资资料待移交、等待税务师工资单、工资单金额不匹配、工资单已可查看、待发薪',why:'工资单与发薪二、三期开放'},
- {module:'HACCP',items:'HACCP 表格待填写、温度与清洁检查',why:'由 HACCP 模块自己的待办承载（HR-TODO-64）'}
-];
+/* HR-TODO-30（特殊审批待批）已取消：特殊审批不另建待办（AM-05）。第二层材料没交齐时，老板在同一次审核通过 / 公司代填确认 / 在岗老员工确认上勾选特殊审批并写原因，留审批人、时间和缺项名单。
+   所以类型清单里没有这一行，也没有独立的“特殊审批”待办。 */
+
+/* 二、三期或后续阶段的事项：恢复为老板原版的逐项事项和处理入口，正常展示、不灰；每行带期次标签。
+   一期范围以规格和修订为准（HR-TODO-61 ★7.x）。列：分类 / 事项 / 何时提醒 / 员工做什么 / 老板做什么 / 通知对象 / 风险 / 入口 / 期次 */
+const HR_TODO_LATER_ROWS = [
+['排班','新班表已发布','店长发布下一周班表','查看自己的班次与门店安排','查看发布结果；仅在有冲突时跟进','员工','低','schedule','二期'],
+['排班','班次时间发生变更','已发布班次被调整','核对新时间，及时联系店长反馈冲突','查看调整记录与员工反馈','双方','中','schedule','二期'],
+['排班','提交下周可工作时间','到达门店设定的意向收集时间','提交可工作的日期和时段','汇总意向后安排班次','员工','中','schedule','二期'],
+['考勤','漏打卡 / 打卡异常','有班次但缺上班或下班记录','补交时间与说明','核对排班与原始打卡，修正计薪记录','双方','高','hours','二期'],
+['考勤','补交工时等待审核','员工手动提交或修改了一天的工时','查看处理结果，补充说明','审核提交的时段和休息时间，避免重复计入','老板','中','hours','二期'],
+['工时','本月工时需要确认','员工本月最后一个工作日结束','核对排班、打卡、计薪规则和休假，回复确认或提出异议','查看员工确认状态；未回复时可催办','双方','中','pay','三期'],
+['工时','员工对工时提出异议','员工回复“某一天的时间不对”','说明日期和正确时段，等待回复','查看沟通内容，核对并调整后重新请员工确认','双方','高','pay','三期'],
+['工时','工时账户存取建议','本月工时高于或低于合同约定范围','查看本月计薪工时与账户余额','决定是否存入或取出；提交前可手动调整','老板','中','pay','三期'],
+['休假','年假申请等待审批','员工提交休假日期','查看申请结果','结合排班审核申请，通过后计入工时日历','老板','中','leave','二期'],
+['休假','休假结果 / 病假材料待补','休假已处理，或病假证明需要补交','查看审批结果，按要求补交病假材料','核对病假日期与记录，更新计薪工时','双方','中','leave','二期'],
+['薪资','月度工资资料待移交','到达门店约定的月末核对节点','查看自己的工时确认消息','核对工时、奖金、差旅等，确认后移交税务师','老板','高','pay','三期'],
+['薪资','等待税务师工资单','本月资料已移交，工资单尚未回传','等待工资单发布通知','跟进税务师上传，回传后识别 Brutto / Netto','老板','中','pay','三期'],
+['薪资','工资单金额不匹配','回传 PDF 的 Brutto 与本月预期不一致','等待核对后的工资单','打开 PDF 比较金额，必要时提交修改','老板','高','pay','三期'],
+['薪资','工资单已可查看','税务师回传后，老板选择发送工资单','查看本人当月工资单','查看发送记录，处理发送失败或缺失文件','员工','低','pay','三期'],
+['薪资','待发薪 / 修改待跟进','工资单已回传但未标记打款，或更正尚未回传','查看工资单及打款状态','选择员工生成 SEPA XML，跟进更正与打款状态','老板','高','pay','三期'],
+['委派','HACCP 表格待填写','当班员工被委派温度或清洁检查','按任务要求填表，提交异常说明','查看任务结果并跟进异常','员工','中','tasks','后续']
+].map((x,i)=>({id:'later-'+i,category:x[0],title:x[1],trigger:x[2],employee:x[3],owner:x[4],audience:x[5],risk:x[6],target:x[7],phase:x[8]}));
 
 function hrTodoHref(target,audience,id){
  if(audience==='employee')return '#employee-ui'+(id?'?preview='+encodeURIComponent(id):'');
  if(target==='review')return id?'#'+slug('employee','邀请详情')+'?id='+encodeURIComponent(id):'#'+slug('employee','入职邀请');
- if(id)return `#${slug("employee","员工资料")}?id=${encodeURIComponent(id)}&tab=${target==='contract'?'contract':'docs'}`;
- return '#'+slug('employee','员工档案');
+ if(target==='docs'||target==='contract')return id?`#${slug("employee","员工资料")}?id=${encodeURIComponent(id)}&tab=${target==='contract'?'contract':'docs'}`:'#'+slug('employee','员工档案');
+ return '#'+slug('employee',({schedule:'排班管理',hours:'排班管理',pay:'工资单与发薪',leave:'排班管理',tasks:'员工档案'})[target]||'员工档案');
 }
 
 /* 当前演示档案里的真实提醒，映射到上面的事项类型；标题仍只写「姓名：类别」。 */
@@ -91,13 +104,16 @@ function hrTodosPage(){
  const types=HR_TODO_TYPE_LIST.filter(visible);
  const live=hrTodoEntryItems(scope).filter(visible);
  const liveRow=x=>`<tr><td><span class="pill ${x.risk==='高'?'red':x.risk==='中'?'orange':'blue'}">${empEsc(x.category)}</span></td><td><strong>${empEsc(x.title)}</strong><small>${empEsc(x.trigger)}</small></td><td><span class="pill ${x.audience==='双方'?'purple':'gray'}">${x.audience==='双方'?'员工 + 老板':x.audience+'端'}</span></td><td>${empEsc(audience==='owner'?x.owner:x.employee)}</td><td><a class="ghost-btn" href="${hrTodoHref(x.target,audience,x.id)}">查看档案 →</a></td></tr>`;
- const categories=['全部','材料','合同','入职','审批','离职','账号','保存期','变更'];
+ const categories=['全部','材料','合同','入职','审批','离职','账号','保存期','变更','排班','考勤','工时','休假','薪资','委派'];
+ const later=HR_TODO_LATER_ROWS.filter(x=>(x.audience==='双方'||x.audience===(audience==='owner'?'老板':'员工'))&&(isAll||x.category===category));
+ const phaseTone=p=>p==='三期'?'orange':p==='后续'?'blue':'purple';
+ const laterRow=x=>`<tr><td><span class="pill ${x.risk==='高'?'red':x.risk==='中'?'orange':'blue'}">${empEsc(x.category)}</span><span class="pill ${phaseTone(x.phase)} hr-todo-phase">${x.phase}</span></td><td><strong>${empEsc(x.title)}</strong><small>流程示例 · ${empEsc(x.trigger)}</small></td><td><span class="pill ${x.audience==='双方'?'purple':'gray'}">${x.audience==='双方'?'员工 + 老板':x.audience+'端'}</span></td><td>${empEsc(audience==='owner'?x.owner:x.employee)}</td><td><a class="ghost-btn" href="${hrTodoHref(x.target,audience,null)}">查看入口 →</a></td></tr>`;
  return `<div class="page-head"><div><h1>待办事项</h1><p>人事待办的事项类型清单 · 用来核对一期规则是否齐全，不当作真实待办页使用。</p></div><span class="pill purple">本机演示</span></div>
  <div class="hr-todo-audience"><a class="${audience==='employee'?'active':''}" href="#todos?view=employee">员工端 <small>我只看到与本人有关的条目</small></a><a class="${audience==='owner'?'active':''}" href="#todos?view=owner">老板端 <small>审核、跟进与确认</small></a></div>
  <p class="hr-todo-context">${audience==='employee'?'员工端视角：员工本人只会看到派给自己的条目，入口在员工端「任务」页签。':'老板端视角：管理端条目按门店和档案权限可见，老板另有确认和清理类条目。'} 这一页是事项类型清单（HR-TODO-55），真实待办页是 KaiSpan 现有待办页加一行「人事」（HR-TODO-12）。</p>
  <div class="toolbar">${categories.map(c=>`<a class="filter ${c===category?'active':''}" href="#todos?view=${audience}&kind=${encodeURIComponent(c)}">${c}</a>`).join('')}</div>
 
- <section class="card"><div class="section-title"><div><h2>一期事项类型（HR-TODO-20～39；31 暂缺逾期、35 离职交接已取消）</h2><p>标题只写「员工姓名：事项类别」，证件号、日期、金额和缺项明细都在 HR 页面查看（HR-TODO-05）。</p></div><span class="pill blue">${types.length} / 20 类</span></div>
+ <section class="card"><div class="section-title"><div><h2>一期事项类型（HR-TODO-20～39；30 特殊审批待批、31 暂缺逾期、35 离职交接已取消）</h2><p>标题只写「员工姓名：事项类别」，证件号、日期、金额和缺项明细都在 HR 页面查看（HR-TODO-05）。</p></div><span class="pill blue">${types.length} / ${HR_TODO_TYPE_LIST.length} 类</span></div>
  <div class="hr-todo-scroll"><table class="table hr-todo-table hr-todo-type-table"><thead><tr><th>编号</th><th>事项类别</th><th>标题写法</th><th>何时开</th><th>何时关</th><th>给谁 / 关闭方式</th></tr></thead><tbody>${types.map(hrTodoTypeRow).join('')||'<tr><td colspan="6">该视角下没有这一类的事项。</td></tr>'}</tbody></table></div></section>
 
  <section class="card" style="margin-top:16px"><div class="section-title"><div><h2>真实待办页的样子：按来源分行</h2><p>KaiSpan 现有待办页加一行「人事」。员工本人的条目也在「人事」这一行，由 HR 接口校验是不是本人（HR-TODO-06 / HR-TODO-12）。</p></div><span class="pill blue">静态示意</span></div>
@@ -106,15 +122,14 @@ function hrTodosPage(){
   <tr><td><strong>Liam：证件需要处理</strong><small>员工本人的一条，指派给本人</small></td><td><span class="pill gray">员工端</span></td><td>员工端 · 任务</td></tr>
   <tr><td><span class="pill blue">财务</span></td><td><strong>点钱与记账委派</strong><small>一期员工端任务只含人事和点钞（HR-TODO-61）</small></td><td><span class="pill gray">员工端</span></td><td>员工端 · 任务</td></tr>
   <tr><td><span class="pill blue">仓储</span></td><td><strong>点货、损耗记录</strong><small>由仓库管理助手自己的待办承载</small></td><td><span class="pill gray">仓库 / 店长</span></td><td>仓库管理助手</td></tr>
-  <tr class="is-muted"><td><span class="pill gray">排班</span></td><td><strong>班表发布、漏打卡</strong><small>二、三期开放，不在本期范围</small></td><td><span class="pill gray">后续</span></td><td>—</td></tr>
+  <tr><td><span class="pill purple">排班</span><span class="pill purple hr-todo-phase">二期</span></td><td><strong>班表发布、漏打卡</strong><small>二、三期事项，见下方逐项清单</small></td><td><span class="pill gray">员工 + 老板</span></td><td>排班管理</td></tr>
  </tbody></table></div></section>
 
  <section class="card" style="margin-top:16px"><div class="section-title"><div><h2>按当前演示档案生成的待办</h2><p>只有这一块读本机档案；上方是类型清单和版式示意。</p></div><span class="pill blue">${live.length} 条</span></div>
  <div class="hr-todo-scroll"><table class="table hr-todo-table"><thead><tr><th>分类</th><th>事项 / 触发点</th><th>通知对象</th><th>${audience==='owner'?'老板下一步做什么':'员工下一步做什么'}</th><th>操作</th></tr></thead><tbody>${live.map(liveRow).join('')||'<tr><td colspan="5">当前门店没有这一类的待办。</td></tr>'}</tbody></table></div></section>
 
- <details class="card hr-todo-live" style="margin-top:16px"><summary>二、三期或后续阶段的事项 <span class="pill gray">不进一期</span><small>${HR_TODO_LATER_LIST.length} 个模块</small></summary>
- <p class="small">一期员工助手的待办和员工端任务只有人事类事项和点钞记账委派；HACCP、清洁检查、开收店清单放到后续阶段（HR-TODO-61 ★7.x）。</p>
- <div class="hr-todo-scroll"><table class="table hr-todo-table hr-todo-later-table"><thead><tr><th>模块</th><th>示例事项</th><th>为什么不在本期</th></tr></thead><tbody>${HR_TODO_LATER_LIST.map(x=>`<tr class="is-muted"><td><strong>${x.module}</strong><small><span class="pill gray">二、三期或后续</span></small></td><td>${x.items}</td><td>${x.why}</td></tr>`).join('')}</tbody></table></div></details>
+ <section class="card" style="margin-top:16px"><div class="section-title"><div><h2>二、三期事项（带期次标签）</h2><p>本原型包含各期功能，正式一期范围以规格和修订为准。一期员工助手的待办和员工端任务只有人事类事项和点钞记账委派；下面是老板原版里的排班、考勤、工时、休假、薪资和 HACCP 事项，仅作流程示例，不实际发送通知。</p></div><span class="pill purple">${later.length} 项</span></div>
+ <div class="hr-todo-scroll"><table class="table hr-todo-table hr-todo-later-table"><thead><tr><th>分类 / 期次</th><th>事项 / 何时提醒</th><th>通知对象</th><th>${audience==='owner'?'老板下一步做什么':'员工下一步做什么'}</th><th>操作</th></tr></thead><tbody>${later.map(laterRow).join('')||'<tr><td colspan="5">该视角下没有这一类的二、三期事项。</td></tr>'}</tbody></table></div></section>
  <p class="small" style="margin-top:12px">“员工 + 老板”表示同一事项分别通知双方，各自看到相应的处理内容。当前仅展示本地提醒与示例，不实际发送通知或执行审批。</p>`;
 }
 
