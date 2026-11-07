@@ -38,32 +38,36 @@ assert.equal(hintIn.inProbation, true);
 assert.equal(hintIn.earliest, '2026-12-15');
 
 /* 离职：最后工作日当天仍在岗，次日起已离职（HR-LIFE-02/18） */
-assert.equal(ctx.empSetLeave('e18', { who: 'employee', noticeDate: '2026-11-01', lastDay: '2026-11-30', reason: '' }).ok, true);
+assert.equal(ctx.empSetLeave('e18', { noticeDate: '2026-11-01', lastDay: '2026-11-30', reason: '' }).ok, true);
 assert.equal(ctx.empById('e18').status, 'leaving');
 assert.equal(ctx.empStaff('Martin Biergarten').some(x => x.id === 'e18'), true);
-ctx.empSetLeave('e18', { who: 'employee', noticeDate: '2026-10-01', lastDay: '2026-11-06' });
+ctx.empSetLeave('e18', { noticeDate: '2026-10-01', lastDay: '2026-11-06' });
 assert.equal(ctx.empById('e18').status, 'leaving');
-ctx.empSetLeave('e18', { who: 'employee', noticeDate: '2026-10-01', lastDay: '2026-11-05' });
+ctx.empSetLeave('e18', { noticeDate: '2026-10-01', lastDay: '2026-11-05' });
 assert.equal(ctx.empById('e18').status, 'left');
 assert.equal(ctx.empStaff('Martin Biergarten').some(x => x.id === 'e18'), false);
 
-/* 撤销必须写原因；交接四项全勾才算办完（HR-LIFE-29、HR-LIFE-39 ★3.7） */
+/* 撤销必须写原因；离职不再有逐项打勾的交接清单（答复 B14 覆盖 HR-LIFE-39） */
 assert.equal(ctx.empUndoLeave('e18', '').code, 'reason_required');
 assert.equal(ctx.empUndoLeave('e18', '录入错误').ok, true);
-assert.equal(ctx.empHandoverDone(ctx.empById('e18')), false);
-['keys', 'hours', 'finalPay', 'certificate'].forEach(k => ctx.empSetHandoverItem('e18', k, true));
-assert.equal(ctx.empHandoverDone(ctx.empById('e18')), true);
+assert.equal(typeof ctx.empHandoverDone, 'undefined');
+assert.equal(typeof ctx.empSetHandoverItem, 'undefined');
+assert.equal(ctx.empWorkflowEntries(ctx.empById('e18')).some(x => x.key === 'handover'), false);
 
-/* 离职校验：最后工作日不早于通知日；早于参考日期必须写原因（HR-LIFE-13/14） */
-assert.equal(ctx.empSetLeave('e18', { who: 'employee', noticeDate: '2026-11-10', lastDay: '2026-11-09' }).code, 'before_notice');
-assert.equal(ctx.empSetLeave('e18', { who: 'company', noticeDate: '2026-11-06', lastDay: '2026-11-07' }).code, 'reason_required');
-assert.equal(ctx.empSetLeave('e18', { who: 'company', noticeDate: '2026-11-06', lastDay: '2026-11-07', reason: '协商提前' }).ok, true);
+/* 离职校验：最后工作日不早于通知日；不再有“早于参考日期必须写原因”和“谁提出”（答复 B07/B08 覆盖 HR-LIFE-12/14） */
+assert.equal(ctx.empSetLeave('e18', { noticeDate: '2026-11-10', lastDay: '2026-11-09' }).code, 'before_notice');
+assert.equal(ctx.empSetLeave('e18', { noticeDate: '2026-11-06', lastDay: '2026-11-07' }).ok, true);
+assert.equal(ctx.empById('e18').leave.who, undefined, '不记录谁提出');
+assert.equal(ctx.empSetLeave('e18', { noticeDate: '2026-11-06', lastDay: '2026-11-07', reason: '协商提前' }).ok, true);
 
 /* 店长办离职只形成提案，老板确认后生效（HR-ACCESS-07） */
 ctx.hrSetView('manager');
-assert.equal(ctx.empSetLeave('e01', { who: 'mutual', noticeDate: '2026-11-06', lastDay: '2027-01-31', reason: '协商' }).proposal, true);
+assert.equal(ctx.empSetLeave('e01', { noticeDate: '2026-11-06', lastDay: '2027-01-31', reason: '协商' }).code, 'permission', 'ANS-4：店长默认不能办离职');
+ctx.hrSetMgrPerm({ offboard: true });
+assert.equal(ctx.empSetLeave('e01', { noticeDate: '2026-11-06', lastDay: '2027-01-31', reason: '协商' }).proposal, true);
 assert.equal(ctx.empById('e01').leave, null);
 assert.equal(ctx.empById('e01').leaveProposal.state, 'pending');
+ctx.hrSetMgrPerm({ offboard: false });
 ctx.hrSetView('owner');
 assert.equal(ctx.empConfirmLeaveProposal('e01').ok, true);
 assert.equal(ctx.empById('e01').status, 'leaving');
@@ -170,13 +174,9 @@ ctx.empSaveStaff(old);
 assert.equal(ctx.empEmployeeNoConflict(neo, old.employeeNo), null);
 assert.equal(ctx.empById('e14').rehiredBy, 'zz');
 
-/* 特殊审批结果写入变更记录（HR-DATA-14；HR-ONB-32） */
+/* 特殊审批记录写入变更记录（HR-DATA-14；答复 ANS-1 覆盖 HR-ONB-32：不再有暂缺批准/驳回） */
 const sp = ctx.empById('e18');
-sp.employeePortal = { specialSubmission: { state: 'pending', items: ['steuerId'], labels: ['Steuer-ID'], reason: '未收到' } };
-ctx.empSaveStaff(sp);
-assert.equal(ctx.empResolveSpecialSubmission('e18', 'rejected', '', '').code, 'reason');
-assert.equal(ctx.empResolveSpecialSubmission('e18', 'approved', '2026-12-01', '').ok, true);
-assert.equal(ctx.empById('e18').missingApprovals[0].status, 'approved');
-assert.equal(ctx.empById('e18').history.at(-1).field, 'approval.special');
+assert.equal(typeof ctx.empResolveSpecialSubmission, 'undefined');
+assert.equal(typeof sp.employeePortal?.specialSubmission, 'undefined');
 
 console.log('PASS: probation default/effective end, structured notice, leave status/proposal/handover, contract versions/proposal, dispatch send/review/return/void/offline, newhire 4 items, sofort states and no-SV, retention leap day, rehire number, special approval event');

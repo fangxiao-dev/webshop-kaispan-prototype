@@ -10,7 +10,7 @@ const localStorage = {
   removeItem: key => memory.delete(key)
 };
 const ctx = vm.createContext({ console, URLSearchParams, localStorage });
-for (const file of ['viewpoint.js', 'hr-model.js', 'employee.js']) {
+for (const file of ['viewpoint.js', 'hr-answers.js', 'hr-model.js', 'employee.js']) {
   vm.runInContext(fs.readFileSync(file, 'utf8'), ctx);
 }
 
@@ -112,8 +112,18 @@ assert.ok(docPage.includes('下次复训日'));
 assert.ok(docPage.includes('提前知道（关注期'));
 assert.ok(docPage.includes('仅记录'));
 ctx.hrSetView('manager');
-const mgrDocPage = ctx.employeeDocPage();
-assert.ok(mgrDocPage.includes('只有老板和管理员可以操作'), '店长看不到改提前期入口');
+assert.ok(!ctx.employeeDocPage().includes('老板已对你关闭「改证件提醒天数」'), 'ANS-4：店长默认可以改证件提醒天数');
+ctx.empSetRule('docWarnDays', 21);
+assert.equal(ctx.empRule('docWarnDays'), 21, '店长可改证件提醒天数');
+assert.equal(ctx.empRuleAudit()[0].by, '店长', '改动留审计');
+ctx.empSetRule('probationMonths', 5);
+assert.notEqual(ctx.empRule('probationMonths'), 5, '店长不能改其他参数');
+ctx.empSetRule('docWarnDays', 30);
+ctx.hrSetMgrPerm({ docWarn: false });
+assert.ok(ctx.employeeDocPage().includes('老板已对你关闭「改证件提醒天数」'));
+ctx.empSetRule('docWarnDays', 10);
+assert.equal(ctx.empRule('docWarnDays'), 30, '老板关闭后店长改不了');
+ctx.hrSetMgrPerm({ docWarn: true });
 ctx.hrSetView('owner');
 
 /* 合规设置：Betriebsnummer、默认问卷、五类保存年限、只读法定上限、待老板确认汇总 */
@@ -127,21 +137,19 @@ assert.ok(rulesPage.includes('健康证保存年限'));
 assert.ok(rulesPage.includes('其他资料保存年限'));
 assert.ok(rulesPage.includes('法定最长试用期'));
 assert.ok(rulesPage.includes('只读'));
-assert.ok(rulesPage.includes('待老板确认事项汇总'));
+assert.ok(rulesPage.includes('已确认答复'), '答复 83/83 后，待老板确认清单改为已确认答复汇总');
+assert.ok(!rulesPage.includes('待老板确认'), '页面上不再有待老板确认黄标');
 assert.ok(rulesPage.includes('二、三期使用'));
 
 /* 参数默认值、范围和 0 值规则（HR-CONTRACT-19/20/39～47） */
 assert.equal(ctx.empRule('defaultHourlyWage'), '');
 assert.equal(ctx.empRule('probationMaxMonths'), 6);
-assert.equal(ctx.empRule('deferralDefaultDays'), 30);
-assert.equal(ctx.empRule('deferralMaxDays'), 60);
-assert.equal(ctx.empRule('deferralMaxExtensions'), 1);
+assert.equal(ctx.empRules().some(r => /^deferral/.test(r.id)), false, 'ANS-1：暂缺期限/延期参数一期不做');
 assert.equal(ctx.empRuleInputValid('defaultHourlyWage', '').ok, true);
 assert.equal(ctx.empRuleInputValid('probationMonths', 6).ok, true);
 assert.equal(ctx.empRuleInputValid('probationMonths', 7).ok, false);
 assert.equal(ctx.empRuleInputValid('probationMonths', 0).ok, false);
 assert.equal(ctx.empRuleInputValid('residenceWarnDays', 0).ok, false);
-assert.equal(ctx.empRuleInputValid('deferralMaxExtensions', 0).ok, true);
 ctx.hrSetView('manager');
 ctx.empSetRule('probationMonths', 3);
 assert.equal(ctx.empRule('probationMonths'), 6, '店长不能改');

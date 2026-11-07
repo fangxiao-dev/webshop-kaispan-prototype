@@ -637,6 +637,18 @@ function attDecide(store, empId, date, shiftId, kind, opts) {
   }[kind] || { zh: "处理", de: "Bearbeitet" };
   const why = rec.decision.why ? empT(`：${rec.decision.why}`, `: ${rec.decision.why}`) : "";
   attWrite(rec, { at: rec.decision.at, by, what: { zh: label.zh + why, de: label.de + why } });
+  /* 答复 R5-10：补签的收工时间晚于班表，超出的部分一律提交老板审批（走 hours.js 里已有的加班审批），批准前不进工资 */
+  if (kind === "fix" && shift && o.end && typeof hrsAddOt === "function" && !rec.otId) {
+    const plan = attPlanMin(shift);
+    const over = (attNear(schMin(o.end), plan.end) - plan.end) / 60;
+    if (over > attGrace() / 60) {
+      const hours = Math.round(over * 4) / 4;
+      const list = hrsAddOt(rec.store, rec.empId, rec.date, hours,
+        empT(`补签比班表晚收工 ${Math.round(over * 60)} 分钟，需老板审批`, `Nacherfassung ${Math.round(over * 60)} Minuten über Plan — Freigabe durch Inhaber nötig`));
+      rec.otId = Array.isArray(list) && list[0] ? list[0].id : null;
+      attWrite(rec, { at: empNow(), by, what: { zh: `补签超出班表 ${schH(over)}，已提交老板审批`, de: `${schH(over)} über Plan — zur Freigabe beim Inhaber eingereicht` } });
+    }
+  }
   return rec;
 }
 

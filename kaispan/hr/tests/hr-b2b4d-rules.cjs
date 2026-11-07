@@ -60,7 +60,7 @@ const advance = value => { stamp = value; };
 /* A1/a. 导出参数只能缩小权限：店长传 sensitive:true 也不能导出生日/税号/IBAN（HR-ACCESS-04、HR-DATA-32） */
 const exportTarget = seed('csv-target');
 ctx.hrSetView('manager');
-ctx.hrSetMgrPerm({ sensitive: true });
+ctx.hrSetMgrPerm({ sensitive: true, export: true });
 const managerCsv = ctx.empRosterCsv([exportTarget], { sensitive: true });
 assert.ok(!managerCsv.includes('1990-02-03'), '店长不能靠参数导出生日');
 assert.ok(!managerCsv.includes('01234567890'), '店长不能靠参数导出税号');
@@ -71,7 +71,7 @@ assert.ok(ctx.empRosterCsv([exportTarget]).includes('1990-02-03'), '老板可导
 
 /* A8/a. 店长门店范围 = 顶栏当前门店；跨店发送、改合同、导出全部拒绝（HR-ACCESS-01） */
 ctx.hrSetView('manager');
-ctx.hrSetMgrPerm({ sensitive: true });
+ctx.hrSetMgrPerm({ sensitive: true, export: true, sendContract: true, editTerms: true });
 ctx.empScope = () => 'Martin Cafe';
 const cross = seed('cross-store', { ...approved(), store: 'Martin Biergarten' });
 assert.equal(ctx.empSendContractDispatch('cross-store').code, 'store_scope');
@@ -290,28 +290,12 @@ for (const id of ['minijobMonthlyMax', 'werkstudentWeeklyMax', 'dailyHoursMax', 
 assert.equal(ctx.empRuleInputValid('lateRoundingMinutes', 45).ok, false);
 ctx.empSetRule('probationMaxMonths', 99);
 assert.equal(ctx.empRule('probationMaxMonths'), 6, '固定值不能被 setter 改掉');
-ctx.empSetRule('deferralMaxExtensions', 99);
-assert.equal(ctx.empRule('deferralMaxExtensions'), 1, '超出范围不能写入');
 ctx.empSetRule('dailyHoursMax', 0);
 assert.equal(ctx.empRule('dailyHoursMax'), 10);
 ctx.empSetRule('lateRoundingMinutes', 45);
 assert.equal(ctx.empRule('lateRoundingMinutes'), 15);
 ctx.empSetRule('docSoonDays', 20);
 assert.equal(ctx.empRule('docSoonDays'), 90, '关注期不能小于预警期');
-ctx.empSetRule('deferralMaxExtensions', 3);
-assert.equal(ctx.empRule('deferralMaxExtensions'), 3);
-
-/* B8. 延期按钮与延期函数共用配置：允许 3 次时按钮出现，0 次时入口隐藏（HR-CONTRACT-47） */
-seed('extend-config', {
-  entryDate: '2026-11-20',
-  missingApprovals: [{ item: 'steuerId', label: 'Steuer-ID', status: 'approved', deadline: '2026-11-20', extensionCount: 1 }]
-});
-ctx.empSetRule('deferralMaxExtensions', 3);
-assert.ok(ctx.empSpecialApprovalBlock(ctx.empById('extend-config')).includes('emp-special-extend'));
-assert.equal(ctx.empExtendMissingApproval('extend-config', 'steuerId', '2026-11-25', '再延期').ok, true);
-ctx.empSetRule('deferralMaxExtensions', 0);
-const hiddenBlock = ctx.empSpecialApprovalBlock(ctx.empById('extend-config'));
-assert.ok(!hiddenBlock.includes('emp-special-extend'), '0 次时延期入口要隐藏');
 
 /* B4. 待入职（审核通过、入职日在将来）纳入证件提醒/总览/矩阵，但不套试用期提醒（HR-LIFE-02、HR-ONB-22） */
 const pending = seed('pending-doc', { ...approved(), entryDate: '2026-12-01', status: 'active', probationEnd: '2027-03-01' });
@@ -330,29 +314,20 @@ assert.ok(!pendingEntries.includes('probation'), '待入职不提醒试用期');
 ctx.empScope = () => null;
 ctx.empWrite('kaispanEmpStaff', ctx.empAllStaff());
 
-/* B5. 首页人数与档案列表「需要处理」都包含离职后的交接 / 保存期 / 特殊审批（HR-TODO-41/50/51） */
+/* B5. 首页人数与档案列表「需要处理」都包含离职后的交接 / 保存期（HR-TODO-41/50/51） */
 ctx.empAllStaff();
 seed('left-exceptions', {
-  leave: { who: 'employee', noticeDate: '2014-12-01', lastDay: '2015-01-01' },
-  leaveHandover: { items: {} }, retentionHandled: {},
-  ids: { steuerId: '', rentenversicherung: '', iban: '' },
-  missingApprovals: [{ item: 'steuerId', label: 'Steuer-ID', status: 'approved', deadline: '2026-10-01' }]
+  leave: { noticeDate: '2014-12-01', lastDay: '2015-01-01' },
+  retentionHandled: {},
+  ids: { steuerId: '', rentenversicherung: '', iban: '' }
 });
 only('left-exceptions');
 const leftEntries = ctx.empPendingEntries(ctx.empById('left-exceptions')).map(x => x.key);
-assert.ok(leftEntries.includes('handover'));
+assert.ok(!leftEntries.includes('handover'), '答复 B14：不再有交接待办');
 assert.ok(leftEntries.includes('retention'));
-assert.ok(leftEntries.includes('specialDue'));
 assert.equal(ctx.empPendingPeople().length, 1);
 assert.equal(ctx.empSummary().urgentPeople, 1);
 assert.ok(ctx.employeeHomePage().includes('1'), '首页数字和列表口径一致');
-
-/* B9. 逾期暂缺在该项补齐后自动消失（HR-ONB-32） */
-assert.ok(ctx.empWorkflowEntries(ctx.empById('left-exceptions')).some(x => x.key === 'specialDue'));
-const filled = copy(ctx.empById('left-exceptions'));
-filled.ids.steuerId = '01234567890';
-ctx.empSaveStaff(filled);
-assert.ok(!ctx.empWorkflowEntries(ctx.empById('left-exceptions')).some(x => x.key === 'specialDue'), '补齐后逾期待办要消失');
 
 /* B2. 邀请账号：同邮箱冲突要拦；没有邀请记录的在岗老员工建立 token/有效期/veteran 模式（HR-ACCESS-23/30/54、HR-ONB-52） */
 ctx.empWrite('kaispanEmpStaff', ctx.empAllStaff());
@@ -448,7 +423,9 @@ legacyBefore.firstName = 'Old';
 legacyBefore.lastName = 'Name';
 legacyBefore.name = 'Old Name';
 ctx.empSaveStaff(legacyBefore);
-assert.equal(ctx.empApproveInvite('legacy-name', { entryDate: '2026-11-20' }).ok, true);
+/* 这份遗留提交没有社保号（第二层）：ANS-1 之后通过要老板写特殊审批原因 */
+assert.equal(ctx.empApproveInvite('legacy-name', { entryDate: '2026-11-20' }).code, 'special_reason');
+assert.equal(ctx.empApproveInvite('legacy-name', { entryDate: '2026-11-20', specialReason: '社保号下周补' }).ok, true);
 assert.equal(ctx.empById('legacy-name').name, 'New Name');
 assert.equal(ctx.empById('legacy-name').firstName, 'New');
 assert.equal(ctx.empById('legacy-name').lastName, 'Name');

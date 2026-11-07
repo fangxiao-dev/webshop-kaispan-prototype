@@ -67,14 +67,13 @@ function euContractFileCurrent(d,key,file){
  return true;
 }
 /* 演示状态：老板端那些数据状态的演示开关（正式版没有），用于本机走查 */
-const EU_DEMO_STATES=[['','按档案状态'],['returned','资料被退回'],['company','公司代填，待员工确认'],['veteran','在岗老员工开通'],['link','请确认员工档案关联'],['contract','合同与问卷待签回'],['contract-returned','只退回个人问卷'],['missing-approved','已批准暂缺'],['offline','合同线下签署已归档']];
+const EU_DEMO_STATES=[['','按档案状态'],['returned','资料被退回'],['company','公司代填，待员工确认'],['veteran','在岗老员工开通'],['link','请确认员工档案关联'],['contract','合同与问卷待签回'],['contract-returned','只退回个人问卷'],['offline','合同线下签署已归档']];
 
 /* hr-model.js 的共用 helper 在浏览器里全局可用；单测只加载本文件，这里做最小回退，取值口径保持一致。 */
 function euNatClassOf(e){if(typeof hrNationalityClass==='function')return hrNationalityClass(e);const c=e?.contract||{};if(c.nationalityClass==='eu'||c.nationalityClass==='other')return c.nationalityClass;if(typeof c.nonEU==='boolean')return c.nonEU?'other':'eu';return '';}
 function euSetNatClass(e,value){if(typeof hrSetNationalityClass==='function'){hrSetNationalityClass(e,value);return;}e.contract=e.contract||{};e.contract.nationalityClass=value==='eu'||value==='other'?value:'';e.contract.nonEU=e.contract.nationalityClass==='other';}
 function euIsStudentOf(e){if(typeof hrIsStudent==='function')return hrIsStudent(e);const c=e?.contract||{};return c.type==='werkstudent'||c.isStudent===true;}
 function euZusatzOf(e){if(typeof hrZusatzCheck==='function')return hrZusatzCheck(e);const c=e?.contract||{};if(c.zusatzCheck==='yes'||c.zusatzCheck==='no')return c.zusatzCheck;if(c.hasZusatz===true)return 'yes';return euNatClassOf(e)==='other'?'':'no';}
-function euBossMark(code){return typeof hrBossMark==='function'?hrBossMark(code):'';}
 function euUploadError(file,imageOnly){return typeof hrUploadError==='function'?hrUploadError(file,imageOnly):'';}
 /* 员工端语言列表来自 employee-ui-i18n.js；单测只加载本文件时用同一份回退。 */
 const EU_LANGUAGES_FALLBACK=[['中文','zh','中文'],['Deutsch','de','Deutsch'],['English','en','English'],['Tiếng Việt','vi','Tiếng Việt'],['한국어','ko','한국어'],['日本語','ja','日本語']];
@@ -113,7 +112,9 @@ function euStage(d){
  if(d.materialSubmitted||inv.state==='submitted')return 'submitted';
  return 'fill';
 }
-function euWorkspaceOpen(d){const stage=euStage(d);return stage==='approved'||stage==='archived';}
+/* ANS-2：员工上传签好的合同和问卷（两份）即开放工作台，不等老板核对归档；审核通过但还没回传时只有入职任务页。 */
+function euContractReturned(d){const inv=euInvite(d);return euContractArchived(d)||!!inv.contractSignedSubmittedAt||!!d?.contractSignedSubmittedAt;}
+function euWorkspaceOpen(d){const stage=euStage(d);return stage==='archived'||(stage==='approved'&&euContractReturned(d));}
 
 /* 待确认关联要先于欢迎页和设密码出现；确认前只拿得到档案姓名（HR-ACCESS-43）。 */
 function euLinkPendingEmployee(){
@@ -140,6 +141,7 @@ function euRender(){
  const stage=euStage(d);
  if(stage==='fill'||stage==='returned')return euShell(d,euMaterialsPage(d,stage));
  if(stage==='submitted')return euShell(d,euLockedPage(d));
+ if(!euWorkspaceOpen(d))return euShell(d,`<main class="eu-body" data-eu-onboarding-only="1">${euTaskPanel(d)}<p class="eu-note">审核已通过。上传签好的劳动合同和个人调查问卷（两份）后，才会开放班表、资料等工作台；在那之前这里只有入职任务页。</p></main>`);
  return euWorkspace(d);
 }
 
@@ -156,10 +158,10 @@ function euPrepareGroups(d){
  const nat=euNationalityClass(d),student=euStudentAnswer(d)==='yes',zusatz=euZusatzStatus(d);
  if(!nat)return [
   ['每位员工都要准备',['护照或身份证（二选一）、银行卡正面照片','食品卫生指导证明（健康证）','医保卡正反面照片（可以入职后补）']],
-  ['其他国籍的员工额外准备',['居留许可（含临时替代证明）','附加页（Zusatzblatt）：待店长核对居留证件后确定是否需要']],
+  ['其他国籍的员工额外准备',['居留许可（必须填写截止日期）','附加页（Zusatzblatt）：待店长核对居留证件后确定是否需要']],
   ['在读学生额外准备',['在读证明（有效期填学期结束日，每学期换新）']]];
  const first=['护照或身份证（二选一）','银行卡正面照片'];
- if(nat==='other')first.splice(1,0,'居留许可（含临时替代证明）');
+ if(nat==='other')first.splice(1,0,'居留许可');
  if(nat==='other'&&zusatz==='yes')first.splice(2,0,'附加页（Zusatzblatt）');
  if(student)first.push('在读证明');
  return [['提交入职资料时必须交齐',first],['第一个上班日前必须有',['食品卫生指导证明（健康证）','Sozialversicherungsnummer（社保号）','签好的劳动合同和个人调查问卷（审核通过后公司发给你）']],['可以之后再补',['Steuer-ID（个人税务识别号）、医保公司和卡号、医保卡正反面照片']]];
@@ -190,7 +192,7 @@ function euReturnBanner(d){
  return `<section class="eu-return-banner"><strong>资料被退回，请修改后重新提交</strong>${reason?`<p>原因：${empEsc(reason)}</p>`:''}${items.length?`<p>被退回的项目：${items.map(x=>`<span class="eu-flag is-rejected">${empEsc(euT(x))}</span>`).join('')}</p>`:''}</section>`;
 }
 function euReturnKeys(d){const inv=euInvite(d);const raw=inv.returnItems||inv.returnedItems||inv.returnInfo?.items||d.returnedItems||(euDemo()==='returned'?['passport','hygiene']:[]);return Array.isArray(raw)?raw.map(x=>typeof x==='string'?x:x?.key).filter(Boolean):[];}
-const EU_DOC_LABEL_FALLBACK={passport:'护照 / 身份证',visa:'居留许可（含临时替代证明）',zusatz:'附加页（Zusatzblatt）',student:'在读证明',hygiene:'食品卫生指导证明（健康证）',healthFront:'医保卡正面照片',healthBack:'医保卡反面照片',bankFront:'银行卡正面照片',contract:'劳动合同',questionnaire:'个人调查问卷'};
+const EU_DOC_LABEL_FALLBACK={passport:'护照 / 身份证',visa:'居留许可',zusatz:'附加页（Zusatzblatt）',student:'在读证明',hygiene:'食品卫生指导证明（健康证）',healthFront:'医保卡正面照片',healthBack:'医保卡反面照片',bankFront:'银行卡正面照片',contract:'劳动合同',questionnaire:'个人调查问卷'};
 function euReturnItemLabels(d){const keys=euReturnKeys(d);if(!keys.length)return [];const all=[...euDocumentList(d),...euRequiredItems(d).filter(x=>x.type==='field')];
  return keys.map(key=>{
   const hit=all.find(x=>x.key===key||x.doc===key||x.label===key);
@@ -207,37 +209,37 @@ function euIsReturned(d,key){const keys=euReturnKeys(d);return keys.includes(key
 function euMaterialsPage(d,stage){
  const mode=euFillMode(d),returned=stage==='returned',nat=euNationalityClass(d);
  const banner=returned?euReturnBanner(d):'';
- const modeNote=mode==='company'?`<section class="eu-mode-note"><strong>公司已替你填好资料</strong><p>下面显示的是公司填写的内容，只改动有误的地方，然后点“确认资料”。确认后直接通过，不再走店长审核。</p>${euBossMark('6.4')}</section>`:mode==='veteran'?`<section class="eu-mode-note"><strong>在岗老员工开通员工端</strong><p>你不需要重走入职审核和合同：只需确认资料、补交缺的证件。确认后缺的资料会进入“关键资料缺失”提醒。</p>${euBossMark('2.5')}</section>`:'';
+ const modeNote=mode==='company'?`<section class="eu-mode-note"><strong>公司已替你填好资料</strong><p>下面显示的是公司填写的内容，只改动有误的地方，然后点“确认资料”。确认后直接通过，不再走店长审核。</p></section>`:mode==='veteran'?`<section class="eu-mode-note"><strong>在岗老员工开通员工端</strong><p>你不需要重走入职审核和合同：只需确认资料、补交缺的证件。确认后缺的资料会进入“关键资料缺失”提醒。</p></section>`:'';
  const progress=euLayerProgress(d);
  return `<div class="eu-body" data-eu-stage="${stage}"><span class="eu-step">02 / 入职资料</span><h2>${mode==='company'?'核对公司填写的资料':mode==='veteran'?'确认资料并补交证件':'完善你的入职资料'}</h2>${banner}${modeNote}
  <p>姓名与邮箱由邀请带入。先回答国籍类别和是否学生，材料清单会随你的情况变化。</p>
  <h3>第一步 · 回答两个问题</h3>${euDocumentIdentity(d)}
  ${nat?'':`<p class="eu-waiting">待确认国籍：回答国籍类别后才会列出需要哪些材料。</p>`}
  ${nat?`<details class="eu-prepare-fold" open><summary>按你的情况，需要这些材料</summary>${euPrepareList(d)}</details>`:euPrepareList(d)}
- <section class="eu-layer"><header class="eu-layer-head"><span>第一层</span><div><strong>提交时必须有</strong><small>${euTF('{done} / {total} 项已完成，缺项不能提交',{done:progress[1].done,total:progress[1].total})}</small></div></header>
+ <section class="eu-layer"><header class="eu-layer-head"><span>第一层</span><div><strong>建议提交时就有</strong><small>${euTF('{done} / {total} 项已完成，只是提示，缺项不挡提交',{done:progress[1].done,total:progress[1].total})}</small></div></header>
   ${euProfileForm(d,'1')}${euDocSection(d,1,stage)}</section>
- <section class="eu-layer"><header class="eu-layer-head"><span>第二层</span><div><strong>第一个上班日前必须有</strong><small>${euTF('{done} / {total} 项已完成，可申请暂缺',{done:progress[2].done,total:progress[2].total})}</small></div></header>
+ <section class="eu-layer"><header class="eu-layer-head"><span>第二层</span><div><strong>第一个上班日前必须有</strong><small>${euTF('{done} / {total} 项已完成，缺项只是提示',{done:progress[2].done,total:progress[2].total})}</small></div></header>
   ${euProfileForm(d,'2')}${euDocSection(d,2,stage)}<p class="eu-note">签好的劳动合同和个人调查问卷在资料审核通过后由公司发给你，签回后归档。</p></section>
- <section class="eu-layer"><header class="eu-layer-head"><span>第三层</span><div><strong>可以之后补</strong><small>${euTF('{done} / {total} 项已完成，可申请暂缺',{done:progress[3].done,total:progress[3].total})}</small></div></header>
+ <section class="eu-layer"><header class="eu-layer-head"><span>第三层</span><div><strong>可以之后补</strong><small>${euTF('{done} / {total} 项已完成，缺项只是提示',{done:progress[3].done,total:progress[3].total})}</small></div></header>
   ${euProfileForm(d,'3')}${euDocSection(d,3,stage)}</section>
  <p class="eu-validation" role="status"></p>${euSubmissionActions(d)}
- <button type="button" class="ghost-btn eu-skip" style="width:100%;margin-top:12px">测试跳过，进入工作台（演示用，正式版没有）</button><p class="eu-note">演示用，正式版没有：审核通过前只有入职任务页，通过后才开放工作台。</p>
+ <button type="button" class="ghost-btn eu-skip" style="width:100%;margin-top:12px">测试跳过，进入工作台（演示用，正式版没有）</button><p class="eu-note">审核通过后，员工上传签好的合同和问卷（两份）才开放工作台，之前只有入职任务页。</p>
  <p class="eu-note">草稿自动保存到本机；店长只看到你提交的版本。提交后页面锁定，可以撤回再改。</p></div>`;
 }
 
 function euLockedPage(d){
  const at=d.materialSubmitted||euInvite(d).submittedAt||'';
  return `<div class="eu-body"><span class="eu-step">02 / 入职资料</span><h2>资料已提交，等待店长审核</h2><p>提交时间：${empEsc(at)}。审核期间页面锁定，店长只看到这次提交的版本。</p>
- <div class="eu-lock-card"><strong>已冻结的提交内容</strong><p>${euT('第一层必交项')}：${euLayerProgress(d)[1].done} / ${euLayerProgress(d)[1].total}；申请暂缺：${euMissingRequestLabels(d).join('、')||'无'}</p></div>
+ <div class="eu-lock-card"><strong>已冻结的提交内容</strong><p>${euT('第一层必交项')}：${euLayerProgress(d)[1].done} / ${euLayerProgress(d)[1].total}</p></div>
  <p class="eu-note">发现填错可以撤回，回到草稿修改后重新提交；审核人始终看到最后一次提交的版本。</p>
  <button type="button" class="ghost-btn eu-withdraw">撤回提交，回到草稿</button>
- <button type="button" class="ghost-btn eu-skip" style="width:100%;margin-top:12px">测试跳过，进入工作台（演示用，正式版没有）</button><p class="eu-note">演示用，正式版没有：审核通过前只有入职任务页，通过后才开放工作台。</p></div>`;
+ <button type="button" class="ghost-btn eu-skip" style="width:100%;margin-top:12px">测试跳过，进入工作台（演示用，正式版没有）</button><p class="eu-note">审核通过后，员工上传签好的合同和问卷（两份）才开放工作台，之前只有入职任务页。</p></div>`;
 }
 
 function euComingSoonPage(tab){
  const map={home:['今日','打卡与今日班次'],schedule:['排班','班表与报可工作时间'],hours:['薪资','工时、工资单与差旅费']};
  const [title,what]=map[tab]||map.home;
- return `<span class="eu-step">${title}</span><h2>${title}</h2><section class="eu-coming-soon"><strong>即将开放</strong><p>${what}属于第二、三期功能，一期工作台只开放“任务”和“资料”。</p><small>一期员工端：指派给我的待办（人事事项和点钞记账委派）+ 我的资料。</small></section><p class="eu-note">${euBossMark('7.x')}</p>`;
+ return `<span class="eu-step">${title}</span><h2>${title}</h2><section class="eu-coming-soon"><strong>即将开放</strong><p>${what}属于第二、三期功能，一期工作台只开放“任务”和“资料”。</p><small>一期员工端：指派给我的待办（人事事项和点钞记账委派）+ 我的资料。</small></section><p class="eu-note"></p>`;
 }
 
 function euWorkspace(d){
@@ -266,14 +268,14 @@ function euDocumentList(d){
  const nat=euNationalityClass(d),student=euStudentAnswer(d)==='yes',zusatz=euZusatzStatus(d);
  if(!nat)return [];
  const list=[{key:'passport',label:'护照 / 身份证',layer:1,expires:true}];
- if(nat==='other')list.push({key:'visa',label:'居留许可（含临时替代证明）',layer:1,expires:true});
+ if(nat==='other')list.push({key:'visa',label:'居留许可',layer:1,expires:true});
  if(nat==='other'&&zusatz==='yes')list.push({key:'zusatz',label:'附加页（Zusatzblatt）',layer:1,expires:true});
  if(student)list.push({key:'student',label:'在读证明',layer:1,expires:true});
  list.push({key:'bankFront',label:'银行卡正面照片',layer:1,imageOnly:true});
  list.push({key:'hygiene',label:'食品卫生指导证明（健康证）',layer:2,expires:true});
  list.push({key:'healthFront',label:'医保卡正面照片',layer:3,imageOnly:true});
  list.push({key:'healthBack',label:'医保卡反面照片',layer:3,imageOnly:true});
- return list.map(t=>({...t,required:t.layer===1,special:euSpecialMissing(t.label)}));
+ return list.map(t=>({...t,required:t.layer===1}));
 }
 /* 三层必填清单（HR-ONB-26～29）：提交校验、进度、退回标记都从这里取 */
 function euRequiredItems(d){
@@ -285,11 +287,11 @@ function euRequiredItems(d){
  push('birthday','出生日期',1,!!p.birthday);
  push('address','地址',1,!!(p.street&&p.houseNo&&p.zip&&p.city));
  push('iban','IBAN',1,!!p.iban);
- euDocumentList(d).forEach(t=>items.push({key:'doc:'+t.key,doc:t.key,label:t.label,layer:t.layer,type:'doc',done:!!d.docs?.[t.key],special:!!t.special}));
- push('rentenversicherung','Sozialversicherungsnummer（社会保险号）',2,!!p.rentenversicherung,{special:true});
- push('steuerId','Steuer-ID（个人税务识别号）',3,!!p.steuerId,{special:true});
- push('krankenkasse','医保公司',3,!!p.krankenkasse,{special:true});
- push('healthCardNumber','医保卡号',3,!!p.healthCardNumber,{special:true});
+ euDocumentList(d).forEach(t=>items.push({key:'doc:'+t.key,doc:t.key,label:t.label,layer:t.layer,type:'doc',done:!!d.docs?.[t.key]}));
+ push('rentenversicherung','Sozialversicherungsnummer（社会保险号）',2,!!p.rentenversicherung);
+ push('steuerId','Steuer-ID（个人税务识别号）',3,!!p.steuerId);
+ push('krankenkasse','医保公司',3,!!p.krankenkasse);
+ push('healthCardNumber','医保卡号',3,!!p.healthCardNumber);
  return items;
 }
 function euLayerProgress(d){const items=euRequiredItems(d),out={};[1,2,3].forEach(layer=>{const list=items.filter(x=>x.layer===layer)||[];out[layer]={done:list.filter(x=>x.done).length,total:list.length};});return out;}
@@ -350,40 +352,10 @@ function euDocSection(d,layer,stage){
  return list.map(t=>euDocRow(d,t,stage)).join('');
 }
 function euDocRow(d,t,stage){
- const key=t.key,file=d.docs?.[key],approval=euApprovalFor(d,key,t),pending=euSpecialPending(d,key),rejected=euIsReturned(d,key);
- const approvalState=euApprovalState(approval);
- const flags=[t.layer===1?'<span class="eu-flag is-required">提交时必交</span>':`<span class="eu-flag">第${t.layer}层</span>`,t.special&&t.layer>1?(approvalState?euApprovalFlag(approval):pending?'<span class="eu-flag is-pending">等待审批</span>':'<span class="eu-flag">可暂缺</span>'):'',rejected?'<span class="eu-flag is-rejected">被退回</span>':''].filter(Boolean).join('');
+ const key=t.key,file=d.docs?.[key],rejected=euIsReturned(d,key);
+ const flags=[`<span class="eu-flag">第${t.layer}层</span>`,rejected?'<span class="eu-flag is-rejected">被退回</span>':''].filter(Boolean).join('');
  return `<div class="eu-doc${rejected?' is-rejected':''}"><div><strong>${euT(t.label)}${flags}</strong><small>${file?empEsc(file.name):'待上传'}${t.imageOnly?' · 只收照片':''}</small>${euDocExpiryFields(d,t)}</div><label class="ghost-btn eu-upload">${file?'替换':'上传'}<input type="file" accept="${euAccept(t)}" data-doc="${key}" hidden></label>${file?`<button type="button" class="eu-delete" data-doc="${key}" aria-label="删除${t.label}">×</button>`:''}</div>`;
 }
-function euSpecialKeyFor(t){return ['healthFront','healthBack'].includes(t.key)?'healthPhotos':t.key;}
-function euApprovalFor(d,key,t){
- const item=euSpecialKeyFor(t),label=t.label;
- return euMissingApprovals(d).find(x=>(x.item||x.key)===item||x.label===label||(item==='healthPhotos'&&(x.item==='healthFront'||x.item==='healthBack')))||null;
-}
-/* 暂缺审批按状态显示：申请中 / 已批准 / 已驳回 / 已逾期（HR-ONB-31～33） */
-function euApprovalState(a){
- if(!a)return '';
- if(a.status==='approved')return a.deadline&&a.deadline<empToday()?'expired':'approved';
- if(a.status==='rejected')return 'rejected';
- if(a.status==='filled')return 'filled';
- return 'pending';
-}
-function euApprovalText(a){
- const state=euApprovalState(a);
- if(state==='approved')return euTF('已批准暂缺（{date} 前）',{date:euMonthDay(a.deadline)});
- if(state==='expired')return euTF('已逾期未补交（补交日 {date}）',{date:euMonthDay(a.deadline)});
- if(state==='rejected')return '暂缺已驳回';
- if(state==='filled')return '已补齐';
- return '等待审批';
-}
-function euApprovalFlag(a){const state=euApprovalState(a);const tone=state==='approved'?'is-approved':state==='pending'?'is-pending':'is-rejected';return `<span class="eu-flag ${tone}">${euApprovalText(a)}</span>`;}
-/* 暂缺申请只认店长档案里的结果；本机旧副本不能在店长已批准/驳回后继续显示“等待审批”。 */
-function euSpecialRequest(d){const e=euEmployee(d);return e?(e.employeePortal?.specialSubmission||null):(d.specialSubmission||null);}
-function euSpecialState(d){return euSpecialRequest(d)?.state||'';}
-function euSpecialPending(d,key){
- const req=euSpecialRequest(d);if(req?.state!=='pending')return false;const t=euDocumentList(d).find(x=>x.key===key);const item=t?euSpecialKeyFor(t):key;return (req.items||[]).includes(item)||(req.items||[]).includes(key)||(String(req.labels||req.items||'').includes(item));
-}
-
 function euInvitationDownloads(d){
  const token=state().params.get('t')||state().params.get('token'),employee=token?empRoster().find(e=>e.invite?.token===token||e.request?.token===token):null;
  
@@ -392,43 +364,10 @@ function euInvitationDownloads(d){
  return `<section class="eu-invitation-downloads"><h3>个人调查问卷</h3>${card('个人调查问卷（Personalfragebogen）',questionnaire,'Personalfragebogen.pdf')}<p>请下载个人调查问卷，填写签字后上传。劳动合同将在资料审核通过后另行发送。</p></section>`;
 }
 
-function euSpecialMissing(label){
- const list=['Steuer-ID（个人税务识别号）','Sozialversicherungsnummer（社会保险号）','Steuernummer','Rentenversicherung Nr.','医保名称','医保公司','医保卡号','医保卡（Krankenkasse）','医保卡正面照片','医保卡反面照片','医保卡正反面照片','食品卫生指导证明','食品卫生指导证明（健康证）','食品卫生指导证明（健康证首次证明）'];
- return list.includes(label);
-}
-
-
-/* 可申请暂缺的只有 6 项（HR-ONB-30）：税号、社保号、医保公司、医保卡号、医保卡照片、健康证首次证明 */
-function euSpecialMissingItems(d){
- const p=d.profile||{},out=[],approved=new Set(euMissingApprovals(d).filter(x=>x.status==='approved'&&(!x.deadline||x.deadline>=empToday())).map(x=>x.item||x.key));
- const add=(key,label,missing)=>{if(missing&&!approved.has(key))out.push({key,label});};
- add('steuerId','Steuer-ID（个人税务识别号）',!p.steuerId);
- add('rentenversicherung','Sozialversicherungsnummer（社会保险号）',!p.rentenversicherung);
- add('krankenkasse','医保公司',!p.krankenkasse);
- add('healthCardNumber','医保卡号',!p.healthCardNumber);
- add('healthPhotos','医保卡正反面照片',!d.docs?.healthFront||!d.docs?.healthBack);
- add('hygiene','食品卫生指导证明（健康证首次证明）',!d.docs?.hygiene);
- return out;
-}
-function euMissingRequestLabels(d){const req=euSpecialRequest(d);return req&&req.state!=='approved'?(req.labels||req.items||[]):[];}
-function euSpecialBlock(d){
- const missing=euSpecialMissingItems(d),approvals=euMissingApprovals(d),req=euSpecialRequest(d),pending=euSpecialState(d)==='pending';
- if(!missing.length&&!approvals.length&&!pending)return '';
- const row=approval=>`<p class="eu-approval">${empEsc(euApprovalLabel(approval))}：${euApprovalText(approval)}${euApprovalState(approval)==='rejected'?'，请补齐或联系店长':''}</p>`;
- return `<section class="eu-special"><strong>申请暂缺</strong><p>可申请暂缺的只有税号、社保号、医保公司、医保卡号、医保卡照片、健康证首次证明；其他第一层必交项必须交齐。</p>${approvals.map(row).join('')}
- ${pending?`<div class="eu-special-receipt"><strong>等待审批</strong><p>已提交：${empEsc((req.labels||req.items||[]).join('、'))}</p><p>${empEsc(req.reason||'')}</p><small>${empEsc(req.at||'')} · 申请不会自动获批，需等待店长审批</small><div class="eu-cols"><button type="button" class="ghost-btn eu-special-approve">演示：店长已批准</button><button type="button" class="ghost-btn eu-special-reject">演示：店长驳回</button></div></div>`:missing.length?`<button type="button" class="ghost-btn eu-special-submit">申请暂缺（${missing.length} 项）</button>`:'<p class="eu-note">没有可申请暂缺的缺项。</p>'}
- <form class="eu-special-form" hidden><p>勾选要申请暂缺的项目：</p>${missing.map(x=>`<label class="eu-check"><input type="checkbox" data-special-item="${x.key}"> ${empEsc(x.label)}</label>`).join('')}<label><span>原因${euRequiredStar()}</span><textarea name="reason" required placeholder="说明暂缺原因和预计补交时间"></textarea></label><p class="eu-note">申请不会自动获批，需等待店长审批。</p><div class="eu-cols"><button type="button" class="ghost-btn eu-special-cancel">取消</button><button class="primary-btn eu-special-submit-confirm" type="submit">提交申请</button></div></form></section>`;
-}
 function euSubmissionActions(d){
  const mode=euFillMode(d);
- if(mode!=='self')return `${euSpecialBlock(d)}<div class="eu-submit-actions"><button type="button" class="primary-btn eu-company-confirm">${mode==='veteran'?'确认资料':'确认资料，直接通过'}</button></div><p class="eu-note">${mode==='veteran'?'在岗老员工不重走审核和合同：确认后缺的资料进入“关键资料缺失”提醒。':'公司代填：确认后不再走审核，直接进入已通过，随后公司发合同。'}${mode==='company'?euBossMark('6.4'):euBossMark('2.5')}</p>`;
- return `${euSpecialBlock(d)}<div class="eu-submit-actions"><button type="button" class="primary-btn eu-material-submit">提交材料</button></div><p class="eu-note">提交按钮只校验第一层“提交时必须有”。第二、三层缺项可申请暂缺；提交后页面锁定，可以撤回再改。</p>`;
-}
-function euOnboardingComplete(d){
- if(d.demoWorkspaceAt||d.veteranConfirmedAt||d.confirmedCompanyProfileAt)return true;
- const e=euEmployee(d);if(!e)return false;const inv=e.invite||{};
- if(inv.onboardingFilesVersion===1)return !!inv.contractSignedReviewedAt;
- return inv.state==='approved'||['active','probation'].includes(e.status)||!!inv.contractSignedReviewedAt;
+ if(mode!=='self')return `<div class="eu-submit-actions"><button type="button" class="primary-btn eu-company-confirm">${mode==='veteran'?'确认资料':'确认资料，直接通过'}</button></div><p class="eu-note">${mode==='veteran'?'在岗老员工不重走审核和合同：确认后缺的资料进入“关键资料缺失”提醒。':'公司代填：确认后不再走审核，直接进入已通过，随后公司发合同。'}</p>`;
+ return `<div class="eu-submit-actions"><button type="button" class="primary-btn eu-material-submit">提交材料</button></div><p class="eu-note">三层清单只提示还缺什么，不会挡住提交；没交齐的项目，店长审核时可能退回，或由老板做特殊审批。提交后页面锁定，可以撤回再改。</p>`;
 }
 
 /* ===== 员工档案 ↔ 员工端（唯一员工 ID；工资、排班及月度记录不参与同步） ===== */
@@ -494,7 +433,7 @@ function euBoundData(saved){
    const formalNewer=!!(doc.at&&(!local?.at||String(doc.at)>String(local.at)));
    /* 没编辑过的日期随正式文件刷新；不能再把本机缓存的旧日期当草稿写回去（HR-ONB-52）。 */
    if(formalNewer||!edited.has(key+'Expiry'))d.profile[key+'Expiry']=doc.expiry||'';
-   if(formalNewer||!edited.has(key+'HasExpiry'))d.profile[key+'HasExpiry']=doc.noExpiry===true?'no':doc.expiry?'yes':'';
+   if(formalNewer||!edited.has(key+'HasExpiry'))d.profile[key+'HasExpiry']=doc.expiry?'yes':'';
    if(doc.state==='missing'){delete d.docs[key];return;}
    if(!doc.file){d.docs[key]={name:'档案已记录，原文件未提供',source:'archive',legacyNoFile:true};return;}
    /* 发送记录 ID 和上传时间必须一起投影：只留 at 会让员工端把本次签回件判成旧件（HR-ONB-37/53）。 */
@@ -529,7 +468,7 @@ function euSubmissionSnapshot(d){
  Object.entries(EU_EMPLOYEE_PROFILE_MAP).forEach(([key,path])=>{if(path.startsWith('contact.')||path.startsWith('ids.'))empSetPath(snap,path,p[key]??'');});
  if(p.nationalityClass!==undefined)snap.contract.nationalityClass=p.nationalityClass;
  const student=euStudentAnswer(d);if(student)snap.contract.isStudent=student==='yes';
- Object.entries(EU_EMPLOYEE_DOC_MAP).forEach(([key,docId])=>{const doc=d.docs?.[key];if(!doc||doc.legacyNoFile)return;snap.docs[docId]={state:'ok',file:doc.name,dataUrl:doc.data||null,ref:doc.ref,dispatchId:doc.dispatchId||'',expiry:p[key+'Expiry']||'',noExpiry:p[key+'HasExpiry']==='no',at:doc.at};});
+ Object.entries(EU_EMPLOYEE_DOC_MAP).forEach(([key,docId])=>{const doc=d.docs?.[key];if(!doc||doc.legacyNoFile)return;snap.docs[docId]={state:'ok',file:doc.name,dataUrl:doc.data||null,ref:doc.ref,dispatchId:doc.dispatchId||'',expiry:p[key+'Expiry']||'',noExpiry:false,at:doc.at};});
  return snap;
 }
 
@@ -560,7 +499,7 @@ function euSyncStaff(d,opts){
    if(doc&&!doc.legacyNoFile&&old.at&&doc.at&&String(doc.at)<String(old.at))return;
    /* 只写员工实际编辑过的有效期，没编辑过的日期不能拿本机旧副本覆盖正式文件（HR-ONB-52）。 */
    if(next.docs[docId]&&(!trackEdits||edited.has(key+'Expiry')))next.docs[docId].expiry=d.profile?.[key+'Expiry']??'';
-   if(next.docs[docId]&&(!trackEdits||edited.has(key+'HasExpiry')))next.docs[docId].noExpiry=d.profile?.[key+'HasExpiry']==='no';
+   if(next.docs[docId]&&(!trackEdits||edited.has(key+'HasExpiry')))next.docs[docId].noExpiry=false;
    if(doc?.legacyNoFile)return;
    if(doc){if(old.file&&doc.data&&old.dataUrl!==doc.data&&doc.source!=='archive')next.documentArchive=[{docId,...old,archivedAt:empNow()},...(next.documentArchive||[])];next.docs[docId]={...old,state:'ok',file:doc.name,dataUrl:doc.data||old.dataUrl,ref:doc.ref||old.ref,dispatchId:doc.dispatchId||old.dispatchId||'',expiry:(!trackEdits||edited.has(key+'Expiry'))?(d.profile?.[key+'Expiry']??''):old.expiry,noExpiry:(!trackEdits||edited.has(key+'HasExpiry'))?d.profile[key+'HasExpiry']==='no':old.noExpiry,at:doc.at||old.at,by:doc.source==='archive'?old.by:'self',needsReview:doc.source==='archive'?old.needsReview:true};}
    else if(removed.has(key)&&old.file){next.documentArchive=[{docId,...old,archivedAt:empNow()},...(next.documentArchive||[])];next.docs[docId]={...old,state:'missing'};}
@@ -629,8 +568,6 @@ function euPublishDraftProgress(d){
 }
 
 function euRequiredStar(){return '<span class="eu-required-star" aria-hidden="true">*</span>';}
-function euSubmitHelp(type){const special=type==='special';return `<details class="eu-submit-help"><summary aria-label="${special?'特殊审批提示':'提交材料提示'}">?</summary><div role="note">${special?'仅 Steuer-ID（个人税务识别号）、Sozialversicherungsnummer（社保号）、医保名称、医保卡号 / 正反面照片、健康证可暂缺。其他适用项须填齐，填写原因后申请特殊审批，同时提醒店长审批并通知老板。':'已按要求提交全部资料时，点击“提交材料”即可；不触发店长或老板的特殊审批提醒。'}</div></details>`;}
-
 function euContractSummary(d){const c=d.contractSummary;if(!c)return '';
  const values=[['工作地点',c.workLocation||c.store||'未填写'],['岗位职责',c.duties||empText(empRole(c.role).name)],['合同类型',empText(empContractType(c.type).name)],['入职日期',c.entryDate||'未填写'],['合同到期',c.befristetUntil||'未约定固定到期日'],['每周约定工时',c.weeklyHours?c.weeklyHours+' h':'未单独录入'],['每月工时范围',`${c.hoursMin??'—'}–${c.hoursMax??'—'} h`],['薪资方式',c.payType==='pauschal'?'固定月薪 Brutto':'时薪 Brutto'],['合同薪资',`€${Number(c.rate||0).toFixed(2)} / ${c.payType==='pauschal'?'月':'小时'}`],['年假天数',`${c.urlaubDays??'—'}`],['试用期结束',c.probationEnd||'未设置'],['解约通知期',c.noticePeriod||'未填写'],['发薪时间与支付方式',c.paymentTerms||'未填写'],['加班与工时账户约定',c.overtimeTerms||'未填写'],['补贴 / 奖金约定',c.allowanceTerms||'未填写']];
  return `<details class="eu-task"><summary>合同摘要 · 与员工档案一致</summary><div class="eu-contract-summary">${values.map(([label,value])=>`<div><small>${label}</small><strong>${empEsc(value)}</strong></div>`).join('')}</div><p class="eu-note">合同条款由公司维护；如有差异请联系店长，签署合同原文为准。</p></details>`;
@@ -650,7 +587,7 @@ function euTaskCard(task,d){const saved=euTaskState(task,d),labels={todo:'待处
 function euHrTodoItems(d){
  const items=[],stage=euStage(d),inv=euInvite(d);
  if(stage==='fill'||stage==='returned'){
-  const missing=euLayer1Missing(d);items.push({title:'入职资料待补充',meta:missing.length?euTF('第一层还缺 {n} 项，补齐后可提交',{n:missing.length}):euT('第一层已齐，可以提交审核'),pill:'入职',tone:'orange',tab:'docs'});
+  const missing=euLayer1Missing(d);items.push({title:'入职资料待补充',meta:missing.length?euTF('第一层还缺 {n} 项（只是提示，不挡提交）',{n:missing.length}):euT('第一层已齐，可以提交审核'),pill:'入职',tone:'orange',tab:'docs'});
  }
  /* 在岗老员工确认后免审核免合同，但缺的资料要单独提醒（HR-ONB-52、hr.profile_missing） */
  if(stage==='archived'){
@@ -663,7 +600,6 @@ function euHrTodoItems(d){
  if(update&&update.state==='pending')items.push({title:'资料修改待店长核对',meta:euTF('共 {n} 项，核对期间档案保持原值',{n:(update.items||[]).length}),pill:'资料',tone:'blue',tab:'docs'});
  else if(update&&update.state==='returned')items.push({title:'资料修改被退回',meta:update.reason||'请按店长说明修改后重新提交',pill:'资料',tone:'orange',tab:'docs'});
  euExpiryNotices(d).forEach(x=>items.push({title:x.title,meta:x.message,pill:'证件',tone:'red',tab:'docs'}));
- euMissingApprovals(d).forEach(x=>{const state=euApprovalState(x);if(state==='approved')items.push({title:euTF('已批准暂缺：{label}',{label:euT(euApprovalLabel(x))}),meta:euTF('补交日 {date} 前交回，逾期会每天提醒',{date:euMonthDay(x.deadline)}),pill:'暂缺',tone:'blue',tab:'docs'});else if(state==='expired')items.push({title:euTF('暂缺已逾期：{label}',{label:euT(euApprovalLabel(x))}),meta:euTF('补交日 {date} 已过，请尽快补交',{date:euMonthDay(x.deadline)}),pill:'暂缺',tone:'red',tab:'docs'});});
  if(euContractSent(d)&&!euContractArchived(d))items.push({title:'签回劳动合同和个人问卷',meta:euContractTodoMeta(d),pill:'合同',tone:'orange',tab:'docs'});
  if(euLinkPending(d))items.push({title:'请确认员工档案关联',meta:'确认前只显示档案姓名',pill:'关联',tone:'orange',tab:'docs'});
  return items;
@@ -682,7 +618,7 @@ function euTaskPanel(d){
  const fields=`${field('date','记账日期','date')}<h3>按面额清点现金</h3><div class="eu-denominations">${[200,100,50,20,10,5,2,1,.5,.2,.1,.05,.02,.01].map(amount=>`<label>€${amount.toFixed(2)}<input type="number" min="0" step="1" name="count_${amount}" data-denom="${amount}" value="${v['count_'+amount]??0}" aria-label="${amount} 欧元数量" ${disabled}></label>`).join('')}</div><div class="eu-cash-total">清点现金 <strong class="eu-counted">€0.00</strong></div>${field('expected','结算单应有现金 €')}${field('opening','备用金 / 起始现金 €')}${field('cashRevenue','现金收入 €')}${field('cardRevenue','银行卡收入 €')}${field('expense','现金支出 €','number',false)}<label>结算单 / 票据编号<input name="receipt" value="${empEsc(v.receipt||'')}" ${disabled}></label><div class="eu-cash-total">与应有现金差额 <strong class="eu-cash-diff">€0.00</strong></div><label>差额原因 / 备注<textarea name="note" ${disabled}>${empEsc(v.note||'')}</textarea></label>`;
  return `<button class="ghost-btn eu-task-back">‹ 我的任务</button><span class="eu-step" style="display:block;margin-top:20px">${task.category}</span><h2>${task.title}</h2><p>${task.from} 委派 · ${task.due}</p><div class="eu-task"><strong>任务要求</strong><p>${task.instructions}</p></div>${locked?`<p class="eu-notice">${saved.state==='done'?'已完成':'已提交，等待店长审核'} · ${empEsc(saved.submittedAt||'')}</p>`:''}<form id="eu-assignment-form" data-task="${task.id}" data-kind="${task.kind}">${fields}<p class="eu-note">现金清点和应有金额分别记录，差额不为零时需说明原因。本机演示，不会写入正式门店账。</p>${locked?'<button class="ghost-btn eu-task-revise" type="button">补充 / 修改提交</button>':'<div class="eu-cols"><button type="button" class="ghost-btn eu-task-draft">保存草稿</button><button class="primary-btn" type="submit">提交任务</button></div>'}</form>${saved.history?.length?`<details class="eu-task"><summary>历史提交（${saved.history.length}）</summary>${saved.history.map(h=>`<p>${empEsc(h.at)} · 已保留上一版</p>`).join('')}</details>`:''}`;}
  const list=items.length?items.map(x=>`<article class="eu-assignment"><div class="eu-assignment-top"><span class="pill ${x.tone}">${x.pill}</span></div><h3>${empEsc(x.title)}</h3><p>${empEsc(x.meta)}</p><button class="ghost-btn" data-tab="${x.tab}">打开处理</button></article>`).join(''):'<p class="eu-note">目前没有等你处理的人事事项。</p>';
- return `<span class="eu-step">指派给我的待办</span><h2>我的任务</h2><p>这里只显示分配给你本人的事项：人事待办和点钞记账委派。</p><h3>人事待办</h3>${list}<h3>委派任务</h3>${tasks.map(t=>euTaskCard(t,d)).join('')}<p class="eu-note">点钞记账为演示委派，不代表门店真实待办；正式接入后只显示分配给本人的任务。</p>${euBossMark('7.x')}`;
+ return `<span class="eu-step">指派给我的待办</span><h2>我的任务</h2><p>这里只显示分配给你本人的事项：人事待办和点钞记账委派。</p><h3>人事待办</h3>${list}<h3>委派任务</h3>${tasks.map(t=>euTaskCard(t,d)).join('')}<p class="eu-note">点钞记账为演示委派，不代表门店真实待办；正式接入后只显示分配给本人的任务。</p>`;
 }
 function euTaskBind(){
  const draw=()=>app();
@@ -762,9 +698,9 @@ function euDownloadPayslip(d,month){
 }
 
 
-function euDocExpiryFields(d,t){if(!t?.expires)return '';const p=d.profile||{},key=t.key,choice=p[key+'HasExpiry']||(p[key+'Expiry']?'yes':'');return `${t.expiryOptional?`<label><span>材料是否有截止日期${d.docs[key]?euRequiredStar():''}</span><select class="eu-profile-field eu-eligibility" data-profile="${key}HasExpiry"><option value="">请选择</option><option value="yes" ${choice==='yes'?'selected':''}>有截止日期</option><option value="no" ${choice==='no'?'selected':''}>无明确截止日期</option></select></label>`:''}${!t.expiryOptional||choice==='yes'?`<label><span>有效期至${euRequiredStar()}</span><input class="eu-profile-field" data-profile="${key}Expiry" type="date" value="${empEsc(p[key+'Expiry']||'')}"></label><small>请按材料填写完整年月日。</small>`:''}`;}
+function euDocExpiryFields(d,t){if(!t?.expires)return '';const p=d.profile||{},key=t.key,choice=p[key+'HasExpiry']||(p[key+'Expiry']?'yes':'');return `<label><span>有效期至${euRequiredStar()}</span><input class="eu-profile-field" data-profile="${key}Expiry" type="date" value="${empEsc(p[key+'Expiry']||'')}"></label><small>所有证件都要填写截止日期，请按材料填写完整年月日。</small>`;}
 
-function euExpiryMissing(d){return euDocumentList(d).filter(t=>t.expires&&d.docs[t.key]).flatMap(t=>{const p=d.profile||{};if(t.expiryOptional&&p[t.key+'HasExpiry']==='no')return [];return empValidExpiry(p[t.key+'Expiry'])?[]:[t.label+'有效期（年月日）'];});}
+function euExpiryMissing(d){return euDocumentList(d).filter(t=>t.expires&&d.docs[t.key]).flatMap(t=>{const p=d.profile||{};return empValidExpiry(p[t.key+'Expiry'])?[]:[t.label+'有效期（年月日）'];});}
 
 function euContractReleased(d){const e=euEmployee(d);return !!(e?.invite?.state==='approved'&&e.invite.contractSentAt);}
 function euContractFile(d,key){
@@ -828,7 +764,6 @@ function euContractEmailTip(){return `<details class="eu-contract-tip"><summary 
 
 
 /* ===== 入职后：我的资料（HR-ONB-43/44、HR-DOC-20） ===== */
-const EU_SPECIAL_ITEMS=[['steuerId','Steuer-ID（个人税务识别号）'],['rentenversicherung','Sozialversicherungsnummer（社会保险号）'],['krankenkasse','医保公司'],['healthCardNumber','医保卡号'],['healthPhotos','医保卡正反面照片'],['hygiene','食品卫生指导证明（健康证首次证明）']];
 /* 本机草稿的请求与店长写入 employeePortal 的核对结果合并：店长退回时以店长结果为准（HR-ONB-43） */
 function euUpdateRequest(d){
  const portal=euEmployee(d)?.employeePortal?.updateRequest||null,local=d.updateRequest||null;
@@ -929,12 +864,7 @@ function euPushSupplementReturn(d,sub){
  }
  return e.id;
 }
-/* 暂缺审批结果：店长写入档案的 missingApprovals（见报告“依赖字段”） */
 function euDaysFrom(date,days){const dt=new Date(date+'T12:00:00');dt.setDate(dt.getDate()+days);return dt.toISOString().slice(0,10);}
-function euMissingApprovals(d){const demo=euDemo();if(demo==='missing-approved')return EU_SPECIAL_ITEMS.map(([item,label])=>({item,label,status:'approved',deadline:euDaysFrom(empToday(),30)}));const e=euEmployee(d);
- /* 已关联档案时只认店长写入的结果；本机副本只在没有档案的演示数据里兜底。 */
- const raw=e?(e.missingApprovals||e.employeePortal?.missingApprovals||e.invite?.missingApprovals||[]):(d.missingApprovals||[]);return Array.isArray(raw)?raw:[].concat(raw);}
-function euApprovalLabel(x){return x.label||(EU_SPECIAL_ITEMS.find(([key])=>key===x.item)?.[1])||x.item||'';}
 /* 日期格式跟界面语言走，避免德语界面里混出“12 月 1 日”。 */
 function euMonthDay(date){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(date||'');if(!m)return '';const lang=typeof euLang==='function'?euLang():'zh';
  if(lang==='de')return `${Number(m[3])}.${Number(m[2])}.${m[1]}`;
@@ -962,8 +892,8 @@ function euUpdateForm(d){
 }
 function euUpdateDocRow(d,t){
  const key=t.key,formal=d.docs?.[key],pending=d.updateDraft?.docs?.[key],changed=!!pending,oldExpiry=(d.profile||{})[key+'Expiry']||'';
- const expiry=d.updateDraft?.profile?.[key+'Expiry']||'',approval=euApprovalFor(d,key,t),waiting=euSpecialPending(d,key);
- const flags=[changed?'<span class="eu-flag is-pending">待核对</span>':'',euApprovalState(approval)?euApprovalFlag(approval):waiting?'<span class="eu-flag is-pending">等待审批</span>':(!formal&&t.special?'<span class="eu-flag">可暂缺</span>':'')].filter(Boolean).join('');
+ const expiry=d.updateDraft?.profile?.[key+'Expiry']||'';
+ const flags=[changed?'<span class="eu-flag is-pending">待核对</span>':''].filter(Boolean).join('');
  return `<div class="eu-doc${changed?' is-changed':''}"><div><strong>${euT(t.label)}${flags}</strong><small>现行：${formal?empEsc(formal.name):'未上传'}${t.expires&&formal?` · 有效期至 ${empEsc(oldExpiry||'待补充')}`:''}</small>${changed?`<small>新文件：${empEsc(pending.name)}</small>`:''}${t.expires?`<label><span>新版本有效期至${euRequiredStar()}</span><input class="eu-update-expiry" data-doc-expiry="${key}" type="date" value="${empEsc(expiry)}"></label>${changed&&oldExpiry?`<label class="eu-keep-date"><input type="checkbox" data-keep-expiry="${key}" ${d.updateDraft?.keepExpiry?.[key]?'checked':''}> 保留原日期 ${empEsc(oldExpiry)}（须写原因）</label>${d.updateDraft?.keepExpiry?.[key]?`<input class="eu-keep-reason" data-keep-reason="${key}" placeholder="写保留原日期的原因" value="${empEsc(d.updateDraft?.keepReason?.[key]||'')}">`:''}`:''}`:''}</div><div class="eu-doc-actions"><label class="ghost-btn eu-upload">${changed?'更换':'替换 / 上传'}<input type="file" accept="${euAccept(t)}" data-doc-update="${key}" hidden></label>${changed?`<button type="button" class="eu-delete" data-doc-cancel="${key}" aria-label="取消待核对的${t.label}">×</button>`:''}</div></div>`;
 }
 function euDocsTab(d){
@@ -1081,13 +1011,8 @@ function euBind(){
   euSave(fresh);rerender();
  });
  document.querySelectorAll('.eu-delete').forEach(b=>b.onclick=()=>{if(!b.dataset.doc)return;const d=euData();d.docHistory=[{key:b.dataset.doc,file:d.docs[b.dataset.doc],at:empNow()},...(d.docHistory||[])];delete d.docs[b.dataset.doc];d.materialSubmitted=null;euSave(d);rerender();});
- document.querySelector('.eu-special-submit')?.addEventListener('click',()=>{const d=euData(),missing=euSpecialMissingItems(d),box=document.querySelector('.eu-validation');if(!missing.length){if(box)box.textContent=euT('当前没有可申请暂缺的项目。');return;}const form=document.querySelector('.eu-special-form');if(!form)return;form.hidden=false;form.querySelector('textarea')?.focus();});
- document.querySelector('.eu-special-cancel')?.addEventListener('click',()=>{const form=document.querySelector('.eu-special-form');if(form)form.hidden=true;});
- document.querySelector('.eu-special-form')?.addEventListener('submit',ev=>{ev.preventDefault();const d=euData(),form=ev.currentTarget;const picked=[...form.querySelectorAll('[data-special-item]:checked')].map(x=>x.dataset.specialItem);const reason=String(new FormData(form).get('reason')||'').trim();if(!picked.length){empFlash(form,euT('请勾选要申请暂缺的项目'));return;}if(!reason){empFlash(form,euT('请写明暂缺原因和预计补交时间'));return;}d.specialSubmission={state:'pending',items:picked,labels:picked.map(key=>EU_SPECIAL_ITEMS.find(([k])=>k===key)?.[1]||key),reason,at:empNow()};d.messages.unshift('暂缺申请已提交，等待店长审批');euSave(d);euPublishPortal(d,{specialSubmission:d.specialSubmission});rerender();});
- document.querySelector('.eu-special-approve')?.addEventListener('click',()=>{const d=euData(),req=euSpecialRequest(d)||d.specialSubmission||{},deadline=euDaysFrom(empToday(),30),labels=(req.labels||[]);d.missingApprovals=labels.map((label,i)=>({item:req.items?.[i],label,status:'approved',deadline}));d.specialSubmission={...req,state:'approved'};euSave(d);euPublishPortal(d,{specialSubmission:d.specialSubmission},{missingApprovals:d.missingApprovals});rerender();});
- document.querySelector('.eu-special-reject')?.addEventListener('click',()=>{const d=euData();d.specialSubmission={...(euSpecialRequest(d)||d.specialSubmission||{}),state:'rejected'};euSave(d);euPublishPortal(d,{specialSubmission:d.specialSubmission});rerender();});
  /* 提交只校验第一层（HR-ONB-17/26） */
- document.querySelector('.eu-material-submit')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),missing=euLayer1Missing(d);if(euInviteExpiredForSubmit(d)){if(box){box.textContent=euT('邀请链接已过期，请联系店长重新发送邀请。');box.scrollIntoView({block:'center'});}return;}if(!euNationalityClass(d)){if(box){box.textContent=euT('请先回答国籍类别和是否学生。');box.scrollIntoView({block:'center'});}return;}if(missing.length){if(box){box.textContent=euTF('第一层还缺：{items}',{items:missing.map(x=>euT(x)).join('、')});box.scrollIntoView({block:'center'});}return;}const at=empNow();d.materialSubmitted=at;d.submitActionAt=at;d.submitted=euSubmissionSnapshot(d);d.returnedAt=null;d.messages.unshift('资料已提交，等待审核');euSave(d);euSession.step='materials';rerender();});
+ document.querySelector('.eu-material-submit')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation');if(euInviteExpiredForSubmit(d)){if(box){box.textContent=euT('邀请链接已过期，请联系店长重新发送邀请。');box.scrollIntoView({block:'center'});}return;}if(!euNationalityClass(d)){if(box){box.textContent=euT('请先回答国籍类别和是否学生。');box.scrollIntoView({block:'center'});}return;}const at=empNow();d.materialSubmitted=at;d.submitActionAt=at;d.submitted=euSubmissionSnapshot(d);d.returnedAt=null;d.messages.unshift('资料已提交，等待审核');euSave(d);euSession.step='materials';rerender();});
  document.querySelector('.eu-company-confirm')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),mode=euFillMode(d),missing=mode==='veteran'?[]:euLayer1Missing(d);if(missing.length){if(box){box.textContent=euTF('还缺：{items}',{items:missing.map(x=>euT(x)).join('、')});box.scrollIntoView({block:'center'});}return;}if(mode==='veteran')d.veteranConfirmedAt=empNow();else{if(euDemo()==='company')d.demoCompanyConfirmedAt=empNow();else d.confirmedCompanyProfileAt=empNow();}d.messages.unshift(mode==='veteran'?'资料已确认，员工端已开通':'资料已确认，等待公司发送合同');euSave(d,{archive:mode!=='company'||!euDemo()});euSession.step='materials';euSession.tab='tasks';rerender();});
  document.querySelector('.eu-withdraw')?.addEventListener('click',()=>{const d=euData();d.materialSubmitted=null;d.submitActionAt=null;d.withdrawnAt=empNow();d.messages.unshift('已撤回提交，可以继续修改');euSave(d);euSession.step='materials';rerender();});
  /* 合同与问卷：两份一起下载、签字、上传；被退回只重传那一份（HR-ONB-36/38） */

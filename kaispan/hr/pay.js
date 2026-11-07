@@ -342,7 +342,7 @@ function payDropSlip(store, month, empId, by) {
 }
 
 /* ============================================================ 对账 ======== */
-function payTolerance() { return Number(empRule("payslipToleranceEuro")) || 5; }
+function payTolerance() { const euro = Number(empRule("payslipToleranceEuro")); return Number.isFinite(euro) && euro >= 0 ? euro : 0; }
 
 /* 工时差按一刻钟看 —— 工时模块本来就按一刻钟取整，比这更细的差没有意义。 */
 function payDiff(run, empId) {
@@ -750,6 +750,11 @@ function payShell(active, inner) {
 }
 
 function employeePayrollPage() {
+  if (typeof hrCan === "function" && !hrCan("finance")) {
+    return `<div class="page-head"><div><h1>${empT("工资与发薪", "Lohn und Auszahlung")}</h1></div></div>
+      <section class="card"><p class="emp-disabled-reason">${empEsc(hrDenyReason("finance"))}</p>
+      <p class="small">${empT("封账、交给税务师、生成付款文件也需要这个权限（答复 R6-29）。老板可以在「店长权限」里单独授予。", "Abschluss, Übergabe an die Steuerberatung und Zahlungsdatei brauchen dieselbe Berechtigung (R6-29).")}</p></section>`;
+  }
   const store = payStore();
   const month = payMonth();
   const run = payGet(store, month);
@@ -936,7 +941,7 @@ function payCorrectionPanel(store, month, run) {
   const diff = currentHours < low ? currentHours-low : currentHours > high ? currentHours-high : 0;
   const balance = hrsBalance(store,id,month), advice = payAccountAdvice({ diff, balance, hours:currentHours,high,gross:currentGross,hourly:snap.payType === "hourly",rate:snap.rate,type:contract.type });
   return `<section class="card pay-correction"><div class="section-title"><div><h2>${empT("提交给税务师的修改", "Korrektur an Steuerberatung")}</h2>
-    <p>${empT("选择员工后先显示原申报数据，再填写修改值。这里仅保存修改记录，不覆盖原快照。", "Originalmeldung bleibt erhalten; die Korrektur wird separat gespeichert.")}</p></div></div>
+    <p>${empT("已发工资的月份只向税务师提交修改意见，由税务师决定怎么处理（答复 R6-12）。选择员工后先显示原申报数据，再填写修改值；这里仅保存修改记录，不覆盖原快照。", "Für ausgezahlte Monate nur ein Änderungsvorschlag an die Steuerberatung; sie entscheidet (R6-12). Originalmeldung bleibt erhalten.")}</p></div></div>
     <label class="pay-correction-select">${empT("员工", "Mitarbeiter")}<select class="pay-correction-employee">${ids.map(i => `<option value="${i}" ${i === id ? "selected" : ""}>${empEsc(run.snap[i].name)}</option>`).join("")}</select></label>
     <div class="pay-correction-account" data-balance="${balance}" data-rate="${snap.rate}" data-hourly="${snap.payType === "hourly" ? "1" : ""}">
       <strong>Arbeitszeitkonto · 当前余额 ${balance < 0 ? "−" : ""}${schH(Math.abs(balance))}</strong><small>${advice ? empEsc(advice.text) : "存入或取出由你决定"} · 紫色仅为建议；点击下方提交修改后才保存。</small>

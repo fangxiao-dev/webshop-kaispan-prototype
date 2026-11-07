@@ -5,7 +5,7 @@
 .hr-view-seg button.active { background: #4f46e5; color: #fff; }
 .hr-view-perm { position: relative; font-size: 12px; }
 .hr-view-perm summary { cursor: pointer; color: #4f46e5; font-weight: 700; list-style: none; }
-.hr-view-perm > div { position: absolute; right: 0; top: 24px; z-index: 30; width: 230px; display: grid; gap: 6px; padding: 10px 12px; background: #fff; border: 1px solid #d6dae1; border-radius: 10px; box-shadow: 0 8px 24px rgba(15, 23, 42, .12); }
+.hr-view-perm > div { position: absolute; right: 0; top: 24px; z-index: 30; width: 270px; display: grid; gap: 6px; padding: 10px 12px; background: #fff; border: 1px solid #d6dae1; border-radius: 10px; box-shadow: 0 8px 24px rgba(15, 23, 42, .12); }
 .hr-view-perm label { display: flex; align-items: center; gap: 6px; }
 .hr-boss-mark { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 1.6; color: #92400e; background: #fef3c7; border: 1px dashed #d97706; vertical-align: middle; white-space: nowrap; cursor: help; }
 .hr-boss-table td:first-child { white-space: nowrap; font-weight: 700; }

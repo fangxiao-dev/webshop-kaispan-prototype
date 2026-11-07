@@ -20,6 +20,27 @@ function hrIsNonEu(e) {
   return hrNationalityClass(e) === "other";
 }
 
+/* 员工所属单位（答复 B26）：员工可以挂在门店，也可以挂在部门、仓库等非门店单位下。
+   KaiSpan 已有这类单位；原型在门店之外补两个演示单位，名册、建档、调店、雇主资料都按“单位”处理。 */
+const HR_EXTRA_UNITS = [
+  { name: "Zentrale Büro", kind: "department", label: "总部办公室" },
+  { name: "Zentrallager", kind: "warehouse", label: "中央仓库" }
+];
+const HR_UNIT_KIND_LABELS = { store: "门店", department: "部门", warehouse: "仓库" };
+
+function hrExtraUnitNames() {
+  return HR_EXTRA_UNITS.map(unit => unit.name);
+}
+
+function hrUnitKind(name) {
+  return HR_EXTRA_UNITS.find(unit => unit.name === name)?.kind || "store";
+}
+
+function hrUnitLabel(name) {
+  const kind = hrUnitKind(name);
+  return kind === "store" ? String(name || "") : `${name}（${HR_UNIT_KIND_LABELS[kind]}）`;
+}
+
 /* 学生：员工自答 contract.isStudent，或合同类型是 Werkstudent 即视为学生。 */
 function hrIsStudent(e) {
   const c = e?.contract || {};
@@ -51,7 +72,7 @@ const HR_ACCOUNT_STATES = {
 /* 材料叫法统一（HR-DOC-01） */
 const HR_DOC_LABELS = {
   passport: "护照 / 身份证",
-  visa: "居留许可（含临时替代证明）"
+  visa: "居留许可"
 };
 
 /* 上传限制（HR-DOC-12）：PDF、PNG、JPEG，最大 20 MB；银行卡、医保卡只收照片 */
