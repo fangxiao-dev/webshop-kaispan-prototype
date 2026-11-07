@@ -85,3 +85,24 @@
 .eu-special>strong{font-size:12px;color:#52467a}
 
 @media(max-width:600px){.eu-head-actions{width:100%}.eu-layer{padding:4px 10px 12px}.eu-contract-file{flex-direction:column;align-items:flex-start}}
+
+/* 二、三期页签：期次小标签（不灰，只提示期次）、出差打卡提示、换班申请（R4、8.4、8.28） */
+.eu-phase-row{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.eu-phase-tag{display:inline-block;padding:2px 10px;border-radius:999px;background:#ece6ff;color:#5b3fcf;font-size:11px;font-weight:700}
+.eu-phase-row small{font-size:10px;color:#8b82a3}
+.eu-trip-punch{border:1px solid #cfe0ff;border-radius:12px;background:#f4f8ff;padding:12px 14px;margin:12px 0;display:grid;gap:8px}
+.eu-trip-punch strong{font-size:12px;color:#255b9c}
+.eu-trip-punch label{display:grid;gap:4px;font-size:11px;font-weight:600}
+.eu-trip-punch input{box-sizing:border-box;border:1px solid #c9d8f2;border-radius:8px;padding:8px;font:inherit}
+.eu-trip-punch small{font-size:10px;color:#6c7ea0}
+.eu-swap-shift{border:1px solid #e9e5f7;border-radius:10px;background:#fcfbff;padding:10px 12px;margin:8px 0}
+.eu-swap-line{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.eu-swap-line small{color:#6c7488;font-weight:500}
+.eu-swap-open>summary{display:inline-block;margin-top:8px;cursor:pointer;list-style:none}
+.eu-swap-open>summary::-webkit-details-marker{display:none}
+.eu-swap-form{display:grid;gap:8px;margin-top:10px}
+.eu-swap-form label{display:grid;gap:4px;font-size:11px;font-weight:600}
+.eu-swap-form select,.eu-swap-form input{box-sizing:border-box;border:1px solid #ddd5f2;border-radius:8px;padding:8px;font:inherit}
+.eu-swap-done{font-size:11px;color:#6c7488;margin:6px 0}
+.eu-travel-status.is-approved{background:#e9f7f0;color:#2c7a5b}
+.eu-travel-status.is-returned{background:#fff1f0;color:#b4232f}
