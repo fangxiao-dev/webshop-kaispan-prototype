@@ -118,9 +118,9 @@ assert.equal(ctx.empById(offline.id).invite.offlineSignedAt, null);
 assert.equal(ctx.empContractArchived(ctx.empById(offline.id)), false);
 assert.equal(ctx.empContractSignedDoc(ctx.empById(offline.id), 'contract').file, undefined);
 
-/* 6. 试用期默认结束日统一算法：3/15、8/31、闰年 2/29（HR-LIFE-06） */
+/* 6. 试用期默认结束日统一算法：3/15、8/31→月末 2/28、闰年 2/29（HR-LIFE-06、AM-15） */
 assert.equal(ctx.empProbationDefaultEndAt('2026-03-15', 6), '2026-09-14');
-assert.equal(ctx.empProbationDefaultEndAt('2026-08-31', 6), '2027-02-27');
+assert.equal(ctx.empProbationDefaultEndAt('2026-08-31', 6), '2027-02-28');
 assert.equal(ctx.empProbationDefaultEndAt('2028-02-29', 6), '2028-08-28');
 
 /* 7. 试用期内取“法定通知期”和“合同通知期”中较晚者（HR-LIFE-15） */
@@ -154,7 +154,7 @@ assert.ok(!todos.some(t => t.type === '离职交接未办完'), '答复 B14：�
 assert.ok(todos.some(t => t.type === '离职资料保存期到期'));
 assert.ok(todos.some(t => t.type === '店长合同提案待老板确认'));
 assert.ok(!todos.some(t => t.type === '特殊审批逾期未补交'), 'ANS-1：暂缺逾期待办不再有');
-assert.ok(todos.some(t => t.type === '特殊审批待批（材料没交齐）'));
+assert.ok(!todos.some(t => t.type === '特殊审批待批（材料没交齐）'), 'AM-05：特殊审批不另建独立待办');
 const newHireAlert = ctx.empAlertsFor(ctx.empById('c-newhire-today'), '2026-11-06').find(x => x.kind === 'newhire');
 assert.equal(newHireAlert.level, 'expired', '入职当天仍未办完就算逾期');
 

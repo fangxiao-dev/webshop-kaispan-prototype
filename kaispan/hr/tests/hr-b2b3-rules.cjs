@@ -150,7 +150,7 @@ assert.equal(typeof ctx.empExtendMissingApproval, 'undefined', '延期一期不�
 const gapInvite = clone('e15', { id: 't-gap', entryDate: '', invite: { ...clone('e15').invite, state: 'submitted', submitted: {} } });
 save(gapInvite);
 assert.ok(ctx.empOnbGaps(ctx.empById('t-gap'), 'submitted').length > 0, '空提交有缺项');
-assert.ok(ctx.empWorkflowEntries(ctx.empById('t-gap')).some(x => x.key === 'specialPending'), '老板待办里出现特殊审批待批');
+assert.equal(ctx.empWorkflowEntries(ctx.empById('t-gap')).some(x => x.key === 'specialPending'), false, 'AM-05：特殊审批不另建待办');
 assert.equal(ctx.empApproveInvite('t-gap', { entryDate: '2026-12-01' }).code, 'special_reason', '老板通过缺项资料必须写原因');
 ctx.hrSetView('manager');
 ctx.hrSetMgrPerm({ invite: false, sensitive: true });

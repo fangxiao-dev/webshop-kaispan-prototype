@@ -14,7 +14,6 @@ const HR_TODO_TYPE_LIST = [
  {code:'HR-TODO-27',key:'hr.newhire_pending',name:'新人上工前清单',category:'入职',risk:'中',audience:'老板',target:'docs',open:'入职状态已通过及之后，上工前清单未办完（在岗老员工开通的不开）；截止日是入职日期，当天仍未办完标逾期',close:'清单全部完成、录入离职或入职被取消',to:'管理端',mode:'业务事实自动关闭'},
  {code:'HR-TODO-28',key:'hr.update_request_pending',name:'补件待员工处理',category:'材料',risk:'中',audience:'员工',target:'docs',open:'店长推送补件，且员工有可用账号',close:'员工交回，或推送被撤销',to:'员工本人',mode:'业务事实关闭'},
  {code:'HR-TODO-29',key:'hr.update_request_review',name:'补件 / 资料更新待核对',category:'材料',risk:'中',audience:'老板',target:'docs',open:'员工交回补件，或入职后提交资料更新',close:'店长采纳（写入档案）或退回（必填原因）',to:'本店店长；改银行卡时老板同时知情',mode:'业务事实关闭'},
- {code:'HR-TODO-30',key:'hr.special_approval_pending',name:'特殊审批待批（材料没交齐）',category:'审批',risk:'中',audience:'老板',target:'review',open:'员工提交的资料里第二层材料没交齐（答复 ANS-1：只提示，不挡员工提交）',close:'老板特殊审批通过（必须写原因，记录审批人和时间）或退回补充',to:'老板；店长不能做特殊审批',mode:'业务事实关闭'},
  {code:'HR-TODO-32',key:'hr.onboarding_stalled',name:'入职流程停滞',category:'入职',risk:'中',audience:'老板',target:'review',open:'邀请未提交、退回未重提、合同未签回、提交未审核，各自超过对应天数（默认各 3 天）',close:'流程状态前进，或邀请撤销 / 入职取消',to:'本店店长',mode:'业务事实自动关闭'},
  {code:'HR-TODO-33',key:'hr.probation_ending',name:'试用期即将结束',category:'合同',risk:'中',audience:'老板',target:'contract',open:'在试用期且距结束日 ≤ 30 天；待入职的人不触发',close:'结束日一过自动关闭，或结束日被改晚到提醒窗口之外、清空、录入离职',to:'管理端；要解约则办离职',mode:'日期推进自动关闭'},
  {code:'HR-TODO-34',key:'hr.fixed_term_ending',name:'定期合同即将到期 / 已到期',category:'合同',risk:'高',audience:'老板',target:'contract',open:'合同条件有定期合同到期日，且进入提醒窗口',close:'续签（改晚到期日）、转不定期（清空）或办离职',to:'管理端可见，处理由老板确认',mode:'业务事实关闭，到期不自动消失'},
@@ -23,6 +22,9 @@ const HR_TODO_TYPE_LIST = [
  {code:'HR-TODO-38',key:'hr.retention_due',name:'保存期到期，请确认清理',category:'保存期',risk:'中',audience:'老板',target:'docs',open:'离职员工的某类资料保存期已到',close:'老板点「已处理」（记录处理人和时间）',to:'老板',mode:'业务事实关闭；一期不真的删除'},
  {code:'HR-TODO-39',key:'hr.manager_change_confirm',name:'请确认店长提交的变更',category:'变更',risk:'中',audience:'老板',target:'contract',open:'店长提交薪资、合同条件变更或离职办理',close:'老板确认（写入合同版本或离职记录）或驳回',to:'老板',mode:'业务事实关闭'}
 ];
+
+/* HR-TODO-30（特殊审批待批）已取消：特殊审批不另建待办（AM-05）。第二层材料没交齐时，老板在同一次审核通过 / 公司代填确认 / 在岗老员工确认上勾选特殊审批并写原因，留审批人、时间和缺项名单。
+   所以类型清单里没有这一行，也没有独立的“特殊审批”待办。 */
 
 /* 二、三期或后续阶段的事项：本页只做灰行示意，不当作一期内容（HR-TODO-61 ★7.x）。 */
 const HR_TODO_LATER_LIST = [
@@ -97,7 +99,7 @@ function hrTodosPage(){
  <p class="hr-todo-context">${audience==='employee'?'员工端视角：员工本人只会看到派给自己的条目，入口在员工端「任务」页签。':'老板端视角：管理端条目按门店和档案权限可见，老板另有确认和清理类条目。'} 这一页是事项类型清单（HR-TODO-55），真实待办页是 KaiSpan 现有待办页加一行「人事」（HR-TODO-12）。</p>
  <div class="toolbar">${categories.map(c=>`<a class="filter ${c===category?'active':''}" href="#todos?view=${audience}&kind=${encodeURIComponent(c)}">${c}</a>`).join('')}</div>
 
- <section class="card"><div class="section-title"><div><h2>一期事项类型（HR-TODO-20～39；31 暂缺逾期、35 离职交接已取消）</h2><p>标题只写「员工姓名：事项类别」，证件号、日期、金额和缺项明细都在 HR 页面查看（HR-TODO-05）。</p></div><span class="pill blue">${types.length} / 20 类</span></div>
+ <section class="card"><div class="section-title"><div><h2>一期事项类型（HR-TODO-20～39；30 特殊审批待批、31 暂缺逾期、35 离职交接已取消）</h2><p>标题只写「员工姓名：事项类别」，证件号、日期、金额和缺项明细都在 HR 页面查看（HR-TODO-05）。</p></div><span class="pill blue">${types.length} / ${HR_TODO_TYPE_LIST.length} 类</span></div>
  <div class="hr-todo-scroll"><table class="table hr-todo-table hr-todo-type-table"><thead><tr><th>编号</th><th>事项类别</th><th>标题写法</th><th>何时开</th><th>何时关</th><th>给谁 / 关闭方式</th></tr></thead><tbody>${types.map(hrTodoTypeRow).join('')||'<tr><td colspan="6">该视角下没有这一类的事项。</td></tr>'}</tbody></table></div></section>
 
  <section class="card" style="margin-top:16px"><div class="section-title"><div><h2>真实待办页的样子：按来源分行</h2><p>KaiSpan 现有待办页加一行「人事」。员工本人的条目也在「人事」这一行，由 HR 接口校验是不是本人（HR-TODO-06 / HR-TODO-12）。</p></div><span class="pill blue">静态示意</span></div>

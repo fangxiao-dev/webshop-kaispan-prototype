@@ -149,11 +149,12 @@ assert.equal(ctx.empPendingEntries(ctx.empById('a9'), '2026-11-06').some(x => ['
 ctx.hrSetView('manager');
 const perm = ctx.hrMgrPerm();
 assert.equal(perm.invite && perm.sensitive && perm.docWarn, true, '①发邀请 ②审核 ⑧改证件提醒天数默认可以');
-assert.equal(perm.sendContract || perm.editTerms || perm.offboard || perm.export || perm.finance, false, '其余默认不可以');
+assert.equal(perm.sendContract || perm.editTerms || perm.offboard || perm.exportSensitive || perm.finance, false, '其余默认不可以');
+assert.equal(perm.export, true, 'AM-13：导出名单（不含敏感列）店长默认开启');
 assert.equal(ctx.hrCan('exportSensitive'), false);
 ctx.hrSetMgrPerm({ export: true });
-assert.equal(ctx.hrCan('exportSensitive'), false, '含敏感列导出永远只有老板');
-ctx.hrSetMgrPerm({ export: false });
+assert.equal(ctx.hrCan('exportSensitive'), false, '敏感列导出默认关，需老板单独授予');
+ctx.hrSetMgrPerm({ export: true });
 ctx.hrSetView('owner');
 assert.equal(ctx.hrCan('exportSensitive'), true);
 

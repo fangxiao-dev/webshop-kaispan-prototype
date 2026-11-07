@@ -107,13 +107,15 @@ function euStage(d){
  if(demo==='returned')return 'returned';
  if(demo==='contract'||demo==='contract-returned')return 'approved';
  if(inv.state==='returned')return 'returned';
+ if(inv.pendingConfirm&&inv.state!=='approved')return 'submitted';
  if(inv.state==='approved')return 'approved';
  if(euContractSent(d))return 'approved';
  if(d.materialSubmitted||inv.state==='submitted')return 'submitted';
  return 'fill';
 }
 /* ANS-2：员工上传签好的合同和问卷（两份）即开放工作台，不等老板核对归档；审核通过但还没回传时只有入职任务页。 */
-function euContractReturned(d){const inv=euInvite(d);return euContractArchived(d)||!!inv.contractSignedSubmittedAt||!!d?.contractSignedSubmittedAt;}
+/* AM-06 选 A：合同或问卷任一份被退回、或合同作废（该份状态回到“缺”）就关闭，重新签回两份齐备再开放。 */
+function euContractReturned(d){const inv=euInvite(d);if(euContractArchived(d))return true;if(!inv.contractSignedSubmittedAt&&!d?.contractSignedSubmittedAt)return false;return ['contract','questionnaire'].every(key=>['submitted','uploaded','approved'].includes(euContractStatus(d,key).state));}
 function euWorkspaceOpen(d){const stage=euStage(d);return stage==='archived'||(stage==='approved'&&euContractReturned(d));}
 
 /* 待确认关联要先于欢迎页和设密码出现；确认前只拿得到档案姓名（HR-ACCESS-43）。 */
@@ -514,9 +516,14 @@ function euSyncStaff(d,opts){
  }
  if(!d.materialSubmitted&&d.withdrawnAt&&next.invite?.state==='submitted'){next.invite.state='sent';next.invite.withdrawnAt=d.withdrawnAt;next.invite.lastSubmitActionAt=null;}
  /* 公司代填确认只认 employerCompleted===true 或明确的演示模式（HR-ONB-09/52）。 */
- if(d.confirmedCompanyProfileAt&&next.invite&&next.invite.employerCompleted===true){next.invite.state='approved';next.invite.fillMode='company';next.invite.confirmedCompanyProfileAt=d.confirmedCompanyProfileAt;next.invite.approvedAt=next.invite.approvedAt||d.confirmedCompanyProfileAt;}
+ const confirmGaps=(d.confirmedCompanyProfileAt||d.veteranConfirmedAt)&&next.invite?empConfirmGaps(next):[];
+ const confirmHeld=confirmGaps.length>0&&!next.invite?.specialApproval;
+ if(next.invite&&!confirmHeld&&next.invite.pendingConfirm)next.invite.pendingConfirm=null;
+ if(d.confirmedCompanyProfileAt&&next.invite&&next.invite.employerCompleted===true&&next.invite.state!=='approved'&&confirmHeld){next.invite.pendingConfirm=next.invite.pendingConfirm||{mode:'company',at:d.confirmedCompanyProfileAt,items:confirmGaps.map(x=>x.key),labels:confirmGaps.map(x=>empRaw(x.label))};}
+ else if(d.confirmedCompanyProfileAt&&next.invite&&next.invite.employerCompleted===true){next.invite.state='approved';next.invite.fillMode='company';next.invite.confirmedCompanyProfileAt=d.confirmedCompanyProfileAt;next.invite.approvedAt=next.invite.approvedAt||d.confirmedCompanyProfileAt;}
  /* 在岗老员工确认后直接归档：不审核、不发合同（HR-ACCESS-30、HR-ONB-52） */
- if(d.veteranConfirmedAt&&next.invite){next.invite.state='approved';next.invite.fillMode='veteran';next.invite.veteranConfirmedAt=d.veteranConfirmedAt;next.invite.approvedAt=next.invite.approvedAt||d.veteranConfirmedAt;next.invite.archivedAt=next.invite.archivedAt||d.veteranConfirmedAt;next.invite.archivedBy=next.invite.archivedBy||'员工确认';}
+ if(d.veteranConfirmedAt&&next.invite&&next.invite.state!=='approved'&&confirmHeld){next.invite.pendingConfirm=next.invite.pendingConfirm||{mode:'veteran',at:d.veteranConfirmedAt,items:confirmGaps.map(x=>x.key),labels:confirmGaps.map(x=>empRaw(x.label))};}
+ else if(d.veteranConfirmedAt&&next.invite){next.invite.state='approved';next.invite.fillMode='veteran';next.invite.veteranConfirmedAt=d.veteranConfirmedAt;next.invite.approvedAt=next.invite.approvedAt||d.veteranConfirmedAt;next.invite.archivedAt=next.invite.archivedAt||d.veteranConfirmedAt;next.invite.archivedBy=next.invite.archivedBy||'员工确认';}
  if(d.contractSignedSubmittedAt&&next.invite&&(!next.invite.contractSignedSubmittedAt||String(d.contractSignedSubmittedAt)>String(next.invite.contractSignedSubmittedAt)))next.invite.contractSignedSubmittedAt=d.contractSignedSubmittedAt;
  if(d.accountLinkConfirmedAt&&next.invite){
   /* 确认后统一清理兼容标记，入口判定和页面不能一个说已确认、一个还说待确认（HR-ACCESS-43）。 */
@@ -1013,7 +1020,7 @@ function euBind(){
  document.querySelectorAll('.eu-delete').forEach(b=>b.onclick=()=>{if(!b.dataset.doc)return;const d=euData();d.docHistory=[{key:b.dataset.doc,file:d.docs[b.dataset.doc],at:empNow()},...(d.docHistory||[])];delete d.docs[b.dataset.doc];d.materialSubmitted=null;euSave(d);rerender();});
  /* 提交只校验第一层（HR-ONB-17/26） */
  document.querySelector('.eu-material-submit')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation');if(euInviteExpiredForSubmit(d)){if(box){box.textContent=euT('邀请链接已过期，请联系店长重新发送邀请。');box.scrollIntoView({block:'center'});}return;}if(!euNationalityClass(d)){if(box){box.textContent=euT('请先回答国籍类别和是否学生。');box.scrollIntoView({block:'center'});}return;}const at=empNow();d.materialSubmitted=at;d.submitActionAt=at;d.submitted=euSubmissionSnapshot(d);d.returnedAt=null;d.messages.unshift('资料已提交，等待审核');euSave(d);euSession.step='materials';rerender();});
- document.querySelector('.eu-company-confirm')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),mode=euFillMode(d),missing=mode==='veteran'?[]:euLayer1Missing(d);if(missing.length){if(box){box.textContent=euTF('还缺：{items}',{items:missing.map(x=>euT(x)).join('、')});box.scrollIntoView({block:'center'});}return;}if(mode==='veteran')d.veteranConfirmedAt=empNow();else{if(euDemo()==='company')d.demoCompanyConfirmedAt=empNow();else d.confirmedCompanyProfileAt=empNow();}d.messages.unshift(mode==='veteran'?'资料已确认，员工端已开通':'资料已确认，等待公司发送合同');euSave(d,{archive:mode!=='company'||!euDemo()});euSession.step='materials';euSession.tab='tasks';rerender();});
+ document.querySelector('.eu-company-confirm')?.addEventListener('click',()=>{const d=euData(),mode=euFillMode(d),missing=mode==='veteran'?[]:euLayer1Missing(d);if(mode==='veteran')d.veteranConfirmedAt=empNow();else{if(euDemo()==='company')d.demoCompanyConfirmedAt=empNow();else d.confirmedCompanyProfileAt=empNow();}const hint=missing.length?euTF('（第一层还缺，仅提示：{items}）',{items:missing.map(x=>euT(x)).join('、')}):'';d.messages.unshift((mode==='veteran'?'资料已确认，员工端已开通':'资料已确认，等待公司发送合同')+hint);euSave(d,{archive:mode!=='company'||!euDemo()});if(euInvite(d).pendingConfirm){d.messages.unshift('第二层材料没交齐：已确认，等老板特殊审批后才生效');euSave(d);}euSession.step='materials';euSession.tab='tasks';rerender();});
  document.querySelector('.eu-withdraw')?.addEventListener('click',()=>{const d=euData();d.materialSubmitted=null;d.submitActionAt=null;d.withdrawnAt=empNow();d.messages.unshift('已撤回提交，可以继续修改');euSave(d);euSession.step='materials';rerender();});
  /* 合同与问卷：两份一起下载、签字、上传；被退回只重传那一份（HR-ONB-36/38） */
  document.querySelector('.eu-contract-signed-submit')?.addEventListener('click',()=>{const d=euData(),box=document.querySelector('.eu-validation'),need=[];['contract','questionnaire'].forEach(key=>{const status=euContractStatus(d,key);if(status.state==='approved')return;const doc=d.docs?.[key];/* 提交前再判一次：必须是当前发送的文件版本，旧发送/旧退回件都不算（HR-ONB-37/53） */if(status.stale||!doc||!euContractFileCurrent(d,key,doc)){need.push(key);return;}if(status.state==='returned'&&!euContractFreshUpload(d,key,status))need.push(key);});if(need.length){if(box){box.textContent=euTF('请先上传：{items}',{items:need.map(k=>euT(k==='contract'?'已签署劳动合同':'已填写并签署的个人调查问卷')).join('、')});box.scrollIntoView({block:'center'});}return;}d.contractSignedSubmittedAt=empNow();d.messages.unshift('签署文件已提交，等待店长核对');euSave(d);euSyncDocs(d,['contract','questionnaire']);rerender();});
